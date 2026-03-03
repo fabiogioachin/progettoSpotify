@@ -1,0 +1,39 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+    spotify_redirect_uri: str = "http://127.0.0.1:8001/auth/spotify/callback"
+
+    session_secret: str = "cambiami-genera-con-openssl-rand-hex-32"
+    frontend_url: str = "http://127.0.0.1:5173"
+    backend_url: str = "http://127.0.0.1:8001"
+
+    database_url: str = "sqlite+aiosqlite:///./data/spotify_intelligence.db"
+
+    # Set to True in production (HTTPS)
+    cookie_secure: bool = False
+
+    # Generate a unique value per deployment for extra security
+    encryption_salt: str = "spotify-intelligence-salt"
+
+    # Token encryption key (derived from session_secret + encryption_salt)
+    @property
+    def encryption_key(self) -> bytes:
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        import base64
+
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self.encryption_salt.encode(),
+            iterations=100_000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(self.session_secret.encode()))
+
+    model_config = {"env_file": ".env", "extra": "ignore"}
+
+
+settings = Settings()
