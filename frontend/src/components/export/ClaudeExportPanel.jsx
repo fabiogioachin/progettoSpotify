@@ -1,7 +1,15 @@
 import { useState } from 'react'
-import { Copy, Check, ExternalLink, FileText } from 'lucide-react'
+import { Copy, Check, ExternalLink, FileText, Download } from 'lucide-react'
 import { useSpotifyData } from '../../hooks/useSpotifyData'
 import LoadingSpinner from '../ui/LoadingSpinner'
+
+const DATA_BADGES = [
+  { label: 'Tracks', color: 'bg-accent/10 text-accent' },
+  { label: 'Artisti', color: 'bg-emerald-400/10 text-emerald-400' },
+  { label: 'Evoluzione', color: 'bg-amber-400/10 text-amber-400' },
+  { label: 'Rete', color: 'bg-cyan-400/10 text-cyan-400' },
+  { label: 'Temporale', color: 'bg-pink-400/10 text-pink-400' },
+]
 
 export default function ClaudeExportPanel() {
   const [copied, setCopied] = useState(false)
@@ -18,16 +26,27 @@ export default function ClaudeExportPanel() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback
-      const textarea = document.createElement('textarea')
-      textarea.value = data.export_text
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
+      const blob = new Blob([data.export_text], { type: 'text/plain' })
+      const clipboardItem = new ClipboardItem({ 'text/plain': blob })
+      await navigator.clipboard.write([clipboardItem]).catch(() => {
+        window.prompt('Copia il testo:', data.export_text)
+      })
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
+  }
+
+  function handleDownload() {
+    if (!data?.export_text) return
+    const blob = new Blob([data.export_text], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'spotify-listening-intelligence.md'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -42,6 +61,15 @@ export default function ClaudeExportPanel() {
             Genera un prompt ottimizzato con i tuoi dati di ascolto
           </p>
         </div>
+      </div>
+
+      {/* Data badges */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {DATA_BADGES.map(({ label, color }) => (
+          <span key={label} className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${color}`}>
+            {label}
+          </span>
+        ))}
       </div>
 
       {/* Genera */}
@@ -77,7 +105,7 @@ export default function ClaudeExportPanel() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button
               onClick={handleCopy}
               className={`flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-300
@@ -94,9 +122,18 @@ export default function ClaudeExportPanel() {
               ) : (
                 <>
                   <Copy size={16} />
-                  Copia negli appunti
+                  Copia
                 </>
               )}
+            </button>
+
+            <button
+              onClick={handleDownload}
+              className="py-2.5 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 border border-border text-text-secondary hover:text-text-primary hover:border-border-hover transition-all duration-300"
+              title="Scarica come file .md"
+            >
+              <Download size={16} />
+              .md
             </button>
 
             <a

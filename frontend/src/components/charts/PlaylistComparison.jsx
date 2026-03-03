@@ -46,23 +46,23 @@ export default function PlaylistComparison({ comparisons, playlistNames = {}, lo
       </h3>
       <ResponsiveContainer width="100%" height={400}>
         <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
           <XAxis
             dataKey="feature"
-            tick={{ fill: '#9ca3af', fontSize: 11 }}
-            axisLine={{ stroke: '#1e1e30' }}
+            tick={{ fill: '#b3b3b3', fontSize: 11 }}
+            axisLine={{ stroke: '#282828' }}
           />
           <YAxis
             domain={[0, 100]}
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
-            axisLine={{ stroke: '#1e1e30' }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
             tickFormatter={(v) => `${v}%`}
           />
           <Tooltip
             {...TOOLTIP_STYLE}
             formatter={(val) => [`${val}%`, '']}
           />
-          <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
+          <Legend wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }} />
           {barNames.map((name, idx) => (
             <Bar
               key={name}

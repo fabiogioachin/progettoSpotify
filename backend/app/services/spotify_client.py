@@ -142,3 +142,6 @@ class SpotifyClient:
     async def get_artists(self, artist_ids: list[str]) -> dict:
         ids = ",".join(artist_ids[:50])
         return await self.get("/artists", ids=ids)
+
+    async def get_related_artists(self, artist_id: str) -> dict:
+        return await self.get(f"/artists/{artist_id}/related-artists")

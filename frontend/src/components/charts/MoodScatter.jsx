@@ -39,14 +39,14 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={400}>
         <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
           <XAxis
             type="number"
             dataKey="x"
             domain={[0, 100]}
             name="Positività"
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
-            axisLine={{ stroke: '#1e1e30' }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
             label={{ value: 'Positività', position: 'bottom', fill: '#6b7280', fontSize: 12 }}
           />
           <YAxis
@@ -54,8 +54,8 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
             dataKey="y"
             domain={[0, 100]}
             name="Energia"
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
-            axisLine={{ stroke: '#1e1e30' }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
             label={{ value: 'Energia', angle: -90, position: 'left', fill: '#6b7280', fontSize: 12 }}
           />
           <ZAxis

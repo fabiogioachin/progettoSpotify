@@ -29,7 +29,7 @@ class Settings(BaseSettings):
             algorithm=hashes.SHA256(),
             length=32,
             salt=self.encryption_salt.encode(),
-            iterations=100_000,
+            iterations=480_000,
         )
         return base64.urlsafe_b64encode(kdf.derive(self.session_secret.encode()))
 

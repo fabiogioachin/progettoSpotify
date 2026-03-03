@@ -1,5 +1,6 @@
 """Router per dati libreria Spotify dell'utente."""
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,6 +13,8 @@ from app.models.track import AudioFeatures
 from app.schemas import TopTracksResponse, RecentTracksResponse, SavedTracksResponse
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
@@ -173,8 +176,8 @@ async def _get_or_fetch_features(
                     db.add(af)
                     cached[feat["id"]] = af
                 await db.commit()
-            except Exception:
-                pass  # Usa cache parziale se disponibile
+            except Exception as exc:
+                logger.warning("Failed to fetch audio features batch %d-%d: %s", i, i + len(batch), exc)
 
     # Converti in dizionari
     features_map = {}

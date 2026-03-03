@@ -1,4 +1,4 @@
-// Colori e configurazione per i chart Recharts — dark theme
+// Colori e configurazione per i chart Recharts — dark theme Spotify-style
 
 export const CHART_COLORS = {
   accent: '#6366f1',
@@ -29,17 +29,19 @@ export const PLAYLIST_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899']
 
 export const TOOLTIP_STYLE = {
   contentStyle: {
-    backgroundColor: '#1a1a2e',
-    border: '1px solid #2a2a45',
+    backgroundColor: '#282828',
+    border: '1px solid #3e3e3e',
     borderRadius: '8px',
-    color: '#f0f0f5',
+    color: '#FFFFFF',
     fontSize: '13px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
   },
   labelStyle: {
-    color: '#9ca3af',
+    color: '#b3b3b3',
     fontWeight: 600,
   },
 }
+
+export const GRID_COLOR = '#282828'
 
 export { FEATURE_LABELS as RADAR_LABELS } from './constants'

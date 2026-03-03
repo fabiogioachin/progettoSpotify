@@ -34,12 +34,12 @@ export default function AudioRadar({ features, title = 'Profilo Audio', loading 
       <ResponsiveContainer width="100%" height={300}>
         <RadarChart data={data} cx="50%" cy="50%" outerRadius="75%">
           <PolarGrid
-            stroke="#1e1e30"
+            stroke="#282828"
             strokeDasharray="3 3"
           />
           <PolarAngleAxis
             dataKey="feature"
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
           />
           <PolarRadiusAxis
             angle={30}

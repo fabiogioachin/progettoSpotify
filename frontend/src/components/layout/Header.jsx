@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { LogOut, Music2 } from 'lucide-react'
 
@@ -6,7 +6,7 @@ export default function Header() {
   const { user, logout } = useAuth()
 
   return (
-    <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
+    <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border lg:pl-60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -18,13 +18,6 @@ export default function Header() {
               <span className="gradient-text">Listening Intelligence</span>
             </span>
           </Link>
-
-          {/* Nav */}
-          <nav className="flex items-center gap-1" role="navigation" aria-label="Navigazione principale">
-            <NavLink to="/dashboard">Dashboard</NavLink>
-            <NavLink to="/playlists">Playlist</NavLink>
-            <NavLink to="/discovery">Scopri</NavLink>
-          </nav>
 
           {/* User */}
           <div className="flex items-center gap-3">
@@ -50,24 +43,5 @@ export default function Header() {
         </div>
       </div>
     </header>
-  )
-}
-
-function NavLink({ to, children }) {
-  const location = useLocation()
-  const isActive = location.pathname === to
-
-  return (
-    <Link
-      to={to}
-      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300
-        ${isActive
-          ? 'text-accent bg-accent/10'
-          : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
-        }`}
-      aria-current={isActive ? 'page' : undefined}
-    >
-      {children}
-    </Link>
   )
 }

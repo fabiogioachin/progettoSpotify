@@ -11,9 +11,11 @@ export default function KPICard({ title, value, suffix = '', trend, icon: Icon, 
 
   return (
     <div
-      className="glow-card bg-surface rounded-xl p-5 animate-slide-up"
+      className="glow-card bg-surface rounded-xl p-5 animate-slide-up relative overflow-hidden"
       style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
     >
+      {/* Accent bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent rounded-r-full" />
       <div className="flex items-start justify-between mb-3">
         <span className="text-text-secondary text-sm font-medium">{title}</span>
         {Icon && (

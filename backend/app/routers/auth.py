@@ -1,5 +1,6 @@
 """Router autenticazione OAuth Spotify."""
 
+import hmac
 import secrets
 from datetime import datetime, timedelta
 
@@ -76,9 +77,9 @@ async def spotify_callback(
     if error:
         return RedirectResponse(url=f"{settings.frontend_url}?error={error}")
 
-    # Verifica state
+    # Verifica state (timing-safe comparison)
     stored_state = request.cookies.get("oauth_state")
-    if not state or state != stored_state:
+    if not state or not stored_state or not hmac.compare_digest(state, stored_state):
         return RedirectResponse(url=f"{settings.frontend_url}?error=state_mismatch")
 
     # Scambia code per token

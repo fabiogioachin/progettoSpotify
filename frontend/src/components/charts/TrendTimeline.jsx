@@ -43,16 +43,16 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
           <XAxis
             dataKey="name"
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
-            axisLine={{ stroke: '#1e1e30' }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
           />
           <YAxis
             domain={[0, 1]}
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
-            axisLine={{ stroke: '#1e1e30' }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
             tickFormatter={(v) => `${Math.round(v * 100)}%`}
           />
           <Tooltip
@@ -64,7 +64,7 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
           />
           <Legend
             formatter={(val) => FEATURE_LABELS[val] || val}
-            wrapperStyle={{ color: '#9ca3af', fontSize: 12 }}
+            wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }}
           />
           {Object.entries(FEATURE_LABELS).map(([key]) => (
             <Area

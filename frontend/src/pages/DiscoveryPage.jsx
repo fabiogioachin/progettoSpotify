@@ -1,5 +1,4 @@
 import { Compass, Sparkles, Star } from 'lucide-react'
-import Header from '../components/layout/Header'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -19,8 +18,6 @@ export default function DiscoveryPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-text-primary flex items-center gap-2">

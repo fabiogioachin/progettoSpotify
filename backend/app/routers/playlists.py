@@ -1,5 +1,7 @@
 """Router per playlist e confronto."""
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,6 +61,11 @@ async def compare_playlists(
 
     if len(playlist_ids) < 2 or len(playlist_ids) > 4:
         raise HTTPException(status_code=400, detail="Seleziona da 2 a 4 playlist")
+
+    # Validazione formato Spotify playlist ID
+    for pid in playlist_ids:
+        if not re.match(r"^[a-zA-Z0-9]{1,50}$", pid):
+            raise HTTPException(status_code=400, detail="Formato playlist ID non valido")
 
     client = SpotifyClient(db, user_id)
     results = []

@@ -1,3 +1,5 @@
+import { Play } from 'lucide-react'
+
 export default function TrackCard({ track, index }) {
   const energy = track.features?.energy ?? 0
   const valence = track.features?.valence ?? 0
@@ -5,22 +7,31 @@ export default function TrackCard({ track, index }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-hover transition-all duration-300 group">
       {/* Posizione */}
-      <span className="text-text-muted text-sm w-6 text-right font-mono">
+      <span className="text-text-muted text-sm w-6 text-right font-mono group-hover:hidden">
         {index + 1}
       </span>
+      <span className="text-text-primary text-sm w-6 text-right hidden group-hover:block">
+        <Play size={14} className="text-text-primary ml-auto" fill="currentColor" />
+      </span>
 
-      {/* Album art */}
-      {track.album_image ? (
-        <img
-          src={track.album_image}
-          alt={track.album}
-          className="w-10 h-10 rounded-md object-cover"
-        />
-      ) : (
-        <div className="w-10 h-10 rounded-md bg-surface-hover flex items-center justify-center">
-          <span className="text-text-muted text-xs">♪</span>
+      {/* Album art con overlay play */}
+      <div className="relative flex-shrink-0">
+        {track.album_image ? (
+          <img
+            src={track.album_image}
+            alt={track.album}
+            className="w-10 h-10 rounded-md object-cover"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-md bg-surface-hover flex items-center justify-center">
+            <span className="text-text-muted text-xs">♪</span>
+          </div>
+        )}
+        {/* Green play overlay on hover */}
+        <div className="absolute inset-0 bg-black/40 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <Play size={16} className="text-spotify" fill="#1DB954" />
         </div>
-      )}
+      </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0">

@@ -3,17 +3,17 @@
 @tailwind utilities;
 
 :root {
-  --color-background: #0a0a0f;
-  --color-surface: #12121a;
-  --color-surface-hover: #1a1a2e;
-  --color-border: #1e1e30;
-  --color-border-hover: #2a2a45;
+  --color-background: #121212;
+  --color-surface: #181818;
+  --color-surface-hover: #282828;
+  --color-border: #282828;
+  --color-border-hover: #3e3e3e;
   --color-accent: #6366f1;
   --color-accent-hover: #818cf8;
   --color-spotify: #1DB954;
-  --color-text-primary: #f0f0f5;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted: #6b7280;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #b3b3b3;
+  --color-text-muted: #6a6a6a;
 }
 
 * {
@@ -51,15 +51,14 @@ body {
   background-clip: text;
 }
 
-/* Glow card effect */
+/* Glow card effect — Spotify-style clean hover */
 .glow-card {
   transition: all 300ms ease;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
 }
 
 .glow-card:hover {
-  border-color: var(--color-border-hover);
-  box-shadow: 0 0 30px rgba(99, 102, 241, 0.08);
+  background: var(--color-surface-hover);
 }
 
 /* Staggered animation utility */
@@ -76,6 +75,6 @@ body {
 
 .audio-bar {
   animation: audioWave 1.2s ease-in-out infinite;
-  background: linear-gradient(to top, #6366f1, #818cf8);
+  background: linear-gradient(to top, #1DB954, #6366f1);
   border-radius: 2px;
 }

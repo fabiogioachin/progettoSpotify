@@ -39,7 +39,7 @@ export default function GenreTreemap({ genres, title = 'Distribuzione Generi', l
           data={data}
           dataKey="size"
           nameKey="name"
-          stroke="#0a0a0f"
+          stroke="#121212"
           animationDuration={1200}
           content={<CustomTreemapContent />}
         >
@@ -64,7 +64,7 @@ function CustomTreemapContent({ x, y, width, height, name, fill }) {
         width={width}
         height={height}
         fill={fill}
-        stroke="#0a0a0f"
+        stroke="#121212"
         strokeWidth={2}
         rx={4}
         style={{ opacity: 0.85 }}

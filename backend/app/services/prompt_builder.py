@@ -9,11 +9,17 @@ def build_claude_prompt(
     trends: list[dict],
     genres: dict,
     playlist_comparison: list[dict] | None = None,
+    taste_evolution: dict | None = None,
+    artist_network: dict | None = None,
+    temporal_patterns: dict | None = None,
 ) -> dict:
     """Costruisce un export strutturato con dati + prompt per Claude."""
 
     # Sezione dati compatti
-    data_section = _build_data_section(top_tracks, features_profile, trends, genres, playlist_comparison)
+    data_section = _build_data_section(
+        top_tracks, features_profile, trends, genres, playlist_comparison,
+        taste_evolution, artist_network, temporal_patterns,
+    )
 
     # Prompt pre-compilato
     prompt = _build_prompt_text()
@@ -40,6 +46,9 @@ def _build_data_section(
     trends: list[dict],
     genres: dict,
     playlist_comparison: list[dict] | None,
+    taste_evolution: dict | None = None,
+    artist_network: dict | None = None,
+    temporal_patterns: dict | None = None,
 ) -> str:
     lines = ["# Dati di Ascolto Spotify — Analisi Personale", ""]
 
@@ -108,6 +117,52 @@ def _build_data_section(
                 lines.append(f"- {key}: {val}")
             lines.append("")
 
+    # Evoluzione gusto (opzionale)
+    if taste_evolution:
+        lines.append("## Evoluzione Gusto")
+        artists = taste_evolution.get("artists", {})
+        rising = artists.get("rising", [])
+        loyal = artists.get("loyal", [])
+        falling = artists.get("falling", [])
+        if rising:
+            lines.append(f"- **Rising**: {', '.join(a.get('name', '') for a in rising[:10])}")
+        if loyal:
+            lines.append(f"- **Loyal**: {', '.join(a.get('name', '') for a in loyal[:10])}")
+        if falling:
+            lines.append(f"- **Falling**: {', '.join(a.get('name', '') for a in falling[:10])}")
+        metrics = taste_evolution.get("metrics", {})
+        if metrics:
+            lines.append(f"- **Loyalty Score**: {metrics.get('loyalty_score', 'N/A')}%")
+            lines.append(f"- **Turnover Rate**: {metrics.get('turnover_rate', 'N/A')}%")
+        lines.append("")
+
+    # Ecosistema artisti (opzionale)
+    if artist_network:
+        lines.append("## Ecosistema Artisti")
+        clusters = artist_network.get("clusters", [])
+        for i, cluster in enumerate(clusters[:5]):
+            artist_names = [a.get("name", "") for a in cluster.get("artists", [])[:8]]
+            lines.append(f"- **Cluster {i + 1}**: {', '.join(artist_names)}")
+        bridges = artist_network.get("bridge_artists", [])
+        if bridges:
+            bridge_strs = [f"{b.get('name', '')} (score: {b.get('score', 0)})" for b in bridges[:5]]
+            lines.append(f"- **Bridge Artists**: {', '.join(bridge_strs)}")
+        lines.append(f"- **Total Nodes**: {artist_network.get('total_nodes', 'N/A')}")
+        lines.append(f"- **Cluster Count**: {artist_network.get('cluster_count', 'N/A')}")
+        lines.append("")
+
+    # Pattern temporali (opzionale)
+    if temporal_patterns:
+        lines.append("## Pattern Temporali")
+        peak_hours = temporal_patterns.get("peak_hours", [])
+        if peak_hours:
+            lines.append(f"- **Ore di Punta**: {', '.join(str(h) for h in peak_hours[:5])}")
+        lines.append(f"- **Max Streak**: {temporal_patterns.get('max_streak', 'N/A')} giorni")
+        lines.append(f"- **Weekday %**: {temporal_patterns.get('weekday_pct', 'N/A')}%")
+        avg_session = temporal_patterns.get("avg_session_duration", "N/A")
+        lines.append(f"- **Durata Media Sessione**: {avg_session} min")
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -140,5 +195,21 @@ Basandoti sul profilo audio, suggerisci:
 - 3 generi che l'utente potrebbe apprezzare ma potrebbe non conoscere
 - Il "mood ideale" per una playlist personale
 - Un'osservazione sorprendente che emerge dai dati
+
+## 6. Analisi Ecosistema Artisti
+Se disponibili i dati dell'ecosistema artisti:
+- Analizza i bridge artists per suggerire zone musicali inesplorate che collegano i cluster di ascolto
+- Identifica quali cluster rappresentano nicchie consolidate e quali sono in espansione
+
+## 7. Playlist Contestuali
+Se disponibili i pattern temporali:
+- Suggerisci playlist contestuali basate sulle abitudini temporali (mattina, sera, weekend)
+- Usa le ore di punta e la percentuale weekday/weekend per personalizzare i suggerimenti
+
+## 8. Previsione Scoperte
+Se disponibili i dati di evoluzione del gusto:
+- Identifica i trend nell'evoluzione del gusto musicale (artisti rising vs falling)
+- Predici le prossime scoperte musicali basandoti sulla traiettoria attuale
+- Usa loyalty score e turnover rate per capire quanto l'utente sia aperto a nuove scoperte
 
 Rispondi in modo discorsivo, evita elenchi puntati dove possibile. Sii specifico con riferimenti ai dati reali dell'utente."""

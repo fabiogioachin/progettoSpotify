@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Activity, Disc3, Heart, Music } from 'lucide-react'
-import Header from '../components/layout/Header'
 import KPICard from '../components/cards/KPICard'
 import TrackCard from '../components/cards/TrackCard'
 import AudioRadar from '../components/charts/AudioRadar'
@@ -45,8 +44,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Header row */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -107,10 +104,10 @@ export default function DashboardPage() {
 
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4">
-                  Top 10 Brani
+                  Top 50 Brani
                 </h3>
-                <div className="space-y-1">
-                  {tracks.slice(0, 10).map((track, i) => (
+                <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+                  {tracks.slice(0, 50).map((track, i) => (
                     <TrackCard key={track.id} track={track} index={i} />
                   ))}
                   {tracks.length === 0 && (
