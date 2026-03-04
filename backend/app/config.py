@@ -12,6 +12,11 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./data/spotify_intelligence.db"
 
+    # Supabase (opzionale — se configurato, sovrascrive database_url)
+    supabase_url: str = ""       # URL del progetto (es. https://xxxx.supabase.co)
+    supabase_anon_key: str = ""  # Anon key per future integrazioni client-side
+    supabase_db_url: str = ""    # Connection string PostgreSQL completa dal dashboard Supabase
+
     # Set to True in production (HTTPS)
     cookie_secure: bool = False
 
@@ -32,6 +37,27 @@ class Settings(BaseSettings):
             iterations=480_000,
         )
         return base64.urlsafe_b64encode(kdf.derive(self.session_secret.encode()))
+
+    @property
+    def effective_database_url(self) -> str:
+        """Restituisce la URL del database effettiva.
+
+        Se SUPABASE_DB_URL è configurato, converte la URL PostgreSQL standard
+        nel formato asyncpg per SQLAlchemy. Altrimenti usa SQLite.
+        """
+        if self.supabase_db_url:
+            url = self.supabase_db_url
+            # Converti da postgresql:// a postgresql+asyncpg://
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            return url
+        return self.database_url
+
+    @property
+    def is_using_supabase(self) -> bool:
+        return bool(self.supabase_db_url)
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

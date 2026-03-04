@@ -34,8 +34,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Assicura che la directory data esista
-    os.makedirs("data", exist_ok=True)
+    if settings.is_using_supabase:
+        logger.info("Connessione a Supabase (PostgreSQL)...")
+    else:
+        # Assicura che la directory data esista per SQLite
+        os.makedirs("data", exist_ok=True)
+        logger.info("Usando database SQLite locale")
     await init_db()
     logger.info("Database inizializzato")
     if not settings.cookie_secure and not settings.frontend_url.startswith("http://127"):
@@ -78,7 +82,8 @@ app.include_router(historical.router)
 @app.get("/health")
 async def health():
     """Health check con verifica database."""
-    checks = {"database": "ok"}
+    db_type = "supabase" if settings.is_using_supabase else "sqlite"
+    checks = {"database": "ok", "database_type": db_type}
     try:
         from sqlalchemy import text
         async with async_session() as session:
@@ -87,6 +92,6 @@ async def health():
         checks["database"] = "error"
         logger.error(f"Health check database failed: {e}")
 
-    status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+    status = "ok" if checks["database"] == "ok" else "degraded"
     status_code = 200 if status == "ok" else 503
     return JSONResponse(content={"status": status, "checks": checks}, status_code=status_code)
