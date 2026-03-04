@@ -8,7 +8,7 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts'
-import { TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
 
 export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività vs Energia', loading = false }) {
   if (loading) {
@@ -34,12 +34,16 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
       artist: t.artist,
     }))
 
+  if (data.length === 0) {
+    return <EmptyState />
+  }
+
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={400}>
         <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             type="number"
             dataKey="x"
@@ -80,10 +84,10 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
 
       {/* Legenda quadranti */}
       <div className="grid grid-cols-2 gap-2 mt-3 text-xs text-text-muted">
-        <div className="text-right">😢 Triste e calmo</div>
         <div>😡 Cupo e intenso</div>
+        <div className="text-right">🎉 Festivo ed energico</div>
+        <div>😢 Triste e calmo</div>
         <div className="text-right">😌 Rilassato e felice</div>
-        <div>🎉 Festivo ed energico</div>
       </div>
     </div>
   )

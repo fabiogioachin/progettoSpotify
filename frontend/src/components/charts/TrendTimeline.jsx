@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { FEATURE_COLORS, TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { FEATURE_COLORS, TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
 import { FEATURE_LABELS } from '../../lib/constants'
 
 export default function TrendTimeline({ trends, title = 'Trend Temporale', loading = false }) {
@@ -36,23 +36,23 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           <defs>
-            {Object.entries(FEATURE_COLORS).slice(0, 3).map(([key, color]) => (
+            {Object.entries(FEATURE_COLORS).map(([key, color]) => (
               <linearGradient key={key} id={`gradient-${key}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={color} stopOpacity={0.3} />
                 <stop offset="95%" stopColor={color} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             dataKey="name"
             tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
+            axisLine={{ stroke: GRID_COLOR }}
           />
           <YAxis
             domain={[0, 1]}
             tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
+            axisLine={{ stroke: GRID_COLOR }}
             tickFormatter={(v) => `${Math.round(v * 100)}%`}
           />
           <Tooltip

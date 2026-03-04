@@ -18,7 +18,7 @@ export default {
         spotify: '#1DB954',
         'text-primary': '#FFFFFF',
         'text-secondary': '#b3b3b3',
-        'text-muted': '#6a6a6a',
+        'text-muted': '#8a8a8a',
       },
       fontFamily: {
         display: ['Space Grotesk', 'sans-serif'],

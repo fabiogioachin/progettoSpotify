@@ -17,14 +17,13 @@ export default function DiscoveryPage() {
   const hasError = topError || discoveryError
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-text-primary flex items-center gap-2">
             <Compass size={24} className="text-accent" />
             Discovery
           </h1>
-          <p className="text-text-muted text-sm">
+          <p className="text-text-secondary text-sm">
             Esplora la tua mappa musicale e scopri nuovi artisti
           </p>
         </div>
@@ -131,7 +130,6 @@ export default function DiscoveryPage() {
             </div>
           </>
         )}
-      </main>
-    </div>
+    </main>
   )
 }

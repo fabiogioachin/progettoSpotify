@@ -1,5 +1,10 @@
 import asyncio
 import logging
+import time
+from collections import defaultdict
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +43,6 @@ class SpotifyAuthError(Exception):
     pass
 
 
-# ---- API Rate Limiter Middleware ----
-
-import time
-from collections import defaultdict
-
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
-
-
 class APIRateLimiter(BaseHTTPMiddleware):
     """Sliding window rate limiter per utente/IP."""
 
@@ -54,14 +50,22 @@ class APIRateLimiter(BaseHTTPMiddleware):
         super().__init__(app)
         self.rpm = requests_per_minute
         self._requests: dict[str, list[float]] = defaultdict(list)
+        self._last_cleanup = time.time()
 
     async def dispatch(self, request, call_next):
-        # Rate limit by session cookie (user) or IP as fallback
-        key = request.cookies.get("session") or (request.client.host if request.client else "unknown")
+        # Use IP as key (session cookie can be very long)
+        key = request.client.host if request.client else "unknown"
         now = time.time()
         window = 60.0
 
-        # Clean old entries
+        # Periodic cleanup of stale keys (every 5 minutes)
+        if now - self._last_cleanup > 300:
+            stale = [k for k, v in self._requests.items() if not v or now - v[-1] > window]
+            for k in stale:
+                del self._requests[k]
+            self._last_cleanup = now
+
+        # Clean old entries for this key
         self._requests[key] = [t for t in self._requests[key] if now - t < window]
 
         if len(self._requests[key]) >= self.rpm:

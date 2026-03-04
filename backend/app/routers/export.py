@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_auth
 from app.services.artist_network import build_artist_network
-from app.services.audio_analyzer import compute_profile, compute_trends
+from app.services.audio_analyzer import compute_profile, compute_trends, get_or_fetch_features
 from app.services.prompt_builder import build_claude_prompt
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_evolution import compute_taste_evolution
@@ -37,10 +37,8 @@ async def generate_claude_prompt(
         top_items = top_data.get("items", [])
 
         # Costruisci lista compatta
-        from app.routers.library import _get_or_fetch_features
-
         track_ids = [t["id"] for t in top_items]
-        features_map = await _get_or_fetch_features(db, client, track_ids)
+        features_map = await get_or_fetch_features(db, client, track_ids)
 
         top_tracks = []
         for item in top_items:

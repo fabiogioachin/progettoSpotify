@@ -1,5 +1,6 @@
 """Router per analisi e insight musicali."""
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -16,6 +17,8 @@ from app.services.audio_analyzer import (
 from app.services.discovery import discover
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -36,6 +39,9 @@ async def get_audio_features_profile(
         await save_snapshot(db, user_id, time_range, profile)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore compute_profile: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nel calcolo del profilo audio")
     finally:
         await client.close()
 
@@ -56,6 +62,9 @@ async def get_trends(
         historical = await get_historical_snapshots(db, user_id)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore compute_trends: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nel calcolo dei trend")
     finally:
         await client.close()
 
@@ -75,6 +84,9 @@ async def get_discovery(
         results = await discover(db, client)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore discovery: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nelle raccomandazioni")
     finally:
         await client.close()
 

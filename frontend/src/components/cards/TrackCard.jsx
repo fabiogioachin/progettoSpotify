@@ -44,10 +44,12 @@ export default function TrackCard({ track, index }) {
       </div>
 
       {/* Mini barre energia/valence */}
-      <div className="flex items-center gap-2">
-        <MiniBar label="E" value={energy} color="#f59e0b" />
-        <MiniBar label="V" value={valence} color="#10b981" />
-      </div>
+      {track.features && (
+        <div className="flex items-center gap-2">
+          <MiniBar label="E" value={energy} color="#f59e0b" />
+          <MiniBar label="V" value={valence} color="#10b981" />
+        </div>
+      )}
     </div>
   )
 }

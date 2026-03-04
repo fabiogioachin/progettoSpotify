@@ -2,7 +2,7 @@
 
 import hmac
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
@@ -134,13 +134,13 @@ async def spotify_callback(
         user.display_name = profile.get("display_name")
         user.email = profile.get("email")
         user.avatar_url = (profile.get("images", [{}])[0].get("url") if profile.get("images") else None)
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
 
     # Salva/aggiorna token
     result = await db.execute(select(SpotifyToken).where(SpotifyToken.user_id == user.id))
     token_record = result.scalar_one_or_none()
 
-    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
     if not token_record:
         token_record = SpotifyToken(
@@ -155,7 +155,7 @@ async def spotify_callback(
         token_record.access_token_encrypted = encrypt_token(access_token)
         token_record.refresh_token_encrypted = encrypt_token(refresh_token)
         token_record.expires_at = expires_at
-        token_record.updated_at = datetime.utcnow()
+        token_record.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
 

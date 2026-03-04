@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 
@@ -18,7 +18,7 @@ class Track(Base):
     duration_ms = Column(Integer)
     popularity = Column(Integer)
     preview_url = Column(Text)
-    cached_at = Column(DateTime, default=datetime.utcnow)
+    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class AudioFeatures(Base):
@@ -38,4 +38,4 @@ class AudioFeatures(Base):
     key = Column(Integer)
     mode = Column(Integer)
     time_signature = Column(Integer)
-    cached_at = Column(DateTime, default=datetime.utcnow)
+    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

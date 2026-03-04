@@ -38,7 +38,7 @@ export default function ArtistNetworkPage() {
               <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} />
               <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} />
               <KPICard title="Cluster" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} />
-              <KPICard title="Top Artists" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} />
+              <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} />
             </div>
 
             {/* Network Graph */}
@@ -49,7 +49,7 @@ export default function ArtistNetworkPage() {
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <Waypoints size={18} className="text-accent" />
-                  Bridge Artists
+                  Artisti Ponte
                 </h3>
                 <p className="text-text-secondary text-sm mb-4">
                   Artisti che collegano cluster di gusto diversi

@@ -35,5 +35,21 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
+    def validate_secrets(self):
+        """Avvisa se i segreti di default sono in uso."""
+        import logging
+        log = logging.getLogger(__name__)
+        if self.session_secret == "cambiami-genera-con-openssl-rand-hex-32":
+            log.warning(
+                "SECURITY: session_secret usa il valore di default! "
+                "Genera un segreto con: openssl rand -hex 32"
+            )
+        if self.encryption_salt == "spotify-intelligence-salt":
+            log.warning(
+                "SECURITY: encryption_salt usa il valore di default! "
+                "Imposta un salt unico per il deployment."
+            )
+
 
 settings = Settings()
+settings.validate_secrets()

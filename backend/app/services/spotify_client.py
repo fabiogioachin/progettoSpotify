@@ -1,7 +1,7 @@
 """Wrapper per Spotify Web API con gestione automatica token refresh e rate limiting."""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -49,7 +49,7 @@ class SpotifyClient:
                 raise SpotifyAuthError("Nessun token trovato per l'utente")
 
             # Buffer 5 minuti prima della scadenza
-            if token_record.expires_at <= datetime.utcnow() + timedelta(minutes=5):
+            if token_record.expires_at <= datetime.now(timezone.utc) + timedelta(minutes=5):
                 await self._refresh_token(token_record)
 
             return decrypt_token(token_record.access_token_encrypted)
@@ -75,8 +75,8 @@ class SpotifyClient:
         token_record.access_token_encrypted = encrypt_token(data["access_token"])
         if "refresh_token" in data:
             token_record.refresh_token_encrypted = encrypt_token(data["refresh_token"])
-        token_record.expires_at = datetime.utcnow() + timedelta(seconds=data["expires_in"])
-        token_record.updated_at = datetime.utcnow()
+        token_record.expires_at = datetime.now(timezone.utc) + timedelta(seconds=data["expires_in"])
+        token_record.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
 
     async def _request(self, method: str, url: str, **kwargs) -> Any:

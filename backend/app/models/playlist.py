@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
 
@@ -17,4 +17,4 @@ class PlaylistCache(Base):
     track_count = Column(Integer)
     owner_name = Column(String(255))
     snapshot_id = Column(String(255))
-    cached_at = Column(DateTime, default=datetime.utcnow)
+    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

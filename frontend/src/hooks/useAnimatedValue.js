@@ -10,11 +10,13 @@ export function useAnimatedValue(target, duration = 1000, decimals = 0) {
   const [value, setValue] = useState(0)
   const frameRef = useRef(null)
   const startTimeRef = useRef(null)
+  const prevTargetRef = useRef(0)
 
   useEffect(() => {
     if (target === null || target === undefined) return
 
-    const start = 0
+    const start = prevTargetRef.current
+    prevTargetRef.current = target
     startTimeRef.current = performance.now()
 
     function animate(now) {

@@ -139,16 +139,21 @@ def _build_data_section(
     # Ecosistema artisti (opzionale)
     if artist_network:
         lines.append("## Ecosistema Artisti")
-        clusters = artist_network.get("clusters", [])
-        for i, cluster in enumerate(clusters[:5]):
-            artist_names = [a.get("name", "") for a in cluster.get("artists", [])[:8]]
-            lines.append(f"- **Cluster {i + 1}**: {', '.join(artist_names)}")
-        bridges = artist_network.get("bridge_artists", [])
+        # clusters is a flat list of {id, name, cluster} — group by cluster id
+        clusters_raw = artist_network.get("clusters", [])
+        cluster_groups: dict[int, list[str]] = {}
+        for c in clusters_raw:
+            cid = c.get("cluster", 0)
+            cluster_groups.setdefault(cid, []).append(c.get("name", ""))
+        for i, (cid, names) in enumerate(sorted(cluster_groups.items())[:5]):
+            lines.append(f"- **Cluster {i + 1}**: {', '.join(names[:8])}")
+        bridges = artist_network.get("bridges", [])
         if bridges:
-            bridge_strs = [f"{b.get('name', '')} (score: {b.get('score', 0)})" for b in bridges[:5]]
+            bridge_strs = [f"{b.get('name', '')} (score: {b.get('bridge_score', 0)})" for b in bridges[:5]]
             lines.append(f"- **Bridge Artists**: {', '.join(bridge_strs)}")
-        lines.append(f"- **Total Nodes**: {artist_network.get('total_nodes', 'N/A')}")
-        lines.append(f"- **Cluster Count**: {artist_network.get('cluster_count', 'N/A')}")
+        metrics = artist_network.get("metrics", {})
+        lines.append(f"- **Total Nodes**: {metrics.get('total_nodes', 'N/A')}")
+        lines.append(f"- **Cluster Count**: {metrics.get('cluster_count', 'N/A')}")
         lines.append("")
 
     # Pattern temporali (opzionale)
@@ -156,11 +161,15 @@ def _build_data_section(
         lines.append("## Pattern Temporali")
         peak_hours = temporal_patterns.get("peak_hours", [])
         if peak_hours:
-            lines.append(f"- **Ore di Punta**: {', '.join(str(h) for h in peak_hours[:5])}")
-        lines.append(f"- **Max Streak**: {temporal_patterns.get('max_streak', 'N/A')} giorni")
-        lines.append(f"- **Weekday %**: {temporal_patterns.get('weekday_pct', 'N/A')}%")
-        avg_session = temporal_patterns.get("avg_session_duration", "N/A")
-        lines.append(f"- **Durata Media Sessione**: {avg_session} min")
+            # peak_hours is [{hour, count}]
+            hour_strs = [f"{ph.get('hour', 0)}:00" for ph in peak_hours[:5]]
+            lines.append(f"- **Ore di Punta**: {', '.join(hour_strs)}")
+        streak = temporal_patterns.get("streak", {})
+        lines.append(f"- **Max Streak**: {streak.get('max_streak', 'N/A')} giorni")
+        patterns = temporal_patterns.get("patterns", {})
+        lines.append(f"- **Weekday %**: {patterns.get('weekday_pct', 'N/A')}%")
+        sessions = temporal_patterns.get("sessions", {})
+        lines.append(f"- **Durata Media Sessione**: {sessions.get('avg_duration_minutes', 'N/A')} min")
         lines.append("")
 
     return "\n".join(lines)

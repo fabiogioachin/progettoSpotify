@@ -4,7 +4,7 @@ import { useSpotifyData } from '../../hooks/useSpotifyData'
 import LoadingSpinner from '../ui/LoadingSpinner'
 
 const DATA_BADGES = [
-  { label: 'Tracks', color: 'bg-accent/10 text-accent' },
+  { label: 'Brani', color: 'bg-accent/10 text-accent' },
   { label: 'Artisti', color: 'bg-emerald-400/10 text-emerald-400' },
   { label: 'Evoluzione', color: 'bg-amber-400/10 text-amber-400' },
   { label: 'Rete', color: 'bg-cyan-400/10 text-cyan-400' },

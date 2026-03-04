@@ -43,13 +43,12 @@ export default function DashboardPage() {
   const hasError = topError || trendsError || featuresError
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Header row */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-display font-bold text-text-primary">Dashboard</h1>
-            <p className="text-text-muted text-sm">Panoramica del tuo profilo musicale</p>
+            <p className="text-text-secondary text-sm">Panoramica del tuo profilo musicale</p>
           </div>
           <PeriodSelector value={period} onChange={setPeriod} />
         </div>
@@ -126,7 +125,6 @@ export default function DashboardPage() {
             </div>
           </>
         )}
-      </main>
-    </div>
+    </main>
   )
 }

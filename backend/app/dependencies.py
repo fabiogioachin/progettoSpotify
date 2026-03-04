@@ -1,14 +1,8 @@
 """Dependency injection condivise per i router FastAPI."""
 
-from typing import Literal
-
-from fastapi import Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, Request
 
 from app.config import settings
-from app.constants import TIME_RANGES
-from app.database import get_db
-from app.services.spotify_client import SpotifyClient
 
 
 def get_session_user_id(request: Request) -> int | None:

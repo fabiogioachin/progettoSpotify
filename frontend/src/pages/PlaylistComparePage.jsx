@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ListMusic } from 'lucide-react'
 import PlaylistComparison from '../components/charts/PlaylistComparison'
 import AudioRadar from '../components/charts/AudioRadar'
@@ -10,7 +10,12 @@ export default function PlaylistComparePage() {
   const { data: playlistsData, loading: playlistsLoading } = useSpotifyData('/api/playlists')
 
   const [selectedIds, setSelectedIds] = useState([])
-  const { data: comparison, loading: comparing, error: compareError, compare } = usePlaylistCompare()
+  const { data: comparison, loading: comparing, error: compareError, compare, reset } = usePlaylistCompare()
+
+  // Reset stale comparison when selection changes
+  useEffect(() => {
+    if (comparison) reset()
+  }, [selectedIds.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const playlists = playlistsData?.playlists || []
 
@@ -30,13 +35,12 @@ export default function PlaylistComparePage() {
   playlists.forEach((p) => { playlistNames[p.id] = p.name })
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-text-primary">
             Confronto Playlist
           </h1>
-          <p className="text-text-muted text-sm">
+          <p className="text-text-secondary text-sm">
             Seleziona da 2 a 4 playlist per confrontare i profili audio
           </p>
         </div>
@@ -161,7 +165,6 @@ export default function PlaylistComparePage() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </main>
   )
 }

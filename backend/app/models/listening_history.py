@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 
@@ -13,7 +13,7 @@ class ListeningSnapshot(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
     period = Column(String(20), nullable=False)  # 'short_term', 'medium_term', 'long_term'
-    snapshot_date = Column(DateTime, default=datetime.utcnow)
+    snapshot_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     avg_energy = Column(Float)
     avg_valence = Column(Float)

@@ -1,7 +1,6 @@
 """Analisi approfondita delle playlist dell'utente."""
 
 import asyncio
-from collections import defaultdict
 from datetime import datetime
 
 from app.services.spotify_client import SpotifyClient
