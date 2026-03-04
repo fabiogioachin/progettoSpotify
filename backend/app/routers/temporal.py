@@ -1,5 +1,7 @@
 """Router per pattern temporali di ascolto."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +11,7 @@ from app.services.spotify_client import SpotifyClient
 from app.services.temporal_patterns import compute_temporal_patterns
 from app.utils.rate_limiter import SpotifyAuthError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/temporal", tags=["temporal"])
 
 
@@ -21,9 +24,12 @@ async def get_temporal_patterns(
     """Pattern temporali di ascolto dell'utente."""
     client = SpotifyClient(db, user_id)
     try:
-        result = await compute_temporal_patterns(client)
+        result = await compute_temporal_patterns(client, db=db, user_id=user_id)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore temporal_patterns: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nell'analisi pattern temporali")
     finally:
         await client.close()
     return result

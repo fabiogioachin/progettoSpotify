@@ -35,8 +35,11 @@ async def get_audio_features_profile(
 
     try:
         profile = await compute_profile(db, client, time_range)
-        # Salva snapshot
-        await save_snapshot(db, user_id, time_range, profile)
+        # Salva snapshot (non-blocking — non deve impedire la risposta)
+        try:
+            await save_snapshot(db, user_id, time_range, profile)
+        except Exception as snap_exc:
+            logger.warning("Snapshot non salvato: %s", snap_exc)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except Exception as exc:

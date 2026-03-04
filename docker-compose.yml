@@ -6,6 +6,7 @@ services:
     env_file: .env
     volumes:
       - ./data:/app/data
+      - ./backend/app:/app/app
     restart: unless-stopped
 
   frontend:

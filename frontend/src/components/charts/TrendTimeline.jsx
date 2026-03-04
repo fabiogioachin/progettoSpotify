@@ -1,6 +1,8 @@
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
@@ -25,6 +27,20 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
     return <EmptyState />
   }
 
+  // Controlla se le features audio sono disponibili (non tutte zero)
+  const hasFeatures = trends.some((t) =>
+    t.features && Object.entries(t.features).some(([k, v]) => k !== 'tempo' && v && v > 0)
+  )
+
+  if (hasFeatures) {
+    return <FeatureTrend trends={trends} title={title} />
+  }
+
+  // Fallback: mostra popolarita' e artisti unici per periodo
+  return <PopularityTrend trends={trends} title={title} />
+}
+
+function FeatureTrend({ trends, title }) {
   const data = trends.map((t) => ({
     name: t.label,
     ...t.features,
@@ -78,6 +94,61 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
             />
           ))}
         </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function PopularityTrend({ trends, title }) {
+  const data = trends.map((t) => ({
+    name: t.label,
+    popularity: t.popularity_avg || 0,
+    artists: t.unique_artists || 0,
+    tracks: t.track_count || 0,
+  }))
+
+  const COLORS = {
+    popularity: '#6366f1',
+    artists: '#1DB954',
+    tracks: '#f59e0b',
+  }
+
+  const LABELS = {
+    popularity: 'Popolarità media',
+    artists: 'Artisti unici',
+    tracks: 'Brani analizzati',
+  }
+
+  return (
+    <div className="glow-card bg-surface rounded-xl p-5">
+      <h3 className="text-text-primary font-display font-semibold mb-1">{title}</h3>
+      <p className="text-text-muted text-xs mb-4">
+        Confronto tra periodi — popolarità, artisti e brani
+      </p>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+          <XAxis
+            dataKey="name"
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: GRID_COLOR }}
+          />
+          <YAxis
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: GRID_COLOR }}
+          />
+          <Tooltip
+            {...TOOLTIP_STYLE}
+            formatter={(val, name) => [val, LABELS[name] || name]}
+          />
+          <Legend
+            formatter={(val) => LABELS[val] || val}
+            wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }}
+          />
+          <Bar dataKey="popularity" fill={COLORS.popularity} radius={[4, 4, 0, 0]} animationDuration={1500} />
+          <Bar dataKey="artists" fill={COLORS.artists} radius={[4, 4, 0, 0]} animationDuration={1500} />
+          <Bar dataKey="tracks" fill={COLORS.tracks} radius={[4, 4, 0, 0]} animationDuration={1500} />
+        </BarChart>
       </ResponsiveContainer>
     </div>
   )
