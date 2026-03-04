@@ -1,16 +1,39 @@
-# Enhancement Batch 2 — Todo
+eseguire queste task:
 
-## Completed
-- [x] Create PRD (docs/PRD.md)
-- [x] Create memory files (MEMORY.md, tasks/todo.md, tasks/lessons.md)
-- [x] Top 50 brani in DashboardPage (tracks.slice(0,50) + scroll container)
-- [x] Historical tops backend (historical_tops.py + historical.py router)
-- [x] Historical section in TasteEvolutionPage (timeline + expandable years)
-- [x] Heatmap Wrapped-style (multi-color gradient, storytelling header, stagger animation)
-- [x] StreakDisplay Duolingo-style (flame SVG, progress ring, milestone badges)
-- [x] SessionStats Duolingo-style (animated bars, weekday/weekend comparison)
-- [x] TemporalPage redesign (KPI simplified, StreakDisplay + SessionStats grid)
-- [x] Enhanced Claude export backend (taste_evolution + artist_network + temporal_patterns)
-- [x] ClaudeExportPanel update (data badges + download .md button)
-- [x] Build verification (npm run build: 2294 modules, 0 errors)
-- [x] Backend import verification (all 3 new modules import correctly)
+
+
+
+
+Verificare veridicità dei dati in dashboard: spiegare trend template, ogni voce che lo compone, da dove provengono i dati. Popolarità media 0/100 in dashboard -> valore non coerente Genere top: nullo. eliminare label "nessun dato disponibile"
+
+
+
+elimina tutti i label con nessun dato disponibile
+
+
+
+check dati distribuzione popolaritià e hidden gems in discovery, assolutamente da rifare, piuttosto eliminare
+
+
+
+evoluzione del gusto: informazioni sui primi 4 label quando passo con il cursore
+
+
+
+distribuzione artisti per periodo: sostituire "1 periodo", 2 periodi, 3 periodi con nomi più significativi, analisi più approfondite, però l'idea di base è buona
+
+
+
+pattern temporali è molto carino, assicurati che siano dati reali, sono molto interessanti. vorrei poterci "giocare" di più
+
+
+
+ecosistema artisti non mi convince, è troppo poco esplicativo, integriamo informazioni sui label al movimento del cursore.
+
+
+
+come per "periodo", anche "cluster" è poco significativo, la forma del grafico che senso ha?
+
+
+
+Confronto e analisi completamente da rifare: i dati non ci sono: le playlist sono vuote. un problema da analizzare accuratamente e trovare la radice del problema
