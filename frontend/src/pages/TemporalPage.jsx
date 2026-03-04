@@ -4,7 +4,7 @@ import ListeningHeatmap from '../components/charts/ListeningHeatmap'
 import StreakDisplay from '../components/charts/StreakDisplay'
 import SessionStats from '../components/charts/SessionStats'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import { Headphones, Calendar, RefreshCw } from 'lucide-react'
+import { Headphones, Calendar, RefreshCw, TrendingUp } from 'lucide-react'
 
 export default function TemporalPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/temporal')
@@ -16,6 +16,9 @@ export default function TemporalPage() {
   const streak = data?.streak || {}
   const totalPlays = data?.total_plays || 0
   const mostPlayed = data?.most_played || {}
+  const topTracks = data?.top_tracks || []
+  const accumulated = data?.accumulated || false
+  const newPlaysStored = data?.new_plays_stored || 0
 
   const peakHourLabel = peakHours.length > 0 ? `${String(peakHours[0].hour).padStart(2, '0')}:00` : '--'
 
@@ -31,9 +34,25 @@ export default function TemporalPage() {
           </button>
         </div>
 
-        {/* Spotify API limit notice */}
-        <div className="bg-accent/5 border border-accent/10 rounded-xl px-4 py-2 text-text-secondary text-xs">
-          Basato sugli ultimi {totalPlays} ascolti (limite API Spotify: 50)
+        {/* Data source info */}
+        <div className="bg-accent/5 border border-accent/10 rounded-xl px-4 py-2 text-text-secondary text-xs flex items-center gap-2">
+          {accumulated ? (
+            <>
+              <TrendingUp size={14} className="text-spotify flex-shrink-0" />
+              Basato su {totalPlays} ascolti accumulati
+              {newPlaysStored > 0 && (
+                <span className="text-spotify font-medium">
+                  (+{newPlaysStored} nuovi salvati)
+                </span>
+              )}
+              <span className="text-text-muted ml-auto">Lo storico cresce ad ogni visita</span>
+            </>
+          ) : (
+            <>
+              Basato sugli ultimi {totalPlays} ascolti (limite API Spotify: 50).
+              <span className="text-text-muted ml-auto">I dati si accumulano ad ogni visita</span>
+            </>
+          )}
         </div>
 
         {error && (
@@ -44,20 +63,20 @@ export default function TemporalPage() {
           <LoadingSpinner />
         ) : (
           <>
-            {/* KPI Cards — simplified to 2 (streak and sessions moved to dedicated components) */}
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <KPICard title="Ascolti Totali" value={totalPlays} icon={Headphones} delay={0} />
               <KPICard title="Ora di Punta" value={peakHourLabel} icon={Calendar} delay={100} />
             </div>
 
-            {/* Heatmap — Spotify Wrapped style */}
+            {/* Heatmap */}
             <ListeningHeatmap
               data={heatmap.data || []}
               dayLabels={heatmap.day_labels || []}
               hourLabels={heatmap.hour_labels || []}
             />
 
-            {/* Streak + Sessions — Duolingo style, side by side */}
+            {/* Streak + Sessions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <StreakDisplay
                 streak={streak.max_streak || 0}
@@ -69,6 +88,24 @@ export default function TemporalPage() {
                 mostPlayed={mostPlayed}
               />
             </div>
+
+            {/* Top tracks from history */}
+            {topTracks.length > 0 && (
+              <div className="glow-card bg-surface rounded-xl p-5">
+                <h3 className="text-text-primary font-display font-semibold mb-4">Brani Più Ascoltati</h3>
+                <div className="space-y-2">
+                  {topTracks.map((t, i) => (
+                    <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
+                      <span className="w-6 text-center text-text-muted text-sm font-mono">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-text-primary text-sm truncate">{t.name}</p>
+                      </div>
+                      <span className="text-accent text-sm font-medium">{t.count}×</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Peak Hours */}
             {peakHours.length > 0 && (

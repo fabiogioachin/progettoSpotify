@@ -2,7 +2,7 @@ import { useSpotifyData } from '../hooks/useSpotifyData'
 import KPICard from '../components/cards/KPICard'
 import ArtistNetwork from '../components/charts/ArtistNetwork'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import { Users, GitBranch, Waypoints, BarChart3, RefreshCw } from 'lucide-react'
+import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music } from 'lucide-react'
 
 export default function ArtistNetworkPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/artist-network')
@@ -12,6 +12,7 @@ export default function ArtistNetworkPage() {
   const edges = data?.edges || []
   const clusters = data?.clusters || []
   const bridges = data?.bridges || []
+  const topGenres = data?.top_genres || []
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -44,6 +45,32 @@ export default function ArtistNetworkPage() {
             {/* Network Graph */}
             <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} loading={loading} />
 
+            {/* Genre Cloud */}
+            {topGenres.length > 0 && (
+              <div className="glow-card bg-surface rounded-xl p-5">
+                <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                  <Music size={18} className="text-accent" />
+                  Generi dominanti nel tuo ecosistema
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {topGenres.map((g, i) => {
+                    const size = i < 3 ? 'text-sm px-3 py-1.5' : 'text-xs px-2 py-1'
+                    const opacity = Math.max(0.4, 1 - (i * 0.08))
+                    return (
+                      <span
+                        key={g.genre}
+                        className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20`}
+                        style={{ opacity }}
+                      >
+                        {g.genre}
+                        <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Bridge Artists */}
             {bridges.length > 0 && (
               <div className="glow-card bg-surface rounded-xl p-5">
@@ -52,11 +79,11 @@ export default function ArtistNetworkPage() {
                   Artisti Ponte
                 </h3>
                 <p className="text-text-secondary text-sm mb-4">
-                  Artisti che collegano cluster di gusto diversi
+                  Artisti che collegano cluster di gusto diversi nel tuo ecosistema
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {bridges.map((bridge, i) => (
-                    <div key={bridge.id} className="flex items-center gap-3 p-3 rounded-lg bg-surface-hover animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
+                    <div key={bridge.id} className="flex items-start gap-3 p-3 rounded-lg bg-surface-hover animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
                       {bridge.image ? (
                         <img src={bridge.image} alt={bridge.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
                       ) : (
@@ -66,7 +93,13 @@ export default function ArtistNetworkPage() {
                       )}
                       <div className="min-w-0">
                         <p className="text-text-primary text-sm font-medium truncate">{bridge.name}</p>
-                        <p className="text-accent text-xs">{bridge.bridge_score} connessioni cross-cluster</p>
+                        <p className="text-accent text-xs">{bridge.bridge_score} conn. cross-cluster</p>
+                        {bridge.genres && bridge.genres.length > 0 && (
+                          <p className="text-text-muted text-[10px] truncate mt-0.5">{bridge.genres.join(', ')}</p>
+                        )}
+                        {bridge.popularity > 0 && (
+                          <p className="text-text-muted text-[10px]">Pop. {bridge.popularity}</p>
+                        )}
                       </div>
                     </div>
                   ))}

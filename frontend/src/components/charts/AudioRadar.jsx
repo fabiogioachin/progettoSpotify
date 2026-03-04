@@ -19,7 +19,12 @@ export default function AudioRadar({ features, title = 'Profilo Audio', loading 
     )
   }
 
-  if (!features || Object.keys(features).length === 0) {
+  // Se le features sono tutte zero (API deprecata) o vuote, mostra empty state
+  const hasNonZeroFeatures = features
+    && Object.keys(features).length > 0
+    && Object.entries(features).some(([k, v]) => k !== 'tempo' && v && v > 0)
+
+  if (!hasNonZeroFeatures) {
     return <EmptyState />
   }
 

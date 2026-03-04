@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, UniqueConstraint
 
 from app.database import Base
 
@@ -27,3 +27,21 @@ class ListeningSnapshot(Base):
     top_genre = Column(String(255))
     genre_distribution = Column(Text)  # JSON string
     track_count = Column(Integer)
+
+
+class RecentPlay(Base):
+    """Cronologia ascolti accumulata nel tempo (supera il limite di 50 di Spotify)."""
+
+    __tablename__ = "recent_plays"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    track_spotify_id = Column(String(64), nullable=False)
+    track_name = Column(String(500), nullable=False)
+    artist_name = Column(String(500), nullable=False)
+    duration_ms = Column(Integer, default=180000)
+    played_at = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "track_spotify_id", "played_at", name="uq_user_track_played"),
+    )

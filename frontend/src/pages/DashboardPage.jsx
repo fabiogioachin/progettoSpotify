@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Disc3, Heart, Music } from 'lucide-react'
+import { Disc3, Music, Star, Users } from 'lucide-react'
 import KPICard from '../components/cards/KPICard'
 import TrackCard from '../components/cards/TrackCard'
 import AudioRadar from '../components/charts/AudioRadar'
@@ -29,15 +29,12 @@ export default function DashboardPage() {
   const genres = featuresData?.genres || {}
   const trends = trendsData?.current || []
 
-  // KPI calculations
+  // KPI calculations — solo dati reali sempre disponibili
   const trackCount = topData?.total || 0
-  const avgEnergy = features.energy ? Math.round(features.energy * 100) : 0
-  const avgValence = features.valence || 0
+  const popularityAvg = featuresData?.popularity_avg || 0
+  const uniqueArtists = featuresData?.unique_artists || 0
   const topGenre = Object.keys(genres)[0] || '—'
   const topGenrePct = Object.values(genres)[0] || 0
-
-  const moodEmoji = avgValence > 0.6 ? '😊' : avgValence > 0.3 ? '😐' : '😢'
-  const moodScore = Math.round(avgValence * 100)
 
   const isLoading = topLoading || trendsLoading || featuresLoading
   const hasError = topError || trendsError || featuresError
@@ -63,7 +60,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* KPI Row */}
+            {/* KPI Row — dati reali sempre disponibili */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <KPICard
                 title="Brani analizzati"
@@ -72,10 +69,10 @@ export default function DashboardPage() {
                 delay={0}
               />
               <KPICard
-                title="Energia media"
-                value={avgEnergy}
-                suffix="%"
-                icon={Activity}
+                title="Popolarità media"
+                value={Math.round(popularityAvg)}
+                suffix="/100"
+                icon={Star}
                 delay={100}
               />
               <KPICard
@@ -86,10 +83,9 @@ export default function DashboardPage() {
                 delay={200}
               />
               <KPICard
-                title={`Mood Score ${moodEmoji}`}
-                value={moodScore}
-                suffix="%"
-                icon={Heart}
+                title="Artisti unici"
+                value={uniqueArtists}
+                icon={Users}
                 delay={300}
               />
             </div>

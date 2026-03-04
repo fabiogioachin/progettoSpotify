@@ -1,40 +1,74 @@
-"""Analisi dei pattern temporali di ascolto."""
+"""Analisi dei pattern temporali di ascolto.
 
+Accumula gli ascolti nel DB per superare il limite di 50 dell'API Spotify.
+Ogni volta che viene chiamato, salva i nuovi ascolti e analizza l'intero storico.
+"""
+
+import logging
 from collections import defaultdict
 from datetime import datetime
 
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.listening_history import RecentPlay
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 DAY_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
 
 
-async def compute_temporal_patterns(client: SpotifyClient) -> dict:
-    """Analizza i pattern temporali dai brani ascoltati di recente."""
+async def compute_temporal_patterns(
+    client: SpotifyClient, db: AsyncSession = None, user_id: int = None
+) -> dict:
+    """Analizza i pattern temporali dai brani ascoltati di recente.
+
+    Se db e user_id sono forniti, accumula gli ascolti nel DB per avere
+    uno storico superiore ai 50 dell'API Spotify.
+    """
 
     data = await retry_with_backoff(client.get_recently_played, limit=50)
     items = data.get("items", [])
 
-    if not items:
-        return _empty_result()
-
-    # Parse timestamps
-    plays = []
+    # Parse timestamps from Spotify API
+    api_plays = []
     for item in items:
         played_at_str = item.get("played_at")
         if not played_at_str:
             continue
         dt = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
         track = item.get("track", {})
-        plays.append({
+        api_plays.append({
             "datetime": dt,
-            "weekday": dt.weekday(),  # 0=Monday
+            "weekday": dt.weekday(),
             "hour": dt.hour,
             "track_name": track.get("name", ""),
+            "track_id": track.get("id", ""),
             "artist_name": (track.get("artists", [{}])[0].get("name", "")
                            if track.get("artists") else ""),
             "duration_ms": track.get("duration_ms", 180000),
         })
+
+    # Persist to DB if available (accumulate historical data)
+    stored_count = 0
+    if db and user_id and api_plays:
+        stored_count = await _store_plays(db, user_id, api_plays)
+
+    # Read accumulated plays from DB (if available, gives us more than 50)
+    plays = api_plays
+    if db and user_id:
+        db_plays = await _load_plays(db, user_id)
+        if db_plays and len(db_plays) > len(api_plays):
+            plays = db_plays
+            logger.info(
+                "Temporal patterns: using %d accumulated plays (vs %d from API)",
+                len(plays), len(api_plays),
+            )
+
+    if not plays:
+        return _empty_result()
 
     plays.sort(key=lambda x: x["datetime"])
 
@@ -49,7 +83,7 @@ async def compute_temporal_patterns(client: SpotifyClient) -> dict:
 
     for i in range(1, len(plays)):
         gap = abs((plays[i]["datetime"] - plays[i - 1]["datetime"]).total_seconds())
-        if gap > 1800:  # 30 minutes
+        if gap > 1800:
             sessions.append(current_session)
             current_session = [plays[i]]
         else:
@@ -96,6 +130,10 @@ async def compute_temporal_patterns(client: SpotifyClient) -> dict:
         track_counts[play["track_name"]] += 1
     most_played = max(track_counts.items(), key=lambda x: x[1]) if track_counts else ("", 0)
 
+    # Top 5 most played tracks
+    top_tracks = sorted(track_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_tracks_list = [{"name": name, "count": count} for name, count in top_tracks]
+
     return {
         "heatmap": {
             "data": heatmap,
@@ -122,8 +160,76 @@ async def compute_temporal_patterns(client: SpotifyClient) -> dict:
             "track_name": most_played[0],
             "count": most_played[1],
         },
+        "top_tracks": top_tracks_list,
         "total_plays": len(plays),
+        "accumulated": len(plays) > len(api_plays),
+        "new_plays_stored": stored_count,
     }
+
+
+async def _store_plays(
+    db: AsyncSession, user_id: int, plays: list[dict]
+) -> int:
+    """Salva nuovi ascolti nel DB, ignorando duplicati."""
+    stored = 0
+    for play in plays:
+        dt_naive = play["datetime"].replace(tzinfo=None)
+        track_id = play.get("track_id", "")
+        if not track_id:
+            continue
+        result = await db.execute(
+            select(func.count(RecentPlay.id)).where(
+                RecentPlay.user_id == user_id,
+                RecentPlay.track_spotify_id == track_id,
+                RecentPlay.played_at == dt_naive,
+            )
+        )
+        if result.scalar() > 0:
+            continue
+        rp = RecentPlay(
+            user_id=user_id,
+            track_spotify_id=track_id,
+            track_name=play["track_name"],
+            artist_name=play["artist_name"],
+            duration_ms=play["duration_ms"],
+            played_at=dt_naive,
+        )
+        db.add(rp)
+        stored += 1
+    if stored > 0:
+        try:
+            await db.commit()
+        except Exception as exc:
+            logger.warning("Errore salvataggio ascolti: %s", exc)
+            await db.rollback()
+            stored = 0
+    return stored
+
+
+async def _load_plays(db: AsyncSession, user_id: int) -> list[dict]:
+    """Carica tutti gli ascolti accumulati dal DB."""
+    result = await db.execute(
+        select(RecentPlay)
+        .where(RecentPlay.user_id == user_id)
+        .order_by(RecentPlay.played_at.asc())
+    )
+    rows = result.scalars().all()
+    plays = []
+    for r in rows:
+        dt = r.played_at
+        if dt.tzinfo is None:
+            from datetime import timezone
+            dt = dt.replace(tzinfo=timezone.utc)
+        plays.append({
+            "datetime": dt,
+            "weekday": dt.weekday(),
+            "hour": dt.hour,
+            "track_name": r.track_name,
+            "track_id": r.track_spotify_id,
+            "artist_name": r.artist_name,
+            "duration_ms": r.duration_ms or 180000,
+        })
+    return plays
 
 
 def _compute_streak(sorted_dates: list) -> int:
@@ -163,5 +269,8 @@ def _empty_result():
         },
         "streak": {"max_streak": 0, "unique_days": 0},
         "most_played": {"track_name": "", "count": 0},
+        "top_tracks": [],
         "total_plays": 0,
+        "accumulated": False,
+        "new_plays_stored": 0,
     }

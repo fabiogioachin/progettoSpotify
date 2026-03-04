@@ -27,6 +27,9 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
             "name": artist.get("name", ""),
             "image": images[0]["url"] if images else None,
             "is_top": True,
+            "genres": artist.get("genres", [])[:3],
+            "popularity": artist.get("popularity", 0),
+            "followers": artist.get("followers", {}).get("total", 0),
         }
 
     # Fetch related artists with concurrency control
@@ -58,6 +61,9 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
                     "name": rel.get("name", ""),
                     "image": images[0]["url"] if images else None,
                     "is_top": False,
+                    "genres": rel.get("genres", [])[:3],
+                    "popularity": rel.get("popularity", 0),
+                    "followers": rel.get("followers", {}).get("total", 0),
                 }
 
             # Add edge (deduplicated)
@@ -65,6 +71,14 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
             if edge_key not in seen_edges:
                 seen_edges.add(edge_key)
                 edges.append({"source": source_id, "target": rel_id})
+
+    # Add connection count per node
+    conn_count = defaultdict(int)
+    for edge in edges:
+        conn_count[edge["source"]] += 1
+        conn_count[edge["target"]] += 1
+    for nid in nodes:
+        nodes[nid]["connections"] = conn_count.get(nid, 0)
 
     # Cluster detection (BFS connected components)
     clusters = _detect_clusters(nodes, edges)
@@ -75,11 +89,19 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
     # Count clusters
     cluster_ids = set(c["cluster"] for c in clusters)
 
+    # Genre summary for the network
+    genre_counter = defaultdict(int)
+    for n in nodes.values():
+        for g in n.get("genres", []):
+            genre_counter[g] += 1
+    top_genres = sorted(genre_counter.items(), key=lambda x: x[1], reverse=True)[:10]
+
     return {
         "nodes": list(nodes.values()),
         "edges": edges,
         "clusters": clusters,
         "bridges": bridges[:5],
+        "top_genres": [{"genre": g, "count": c} for g, c in top_genres],
         "metrics": {
             "total_nodes": len(nodes),
             "total_edges": len(edges),
@@ -139,6 +161,8 @@ def _find_bridges(nodes: dict, edges: list, clusters: list) -> list:
             "name": nodes[nid]["name"],
             "bridge_score": score,
             "image": nodes[nid].get("image"),
+            "genres": nodes[nid].get("genres", []),
+            "popularity": nodes[nid].get("popularity", 0),
         }
         for nid, score in bridges
         if nid in nodes

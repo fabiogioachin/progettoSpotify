@@ -1,10 +1,13 @@
 """Analisi approfondita delle playlist dell'utente."""
 
 import asyncio
+import logging
 from datetime import datetime
 
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import retry_with_backoff
+from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 
 async def analyze_playlists(client: SpotifyClient) -> dict:
@@ -56,7 +59,10 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
                     data = await retry_with_backoff(
                         client.get_playlist_tracks, pid, limit=100, offset=off
                     )
-                except Exception:
+                except SpotifyAuthError:
+                    raise  # Auth errors must propagate
+                except Exception as exc:
+                    logger.warning("Errore fetch tracce playlist %s offset %d: %s", pid, off, exc)
                     break
                 for item in data.get("items", []):
                     track = item.get("track")

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.user import SpotifyToken
+from cryptography.fernet import InvalidToken
+
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 from app.utils.token_manager import decrypt_token, encrypt_token
 
@@ -48,15 +50,22 @@ class SpotifyClient:
             if not token_record:
                 raise SpotifyAuthError("Nessun token trovato per l'utente")
 
-            # Buffer 5 minuti prima della scadenza
-            if token_record.expires_at <= datetime.now(timezone.utc) + timedelta(minutes=5):
+            # Buffer 5 minuti prima della scadenza (naive UTC per compatibilità SQLite)
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            if token_record.expires_at <= now_utc + timedelta(minutes=5):
                 await self._refresh_token(token_record)
 
-            return decrypt_token(token_record.access_token_encrypted)
+            try:
+                return decrypt_token(token_record.access_token_encrypted)
+            except InvalidToken:
+                raise SpotifyAuthError("Token corrotto — è necessario riautenticarsi")
 
     async def _refresh_token(self, token_record: SpotifyToken):
         """Rinnova l'access_token usando il refresh_token."""
-        refresh_token = decrypt_token(token_record.refresh_token_encrypted)
+        try:
+            refresh_token = decrypt_token(token_record.refresh_token_encrypted)
+        except InvalidToken:
+            raise SpotifyAuthError("Token corrotto — è necessario riautenticarsi")
 
         resp = await self._client.post(
             SPOTIFY_TOKEN_URL,
@@ -75,8 +84,8 @@ class SpotifyClient:
         token_record.access_token_encrypted = encrypt_token(data["access_token"])
         if "refresh_token" in data:
             token_record.refresh_token_encrypted = encrypt_token(data["refresh_token"])
-        token_record.expires_at = datetime.now(timezone.utc) + timedelta(seconds=data["expires_in"])
-        token_record.updated_at = datetime.now(timezone.utc)
+        token_record.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=data["expires_in"])
+        token_record.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await self.db.commit()
 
     async def _request(self, method: str, url: str, **kwargs) -> Any:

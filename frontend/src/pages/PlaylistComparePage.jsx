@@ -105,64 +105,87 @@ export default function PlaylistComparePage() {
             )}
             {comparing && <LoadingSpinner />}
 
-            {comparison && (
-              <div className="space-y-6 animate-fade-in">
-                <PlaylistComparison
-                  comparisons={comparison.comparisons}
-                  playlistNames={playlistNames}
-                />
-
-                {/* Radar overlay per ciascuna playlist */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {comparison.comparisons.map((comp, idx) => (
-                    <AudioRadar
-                      key={comp.playlist_id}
-                      features={comp.averages}
-                      title={playlistNames[comp.playlist_id] || `Playlist ${idx + 1}`}
-                    />
-                  ))}
-                </div>
-
-                {/* Tabella riassuntiva */}
-                <div className="glow-card bg-surface rounded-xl p-5 overflow-x-auto">
-                  <h3 className="text-text-primary font-display font-semibold mb-4">
-                    Riepilogo
-                  </h3>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left text-text-muted py-2 px-3">Playlist</th>
-                        <th className="text-center text-text-muted py-2 px-3">Brani</th>
-                        <th className="text-center text-text-muted py-2 px-3">Energia</th>
-                        <th className="text-center text-text-muted py-2 px-3">Positività</th>
-                        <th className="text-center text-text-muted py-2 px-3">Ballabilità</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {comparison.comparisons.map((comp) => (
-                        <tr key={comp.playlist_id} className="border-b border-border/50">
-                          <td className="py-2 px-3 text-text-primary font-medium">
-                            {playlistNames[comp.playlist_id] || comp.playlist_id}
-                          </td>
-                          <td className="py-2 px-3 text-center text-text-secondary">
-                            {comp.track_count}
-                          </td>
-                          <td className="py-2 px-3 text-center text-text-secondary">
-                            {Math.round((comp.averages?.energy ?? 0) * 100)}%
-                          </td>
-                          <td className="py-2 px-3 text-center text-text-secondary">
-                            {Math.round((comp.averages?.valence ?? 0) * 100)}%
-                          </td>
-                          <td className="py-2 px-3 text-center text-text-secondary">
-                            {Math.round((comp.averages?.danceability ?? 0) * 100)}%
-                          </td>
+            {comparison && (() => {
+              const hasFeatures = comparison.comparisons.some(c => c.analyzed_count > 0)
+              return (
+                <div className="space-y-6 animate-fade-in">
+                  {/* Tabella riassuntiva — sempre visibile */}
+                  <div className="glow-card bg-surface rounded-xl p-5 overflow-x-auto">
+                    <h3 className="text-text-primary font-display font-semibold mb-4">
+                      Riepilogo
+                    </h3>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left text-text-muted py-2 px-3">Playlist</th>
+                          <th className="text-center text-text-muted py-2 px-3">Brani</th>
+                          <th className="text-center text-text-muted py-2 px-3">Analizzati</th>
+                          {hasFeatures && (
+                            <>
+                              <th className="text-center text-text-muted py-2 px-3">Energia</th>
+                              <th className="text-center text-text-muted py-2 px-3">Positività</th>
+                              <th className="text-center text-text-muted py-2 px-3">Ballabilità</th>
+                            </>
+                          )}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {comparison.comparisons.map((comp) => (
+                          <tr key={comp.playlist_id} className="border-b border-border/50">
+                            <td className="py-2 px-3 text-text-primary font-medium">
+                              {playlistNames[comp.playlist_id] || comp.playlist_id}
+                            </td>
+                            <td className="py-2 px-3 text-center text-text-secondary">
+                              {comp.track_count}
+                            </td>
+                            <td className="py-2 px-3 text-center text-text-secondary">
+                              {comp.analyzed_count}
+                            </td>
+                            {hasFeatures && (
+                              <>
+                                <td className="py-2 px-3 text-center text-text-secondary">
+                                  {Math.round((comp.averages?.energy ?? 0) * 100)}%
+                                </td>
+                                <td className="py-2 px-3 text-center text-text-secondary">
+                                  {Math.round((comp.averages?.valence ?? 0) * 100)}%
+                                </td>
+                                <td className="py-2 px-3 text-center text-text-secondary">
+                                  {Math.round((comp.averages?.danceability ?? 0) * 100)}%
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!hasFeatures && (
+                      <p className="text-text-muted text-xs text-center mt-3">
+                        Profili audio non disponibili — le audio features di Spotify non sono al momento accessibili.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Charts solo se features disponibili */}
+                  {hasFeatures && (
+                    <>
+                      <PlaylistComparison
+                        comparisons={comparison.comparisons}
+                        playlistNames={playlistNames}
+                      />
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {comparison.comparisons.map((comp, idx) => (
+                          <AudioRadar
+                            key={comp.playlist_id}
+                            features={comp.averages}
+                            title={playlistNames[comp.playlist_id] || `Playlist ${idx + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </>
         )}
     </main>

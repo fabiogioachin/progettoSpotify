@@ -1,5 +1,7 @@
 """Router per analisi evoluzione del gusto musicale."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +11,7 @@ from app.services.spotify_client import SpotifyClient
 from app.services.taste_evolution import compute_taste_evolution
 from app.utils.rate_limiter import SpotifyAuthError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/taste-evolution", tags=["taste-evolution"])
 
 
@@ -24,6 +27,9 @@ async def get_taste_evolution(
         result = await compute_taste_evolution(client)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore taste_evolution: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nell'analisi evoluzione gusto")
     finally:
         await client.close()
     return result

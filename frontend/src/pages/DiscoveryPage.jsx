@@ -1,8 +1,11 @@
-import { Compass, Sparkles, Star } from 'lucide-react'
+import { Compass, Sparkles, Star, BarChart3, Music } from 'lucide-react'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
+import GenreTreemap from '../components/charts/GenreTreemap'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { useSpotifyData } from '../hooks/useSpotifyData'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { TOOLTIP_STYLE } from '../lib/chartTheme'
 
 export default function DiscoveryPage() {
   const { data: topData, loading: topLoading, error: topError } = useSpotifyData('/api/library/top', { limit: 50 })
@@ -12,6 +15,13 @@ export default function DiscoveryPage() {
   const recommendations = discoveryData?.recommendations || []
   const outliers = discoveryData?.outliers || []
   const centroid = discoveryData?.centroid || {}
+  const genreDistribution = discoveryData?.genre_distribution || {}
+  const popularityDistribution = discoveryData?.popularity_distribution || []
+  const hasAudioFeatures = discoveryData?.has_audio_features ?? false
+
+  // Controlla se i tracks hanno features per il MoodScatter
+  const tracksWithFeatures = tracks.filter(t => t.features && Object.values(t.features).some(v => v > 0))
+  const hasMoodData = tracksWithFeatures.length > 0
 
   const isLoading = topLoading || discoveryLoading
   const hasError = topError || discoveryError
@@ -38,20 +48,31 @@ export default function DiscoveryPage() {
               </div>
             )}
 
-            {/* Mood Scatter — full width */}
-            <MoodScatter tracks={tracks} />
+            {/* Mood Scatter OPPURE Distribuzione Popolarita' */}
+            {hasMoodData ? (
+              <MoodScatter tracks={tracks} />
+            ) : (
+              <PopularityDistribution data={popularityDistribution} />
+            )}
 
-            {/* Centroid Radar + Outliers */}
+            {/* Genre Treemap + Centroid Radar o Outliers */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <AudioRadar features={centroid} title="Il tuo centro musicale" />
+              {/* Se ci sono generi, mostra il treemap; altrimenti il radar se ha features */}
+              {Object.keys(genreDistribution).length > 0 ? (
+                <GenreTreemap genres={genreDistribution} title="Il tuo DNA musicale" />
+              ) : (
+                <AudioRadar features={centroid} title="Il tuo centro musicale" />
+              )}
 
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <Star size={18} className="text-amber-400" />
-                  Brani Outlier
+                  {hasAudioFeatures ? 'Brani Outlier' : 'Hidden Gems'}
                 </h3>
                 <p className="text-text-muted text-xs mb-3">
-                  Brani che si discostano dal tuo profilo medio
+                  {hasAudioFeatures
+                    ? 'Brani che si discostano dal tuo profilo medio'
+                    : 'Brani meno conosciuti tra i tuoi preferiti'}
                 </p>
                 <div className="space-y-2">
                   {outliers.slice(0, 8).map((track) => (
@@ -59,12 +80,19 @@ export default function DiscoveryPage() {
                       key={track.id}
                       className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300"
                     >
+                      {track.album_image ? (
+                        <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
+                          <Music size={16} className="text-text-muted" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="text-text-primary text-sm truncate">{track.name}</p>
                         <p className="text-text-muted text-xs truncate">{track.artist}</p>
                       </div>
-                      <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
-                        {Math.round(track.distance * 100)}% diverso
+                      <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
+                        {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
                       </span>
                     </div>
                   ))}
@@ -81,10 +109,12 @@ export default function DiscoveryPage() {
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Sparkles size={18} className="text-accent" />
-                Brani Suggeriti
+                {recommendations.length > 0 ? 'Brani Suggeriti' : 'Scoperte Recenti'}
               </h3>
               <p className="text-text-muted text-xs mb-4">
-                Basati sul tuo profilo d'ascolto — priorità ad artisti che non conosci ancora
+                {recommendations.length > 0
+                  ? 'Basati sul tuo profilo d\'ascolto — priorità ad artisti che non conosci ancora'
+                  : 'Brani apparsi di recente nelle tue classifiche'}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {recommendations.map((rec) => (
@@ -99,7 +129,9 @@ export default function DiscoveryPage() {
                         className="w-12 h-12 rounded-md object-cover group-hover:scale-105 transition-transform"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-md bg-surface-hover" />
+                      <div className="w-12 h-12 rounded-md bg-surface-hover flex items-center justify-center">
+                        <Music size={18} className="text-text-muted" />
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-text-primary text-sm font-medium truncate">
@@ -112,9 +144,9 @@ export default function DiscoveryPage() {
                             Nuovo artista
                           </span>
                         )}
-                        {rec.distance_from_profile != null && (
+                        {rec.popularity != null && (
                           <span className="text-[10px] text-text-muted">
-                            {Math.round(rec.distance_from_profile * 100)}% dist.
+                            Pop. {rec.popularity}
                           </span>
                         )}
                       </div>
@@ -131,5 +163,46 @@ export default function DiscoveryPage() {
           </>
         )}
     </main>
+  )
+}
+
+function PopularityDistribution({ data }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[300px]">
+        <p className="text-text-muted text-sm">Nessun dato di popolarità disponibile</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="glow-card bg-surface rounded-xl p-5">
+      <h3 className="text-text-primary font-display font-semibold mb-1 flex items-center gap-2">
+        <BarChart3 size={18} className="text-accent" />
+        Distribuzione Popolarità
+      </h3>
+      <p className="text-text-muted text-xs mb-4">
+        Come si distribuisce la popolarità dei tuoi brani preferiti (0 = nicchia, 100 = mainstream)
+      </p>
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+          <XAxis
+            dataKey="range"
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
+          />
+          <YAxis
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            axisLine={{ stroke: '#282828' }}
+          />
+          <Tooltip
+            {...TOOLTIP_STYLE}
+            formatter={(val) => [`${val} brani`, 'Conteggio']}
+          />
+          <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={1500} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   )
 }

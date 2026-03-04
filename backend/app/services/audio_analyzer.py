@@ -24,12 +24,26 @@ async def compute_profile(
     items = data.get("items", [])
 
     if not items:
-        return {"features": {}, "genres": {}, "track_count": 0}
+        return {"features": {}, "genres": {}, "track_count": 0,
+                "popularity_avg": 0, "unique_artists": 0, "top_artist": "—"}
 
     track_ids = [t["id"] for t in items]
+
+    # Stats sempre disponibili (non dipendono da audio features)
+    popularities = [t.get("popularity", 0) for t in items]
+    popularity_avg = round(sum(popularities) / len(popularities), 1) if popularities else 0
+
+    artist_counter = Counter()
+    for t in items:
+        for a in t.get("artists", []):
+            if a.get("name"):
+                artist_counter[a["name"]] += 1
+    unique_artists = len(artist_counter)
+    top_artist = artist_counter.most_common(1)[0][0] if artist_counter else "—"
+
+    # Audio features (possono essere vuote se API deprecata)
     features = await get_or_fetch_features(db, client, track_ids)
 
-    # Medie features
     averages = {}
     for key in FEATURE_KEYS:
         vals = [f[key] for f in features.values() if f.get(key) is not None]
@@ -46,6 +60,9 @@ async def compute_profile(
         "features": averages,
         "genres": genres,
         "track_count": len(items),
+        "popularity_avg": popularity_avg,
+        "unique_artists": unique_artists,
+        "top_artist": top_artist,
     }
 
 
