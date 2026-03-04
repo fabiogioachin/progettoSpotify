@@ -53,3 +53,37 @@
 - `datetime.utcnow` deprecation warnings are silent in many setups — grep for it proactively
 - `.slice()` on gradient definitions is a subtle bug — rendered areas reference missing gradients silently
 - Rate limiter dicts using raw cookie values as keys will grow unbounded
+
+## Deprecated API Resilience — March 2026
+
+### Failure Mode: Hardcoded fallback values look like real data
+- **Signal**: any `default=180000` or similar magic number in model/service code
+- **Prevention**: default to `0` or `None` for missing data, never a plausible value (e.g. "3 min" duration is believable but wrong)
+- **Rule**: grep for hardcoded numeric defaults in models and services — if the number looks like a real measurement, it's a bug
+
+### Failure Mode: SpotifyAuthError swallowed by generic except
+- **Signal**: `except Exception` in router/service catches SpotifyAuthError too → user gets stale data instead of redirect to login
+- **Prevention**: always add `except SpotifyAuthError: raise` before `except Exception` in any Spotify API calling code
+- **Rule**: every new endpoint touching SpotifyClient must have explicit SpotifyAuthError re-raise
+
+### Failure Mode: Deprecated API fails silently, shows nothing
+- **Signal**: page shows empty cards/charts with no explanation
+- **Prevention**: always return a `has_*` or `*_source` flag from backend so frontend can show alternatives
+- **Rule**: when adding a data source, add a fallback path AND a transparency flag (never silent empty)
+
+### Failure Mode: Taste evolution crashes when 1 of 6 API calls fails
+- **Signal**: `asyncio.gather` with 6 calls — one failure kills entire page
+- **Prevention**: wrap each coroutine in `_safe_fetch()` that returns `{"items": []}` on failure
+- **Rule**: for `asyncio.gather` with 3+ calls, always use individual error handling per call
+
+### Failure Mode: save_snapshot DB error kills profile endpoint
+- **Signal**: snapshot write fails → entire `/api/analytics/features` returns 500
+- **Prevention**: wrap non-critical writes in inner try/except with logger.warning
+- **Rule**: distinguish critical vs non-critical DB operations — non-critical must never block the response
+
+### Data Integrity Checklist
+- [ ] All displayed data comes from real API calls (no mocks, no hardcoded values)
+- [ ] Missing data defaults to 0/null/empty, never to a plausible fake value
+- [ ] Fallback data sources are explicitly labeled in the UI
+- [ ] Each `asyncio.gather` call has per-coroutine error handling
+- [ ] SpotifyAuthError is re-raised before generic Exception in every router/service
