@@ -36,3 +36,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Skill Runtime state files
+tools/skill-runtime/state/*.json
