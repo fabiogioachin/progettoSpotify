@@ -46,6 +46,9 @@ class SpotifyAuthError(Exception):
 class APIRateLimiter(BaseHTTPMiddleware):
     """Sliding window rate limiter per utente/IP."""
 
+    # Paths exempted from rate limiting (lightweight, essential endpoints)
+    EXEMPT_PATHS = {"/auth/me", "/health"}
+
     def __init__(self, app, requests_per_minute: int = 60):
         super().__init__(app)
         self.rpm = requests_per_minute
@@ -53,6 +56,10 @@ class APIRateLimiter(BaseHTTPMiddleware):
         self._last_cleanup = time.time()
 
     async def dispatch(self, request, call_next):
+        # Skip rate limiting for lightweight/essential endpoints
+        if request.url.path in self.EXEMPT_PATHS:
+            return await call_next(request)
+
         # Use IP as key (session cookie can be very long)
         key = request.client.host if request.client else "unknown"
         now = time.time()
@@ -69,9 +76,11 @@ class APIRateLimiter(BaseHTTPMiddleware):
         self._requests[key] = [t for t in self._requests[key] if now - t < window]
 
         if len(self._requests[key]) >= self.rpm:
+            retry_after = int(window - (now - self._requests[key][0])) + 1
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Troppe richieste. Riprova tra poco."},
+                headers={"Retry-After": str(retry_after)},
             )
 
         self._requests[key].append(now)

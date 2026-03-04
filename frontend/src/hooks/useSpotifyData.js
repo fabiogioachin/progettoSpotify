@@ -14,16 +14,18 @@ export function useSpotifyData(endpoint, params = {}, immediate = true) {
 
   const stableParams = JSON.stringify(params)
 
-  const fetchData = useCallback(async (overrideParams = {}) => {
+  const fetchData = useCallback(async (overrideParams = {}, signal) => {
     setLoading(true)
     setError(null)
     try {
       const { data: result } = await api.get(endpoint, {
         params: { ...params, ...overrideParams },
+        signal,
       })
       setData(result)
       return result
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return null
       const message = err.response?.data?.detail || err.message || 'Errore nel caricamento'
       setError(message)
       return null
@@ -33,9 +35,10 @@ export function useSpotifyData(endpoint, params = {}, immediate = true) {
   }, [endpoint, stableParams])
 
   useEffect(() => {
-    if (immediate) {
-      fetchData()
-    }
+    if (!immediate) return
+    const controller = new AbortController()
+    fetchData({}, controller.signal)
+    return () => controller.abort()
   }, [fetchData, immediate])
 
   return { data, loading, error, refetch: fetchData }

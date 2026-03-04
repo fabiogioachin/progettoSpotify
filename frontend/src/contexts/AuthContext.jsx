@@ -8,18 +8,21 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    checkAuth()
+    const controller = new AbortController()
+    checkAuth(controller.signal)
+    return () => controller.abort()
   }, [])
 
-  async function checkAuth() {
+  async function checkAuth(signal) {
     try {
-      const { data } = await api.get('/auth/me')
+      const { data } = await api.get('/auth/me', { signal })
       if (data.authenticated) {
         setUser(data.user)
       } else {
         setUser(null)
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
       console.error('Auth check failed:', err)
       setUser(null)
     } finally {

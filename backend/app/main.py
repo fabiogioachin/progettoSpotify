@@ -51,7 +51,7 @@ app = FastAPI(
 )
 
 # Rate Limiter (prima di CORS per intercettare richieste eccessive)
-app.add_middleware(APIRateLimiter, requests_per_minute=60)
+app.add_middleware(APIRateLimiter, requests_per_minute=120)
 
 # CORS (restrict methods and headers to what the app actually uses)
 app.add_middleware(
