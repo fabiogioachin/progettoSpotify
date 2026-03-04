@@ -52,6 +52,9 @@ class Settings(BaseSettings):
                 url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
             elif url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            # Disabilita prepared statements per compatibilità con Supavisor (transaction mode)
+            separator = "&" if "?" in url else "?"
+            url += f"{separator}prepared_statement_cache_size=0"
             return url
         return self.database_url
 
