@@ -48,7 +48,7 @@ async def compute_temporal_patterns(
             "track_id": track.get("id", ""),
             "artist_name": (track.get("artists", [{}])[0].get("name", "")
                            if track.get("artists") else ""),
-            "duration_ms": track.get("duration_ms", 180000),
+            "duration_ms": track.get("duration_ms", 0),
         })
 
     # Persist to DB if available (accumulate historical data)
@@ -227,7 +227,7 @@ async def _load_plays(db: AsyncSession, user_id: int) -> list[dict]:
             "track_name": r.track_name,
             "track_id": r.track_spotify_id,
             "artist_name": r.artist_name,
-            "duration_ms": r.duration_ms or 180000,
+            "duration_ms": r.duration_ms or 0,
         })
     return plays
 

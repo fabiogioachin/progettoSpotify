@@ -39,7 +39,7 @@ class RecentPlay(Base):
     track_spotify_id = Column(String(64), nullable=False)
     track_name = Column(String(500), nullable=False)
     artist_name = Column(String(500), nullable=False)
-    duration_ms = Column(Integer, default=180000)
+    duration_ms = Column(Integer, default=0)
     played_at = Column(DateTime, nullable=False, index=True)
 
     __table_args__ = (

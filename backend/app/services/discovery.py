@@ -147,6 +147,7 @@ async def discover(
 
     # 6. Raccomandazioni: prova l'API Spotify, fallback a scoperte recenti
     recommendations = []
+    recommendations_source = "spotify"  # "spotify" o "recent_discoveries"
     seed_tracks = top_ids[:5]
     known_artist_ids = set()
     for t in top_items:
@@ -175,12 +176,13 @@ async def discover(
             })
     except Exception as exc:
         logger.info("Recommendations API non disponibile: %s — uso scoperte recenti", exc)
-        # Fallback: le scoperte recenti diventano i suggerimenti
         recommendations = new_discoveries[:20]
+        recommendations_source = "recent_discoveries"
 
     # Se non ci sono raccomandazioni ne' scoperte, usa artisti correlati
     if not recommendations:
         recommendations = new_discoveries[:20]
+        recommendations_source = "recent_discoveries"
 
     # Ordinamento: nuovi artisti prima, poi per popolarita' decrescente
     recommendations.sort(key=lambda x: (not x.get("is_new_artist", False), -(x.get("popularity", 0))))
@@ -211,4 +213,5 @@ async def discover(
         "genre_distribution": genre_distribution,
         "popularity_distribution": popularity_distribution,
         "has_audio_features": has_features,
+        "recommendations_source": recommendations_source,
     }

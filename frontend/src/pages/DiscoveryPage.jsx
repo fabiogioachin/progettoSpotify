@@ -18,6 +18,7 @@ export default function DiscoveryPage() {
   const genreDistribution = discoveryData?.genre_distribution || {}
   const popularityDistribution = discoveryData?.popularity_distribution || []
   const hasAudioFeatures = discoveryData?.has_audio_features ?? false
+  const recommendationsSource = discoveryData?.recommendations_source || 'spotify'
 
   // Controlla se i tracks hanno features per il MoodScatter
   const tracksWithFeatures = tracks.filter(t => t.features && Object.values(t.features).some(v => v > 0))
@@ -109,12 +110,12 @@ export default function DiscoveryPage() {
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Sparkles size={18} className="text-accent" />
-                {recommendations.length > 0 ? 'Brani Suggeriti' : 'Scoperte Recenti'}
+                {recommendationsSource === 'spotify' ? 'Brani Suggeriti' : 'Scoperte Recenti'}
               </h3>
               <p className="text-text-muted text-xs mb-4">
-                {recommendations.length > 0
+                {recommendationsSource === 'spotify'
                   ? 'Basati sul tuo profilo d\'ascolto — priorità ad artisti che non conosci ancora'
-                  : 'Brani apparsi di recente nelle tue classifiche'}
+                  : 'Brani apparsi di recente nelle tue classifiche — non ancora nel tuo medio termine'}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {recommendations.map((rec) => (

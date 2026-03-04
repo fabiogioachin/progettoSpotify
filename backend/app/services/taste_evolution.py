@@ -1,9 +1,21 @@
 """Analisi dell'evoluzione del gusto musicale attraverso i periodi temporali."""
 
 import asyncio
+import logging
 
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import retry_with_backoff
+
+logger = logging.getLogger(__name__)
+
+
+async def _safe_fetch(coro):
+    """Wrapper che restituisce un dict vuoto se la chiamata fallisce."""
+    try:
+        return await coro
+    except Exception as exc:
+        logger.warning("Taste evolution: chiamata API fallita: %s", exc)
+        return {"items": []}
 
 
 async def compute_taste_evolution(client: SpotifyClient) -> dict:
@@ -11,12 +23,12 @@ async def compute_taste_evolution(client: SpotifyClient) -> dict:
 
     # Fetch top artists + tracks for all 3 time ranges in parallel
     results = await asyncio.gather(
-        retry_with_backoff(client.get_top_artists, time_range="short_term", limit=50),
-        retry_with_backoff(client.get_top_artists, time_range="medium_term", limit=50),
-        retry_with_backoff(client.get_top_artists, time_range="long_term", limit=50),
-        retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50),
-        retry_with_backoff(client.get_top_tracks, time_range="medium_term", limit=50),
-        retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50),
+        _safe_fetch(retry_with_backoff(client.get_top_artists, time_range="short_term", limit=50)),
+        _safe_fetch(retry_with_backoff(client.get_top_artists, time_range="medium_term", limit=50)),
+        _safe_fetch(retry_with_backoff(client.get_top_artists, time_range="long_term", limit=50)),
+        _safe_fetch(retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50)),
+        _safe_fetch(retry_with_backoff(client.get_top_tracks, time_range="medium_term", limit=50)),
+        _safe_fetch(retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50)),
     )
 
     short_artists_raw, medium_artists_raw, long_artists_raw = results[0], results[1], results[2]
