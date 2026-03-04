@@ -15,17 +15,19 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Deploy**: locale (dev), predisposto per Docker
 
 ## 4. Limitazioni API Spotify
-- **Deprecati** (non usati): Audio Features, Audio Analysis, Artist genres/popularity/followers, Track popularity/preview_url
+- **Deprecati** (non usati): Audio Features, Audio Analysis, Recommendations
+- **Sempre disponibili**: Artist genres/popularity/followers, Track popularity/preview_url, Top Artists/Tracks, Recently Played, Playlists, Related Artists
 - **Time ranges fissi**: short_term (~4 settimane), medium_term (~6 mesi), long_term (storico completo)
 - **Recently played**: max 50 items (hard limit API)
+- **Workaround accumulo**: modello `RecentPlay` in DB — ogni visita alla pagina Temporal salva nuovi ascolti, lo storico cresce nel tempo
 - **Workaround storico**: playlist "Your Top Songs 20XX" per dati multi-anno
 
 ## 5. Funzionalità
 
 ### 5.1 Dashboard (`/dashboard`)
-- KPI: brani analizzati, energia media, genere top, mood score
-- Top 50 brani con play overlay e mini barre energia/valence
-- Radar audio features, trend timeline, genre treemap
+- KPI: brani analizzati, popolarità media, artisti unici, artista top
+- Top 50 brani con play overlay e mini barre (quando features disponibili)
+- Radar audio features (con rilevamento all-zero → messaggio fallback), trend timeline (popularity fallback se features assenti), genre treemap
 - Export Claude AI per analisi personalizzata
 
 ### 5.2 Evoluzione del Gusto (`/evolution`)
@@ -39,12 +41,16 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Streak di ascolto stile Duolingo (fiamma animata, progress ring, milestone)
 - Statistiche sessioni con gamification
 - Peak hours e pattern weekday/weekend
+- Top 5 brani più ascoltati (da storico accumulato)
+- Accumulo DB progressivo: ogni visita salva nuovi ascolti, indicatore "ascolti accumulati" vs "solo API"
 
 ### 5.4 Ecosistema Artisti (`/artists`)
 - Grafo force-directed SVG relazioni artisti
 - Cluster detection (BFS connected components)
-- Bridge artists tra cluster
-- Metriche diversita musicale
+- Bridge artists tra cluster (con generi e popolarità)
+- Metriche diversità musicale
+- Nodi arricchiti: generi, popolarità, followers, numero connessioni (tooltip dettagliato)
+- Genre cloud: top 10 generi dominanti nell'ecosistema
 
 ### 5.5 Analisi Playlist (`/playlist-analytics`)
 - Statistiche per-playlist: concentrazione, freshness, staleness
@@ -53,11 +59,15 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 
 ### 5.6 Confronto Playlist (`/compare`)
 - Confronto side-by-side tra playlist selezionate
-- Metriche comparative
+- Metriche comparative (audio features se disponibili, altrimenti messaggio informativo)
+- Rendering condizionale: mostra confronto features solo quando i dati audio sono disponibili
 
 ### 5.7 Scopri (`/discovery`)
-- Raccomandazioni personalizzate
-- Suggerimenti basati su profilo
+- Distribuzione generi (treemap) — sempre disponibile via artist genres
+- Distribuzione popolarità (istogramma a barre) — fallback quando MoodScatter non ha features
+- Hidden gems: brani meno popolari tra i preferiti (fallback outlier basato su popolarità anziché distanza audio)
+- Raccomandazioni: API Spotify se disponibile, altrimenti "Scoperte Recenti" (brani in short_term non presenti in medium_term)
+- Flag trasparenza `recommendations_source`: il frontend etichetta chiaramente la sorgente dei suggerimenti
 
 ## 6. Stack Spotify API (Non Deprecato)
 - `GET /me/top/artists` — top artists (3 time ranges, max 50)
@@ -66,12 +76,15 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - `GET /me/playlists` — playlist utente (paginato)
 - `GET /playlists/{id}/tracks` — tracks di una playlist
 - `GET /artists/{id}/related-artists` — artisti correlati
-- `GET /recommendations` — raccomandazioni personalizzate
 - `GET /search` — ricerca contenuti
+
+### API Deprecate (con fallback implementato)
+- `GET /audio-features` → fallback: popolarità, generi artista, confronti tra periodi
+- `GET /recommendations` → fallback: scoperte recenti (short_term − medium_term)
 
 ## 7. Design System
 - Background: #121212 | Surface: #181818 | Hover: #282828
-- Text: #FFFFFF / #b3b3b3 / #6a6a6a
+- Text: #FFFFFF / #b3b3b3 / #8a8a8a (WCAG AA)
 - Accent: #6366f1 (indigo) | Brand: #1DB954 (Spotify green)
 - Font: Space Grotesk (display) + Inter (body)
 - Sidebar: 240px, always visible desktop, collapsible mobile
@@ -79,5 +92,14 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 ## 8. Decisioni Architetturali
 - Nessuna dipendenza esterna per grafici complessi (force-directed = SVG puro)
 - asyncio.Semaphore per rate limiting API calls parallele
-- Graceful degradation: se un dato non e disponibile, la UI mostra stato vuoto
 - Export Claude: markdown con dati strutturati + prompt istruzioni
+- Deploy Docker Compose: backend (uvicorn) + frontend (nginx su porta 5173), volume mount per live reload backend
+
+### 8.1 Resilienza e Degradazione Graduale
+- **SpotifyAuthError propagation**: ogni router ri-lancia `SpotifyAuthError` prima di `except Exception` generico → l'utente viene reindirizzato al login anziché vedere dati stalli
+- **Non-blocking snapshots**: scritture DB non critiche wrappate in try/except con logger.warning → l'endpoint risponde anche se il salvataggio snapshot fallisce
+- **_safe_fetch per gather**: `taste_evolution` wrappa ogni chiamata API individualmente → fallimenti parziali restituiscono dati vuoti anziché crashare l'intera pagina
+- **InvalidToken handling**: `spotify_client` cattura Fernet InvalidToken e rilancia SpotifyAuthError → 401
+- **Rendering condizionale frontend**: flag `has_audio_features` e `recommendations_source` dal backend → il frontend mostra alternative appropriate (popolarità, generi) quando le API deprecate falliscono
+- **AudioRadar all-zero detection**: rileva features con tutti valori a 0 → mostra messaggio "dati non disponibili" anziché radar piatto
+- **Nessun dato finto**: tutti i valori default sono 0/null/vuoto, mai valori plausibili che potrebbero fuorviare l'utente
