@@ -13,6 +13,13 @@ export function AuthProvider({ children }) {
     return () => controller.abort()
   }, [])
 
+  // Ascolta eventi 401 dalle API per invalidare la sessione senza full reload
+  useEffect(() => {
+    const handleExpired = () => setUser(null)
+    window.addEventListener('auth:expired', handleExpired)
+    return () => window.removeEventListener('auth:expired', handleExpired)
+  }, [])
+
   async function checkAuth(signal) {
     try {
       const { data } = await api.get('/auth/me', { signal })

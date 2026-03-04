@@ -24,7 +24,7 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      window.location.href = '/'
+      window.dispatchEvent(new Event('auth:expired'))
     }
     return Promise.reject(error)
   }
