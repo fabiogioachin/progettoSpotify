@@ -5,7 +5,7 @@ import math
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import FEATURE_KEYS
-from app.routers.library import _get_or_fetch_features
+from app.services.audio_analyzer import get_or_fetch_features
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import retry_with_backoff
 
@@ -46,7 +46,7 @@ async def discover(
         return {"recommendations": [], "outliers": [], "centroid": {}}
 
     top_ids = [t["id"] for t in top_items]
-    top_features = await _get_or_fetch_features(db, client, top_ids)
+    top_features = await get_or_fetch_features(db, client, top_ids)
 
     # 2. Calcola centroide
     centroid = _compute_centroid(list(top_features.values()))
@@ -100,7 +100,7 @@ async def discover(
 
     # Fetch features per le recommendations
     rec_ids = [r["id"] for r in recommendations]
-    rec_features = await _get_or_fetch_features(db, client, rec_ids)
+    rec_features = await get_or_fetch_features(db, client, rec_ids)
 
     for rec in recommendations:
         feat = rec_features.get(rec["id"])

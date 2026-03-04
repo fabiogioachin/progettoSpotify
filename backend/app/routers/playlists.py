@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_auth
-from app.routers.library import _get_or_fetch_features
+from app.services.audio_analyzer import get_or_fetch_features
 from app.schemas import PlaylistListResponse, PlaylistComparisonResponse
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
@@ -89,7 +89,7 @@ async def compare_playlists(
                 offset += 100
 
             # Audio features
-            features = await _get_or_fetch_features(db, client, all_tracks[:200])
+            features = await get_or_fetch_features(db, client, all_tracks[:200])
 
             # Calcola medie
             if features:
