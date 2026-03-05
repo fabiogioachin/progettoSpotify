@@ -108,14 +108,21 @@ async def spotify_callback(
     refresh_token = token_data["refresh_token"]
     expires_in = token_data["expires_in"]
 
-    # Ottieni profilo utente
+    # Ottieni profilo utente (retry su 429 con Retry-After)
+    profile_resp = None
     async with httpx.AsyncClient() as client:
-        profile_resp = await client.get(
-            "https://api.spotify.com/v1/me",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+        for attempt in range(3):
+            profile_resp = await client.get(
+                "https://api.spotify.com/v1/me",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if profile_resp.status_code == 429:
+                retry_after = int(profile_resp.headers.get("Retry-After", 2))
+                await asyncio.sleep(min(retry_after, 5))
+                continue
+            break
 
-    if profile_resp.status_code != 200:
+    if profile_resp is None or profile_resp.status_code != 200:
         return RedirectResponse(url=f"{settings.frontend_url}?error=profile_fetch_failed")
 
     profile = profile_resp.json()
