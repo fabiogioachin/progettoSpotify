@@ -94,12 +94,7 @@ export default function ListeningHeatmap({ data = [], dayLabels = [], hourLabels
   }
 
   if (!data.length) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <p className="text-text-muted text-sm text-center py-8">Nessun dato disponibile</p>
-      </div>
-    )
+    return null
   }
 
   return (

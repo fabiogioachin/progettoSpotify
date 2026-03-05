@@ -20,7 +20,7 @@ export default function GenreTreemap({ genres, title = 'Distribuzione Generi', l
   }
 
   if (!genres || Object.keys(genres).length === 0) {
-    return <EmptyState />
+    return null
   }
 
   const data = Object.entries(genres)
@@ -86,10 +86,3 @@ function CustomTreemapContent({ x, y, width, height, name, fill }) {
   )
 }
 
-function EmptyState() {
-  return (
-    <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[380px]">
-      <p className="text-text-muted text-sm">Nessun dato generi disponibile</p>
-    </div>
-  )
-}

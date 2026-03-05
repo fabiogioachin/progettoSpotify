@@ -21,7 +21,7 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
   }
 
   if (!tracks || tracks.length === 0) {
-    return <EmptyState />
+    return null
   }
 
   const data = tracks
@@ -35,7 +35,7 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
     }))
 
   if (data.length === 0) {
-    return <EmptyState />
+    return null
   }
 
   return (
@@ -108,10 +108,3 @@ function CustomTooltip({ active, payload }) {
   )
 }
 
-function EmptyState() {
-  return (
-    <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[480px]">
-      <p className="text-text-muted text-sm">Nessun brano con dati mood disponibile</p>
-    </div>
-  )
-}

@@ -11,6 +11,7 @@ export default function ArtistNetworkPage() {
   const nodes = data?.nodes || []
   const edges = data?.edges || []
   const clusters = data?.clusters || []
+  const clusterNames = data?.cluster_names || {}
   const bridges = data?.bridges || []
   const topGenres = data?.top_genres || []
 
@@ -43,7 +44,7 @@ export default function ArtistNetworkPage() {
             </div>
 
             {/* Network Graph */}
-            <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} loading={loading} />
+            <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} clusterNames={clusterNames} loading={loading} />
 
             {/* Genre Cloud */}
             {topGenres.length > 0 && (

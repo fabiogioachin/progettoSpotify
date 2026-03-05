@@ -12,7 +12,7 @@ function formatFollowers(n) {
   return String(n)
 }
 
-export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], title = 'Ecosistema Artisti', loading = false }) {
+export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], clusterNames = {}, title = 'Ecosistema Artisti', loading = false }) {
   const svgRef = useRef(null)
   const animRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
@@ -20,12 +20,18 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], t
   const posRef = useRef([])
   const velRef = useRef([])
 
-  // Build cluster color map
+  // Build cluster color map and node-to-cluster map
   const clusterColorMap = useMemo(() => {
     const map = {}
     clusters.forEach(c => {
       map[c.id] = CLUSTER_COLORS[c.cluster % CLUSTER_COLORS.length]
     })
+    return map
+  }, [clusters])
+
+  const nodeClusterMap = useMemo(() => {
+    const map = {}
+    clusters.forEach(c => { map[c.id] = c.cluster })
     return map
   }, [clusters])
 
@@ -136,8 +142,10 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], t
   }, [nodes, edges, nodeIndex])
 
   const handleMouseEnter = useCallback((node, pos) => {
-    setTooltip({ ...node, x: pos.x, y: pos.y })
-  }, [])
+    const clusterId = nodeClusterMap[node.id]
+    const clusterLabel = clusterId != null ? (clusterNames[clusterId] || `Cluster ${clusterId + 1}`) : null
+    setTooltip({ ...node, x: pos.x, y: pos.y, clusterLabel })
+  }, [nodeClusterMap, clusterNames])
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null)
@@ -155,12 +163,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], t
   }
 
   if (!nodes.length) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <p className="text-text-muted text-sm text-center py-8">Nessun dato disponibile</p>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -243,6 +246,9 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], t
         >
           <p className="text-text-primary text-sm font-semibold">{tooltip.name}</p>
           {tooltip.is_top && <p className="text-accent text-xs font-medium">⭐ Top Artist</p>}
+          {tooltip.clusterLabel && (
+            <p className="text-text-secondary text-xs mt-0.5">🎵 {tooltip.clusterLabel}</p>
+          )}
           {tooltip.genres && tooltip.genres.length > 0 && (
             <p className="text-text-muted text-xs mt-1">
               {tooltip.genres.join(', ')}
@@ -266,7 +272,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], t
         {[...new Set(clusters.map(c => c.cluster))].slice(0, 8).map(clusterId => (
           <div key={clusterId} className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
-            <span className="text-text-muted text-xs">Cluster {clusterId + 1}</span>
+            <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cluster ${clusterId + 1}`}</span>
           </div>
         ))}
       </div>

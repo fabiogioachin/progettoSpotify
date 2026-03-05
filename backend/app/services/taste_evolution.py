@@ -123,8 +123,8 @@ async def compute_taste_evolution(client: SpotifyClient) -> dict:
             "persistent_tracks_count": len(persistent_ids),
         },
         "overlap_distribution": [
-            {"label": "1 periodo", "count": in_one},
-            {"label": "2 periodi", "count": in_two},
-            {"label": "3 periodi", "count": in_three},
+            {"label": "Passeggeri", "count": in_one},
+            {"label": "Consolidati", "count": in_two},
+            {"label": "Fedelissimi", "count": in_three},
         ],
     }

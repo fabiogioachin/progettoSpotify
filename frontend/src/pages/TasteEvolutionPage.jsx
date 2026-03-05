@@ -40,10 +40,10 @@ export default function TasteEvolutionPage() {
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <KPICard title="Fedeltà" value={metrics.loyalty_score || 0} suffix="%" icon={Heart} delay={0} />
-              <KPICard title="Turnover" value={metrics.turnover_rate || 0} suffix="%" icon={RefreshCw} delay={100} />
-              <KPICard title="Artisti Fedeli" value={(artists.loyal || []).length} icon={Users} delay={200} />
-              <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} />
+              <KPICard title="Fedeltà" value={metrics.loyalty_score || 0} suffix="%" icon={Heart} delay={0} tooltip="Percentuale di artisti che ascolti stabilmente in più periodi" />
+              <KPICard title="Turnover" value={metrics.turnover_rate || 0} suffix="%" icon={RefreshCw} delay={100} tooltip="Percentuale di artisti nuovi rispetto al periodo precedente" />
+              <KPICard title="Artisti Fedeli" value={(artists.loyal || []).length} icon={Users} delay={200} tooltip="Artisti presenti nelle tue classifiche in tutti e tre i periodi" />
+              <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} tooltip="Brani che restano tra i tuoi preferiti in più periodi temporali" />
             </div>
 
             {/* Overlap Distribution */}

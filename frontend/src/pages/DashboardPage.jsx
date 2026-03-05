@@ -30,10 +30,27 @@ export default function DashboardPage() {
   const trends = trendsData?.current || []
 
   // KPI calculations — solo dati reali sempre disponibili
-  const trackCount = topData?.total || 0
-  const popularityAvg = featuresData?.popularity_avg || 0
-  const uniqueArtists = featuresData?.unique_artists || 0
-  const topGenre = Object.keys(genres)[0] || '—'
+  const trackCount = topData?.total || tracks.length || 0
+
+  // Popolarità: preferisci il dato dal backend, altrimenti calcola dai brani
+  let popularityAvg = featuresData?.popularity_avg || 0
+  if (popularityAvg === 0 && tracks.length > 0) {
+    const pops = tracks.map(t => t.popularity || 0).filter(p => p > 0)
+    popularityAvg = pops.length > 0 ? Math.round(pops.reduce((a, b) => a + b, 0) / pops.length) : 0
+  }
+
+  // Artisti unici: preferisci backend, fallback dal conteggio tracks
+  let uniqueArtists = featuresData?.unique_artists || 0
+  if (uniqueArtists === 0 && tracks.length > 0) {
+    const artistNames = new Set()
+    tracks.forEach(t => {
+      if (t.artist) artistNames.add(t.artist)
+      if (t.artists) t.artists.forEach(a => { if (a.name) artistNames.add(a.name) })
+    })
+    uniqueArtists = artistNames.size
+  }
+
+  const topGenre = Object.keys(genres)[0] || null
   const topGenrePct = Object.values(genres)[0] || 0
 
   const isLoading = topLoading || trendsLoading || featuresLoading
@@ -74,14 +91,18 @@ export default function DashboardPage() {
                 suffix="/100"
                 icon={Star}
                 delay={100}
+                tooltip="Media della popolarità Spotify (0-100) dei tuoi brani più ascoltati"
               />
-              <KPICard
-                title="Genere top"
-                value={topGenre}
-                suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
-                icon={Disc3}
-                delay={200}
-              />
+              {topGenre && (
+                <KPICard
+                  title="Genere top"
+                  value={topGenre}
+                  suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
+                  icon={Disc3}
+                  delay={200}
+                  tooltip="Il genere musicale più frequente tra i tuoi artisti"
+                />
+              )}
               <KPICard
                 title="Artisti unici"
                 value={uniqueArtists}
@@ -105,11 +126,7 @@ export default function DashboardPage() {
                   {tracks.slice(0, 50).map((track, i) => (
                     <TrackCard key={track.id} track={track} index={i} />
                   ))}
-                  {tracks.length === 0 && (
-                    <p className="text-text-muted text-sm text-center py-8">
-                      Nessun brano trovato
-                    </p>
-                  )}
+                  {tracks.length === 0 && null}
                 </div>
               </div>
             </div>

@@ -3,9 +3,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const OVERLAP_COLORS = ['#6a6a6a', '#6366f1', '#1DB954']
 
 const OVERLAP_DESCRIPTIONS = {
-  '1 periodo': 'Artisti che compaiono solo in un periodo — gusti passeggeri',
-  '2 periodi': 'Artisti presenti in due periodi — in fase di consolidamento',
-  '3 periodi': 'Artisti presenti in tutti e tre i periodi — i tuoi fedelissimi',
+  'Passeggeri': 'Artisti che compaiono solo in un periodo — gusti del momento',
+  'Consolidati': 'Artisti presenti in due periodi — si stanno radicando nei tuoi ascolti',
+  'Fedelissimi': 'Artisti presenti in tutti e tre i periodi — il cuore del tuo gusto musicale',
 }
 
 export default function TasteOverlapBar({ data = [], title = 'Distribuzione Artisti per Periodo', loading = false }) {
@@ -21,12 +21,7 @@ export default function TasteOverlapBar({ data = [], title = 'Distribuzione Arti
   }
 
   if (!data.length) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <p className="text-text-muted text-sm text-center py-8">Nessun dato disponibile</p>
-      </div>
-    )
+    return null
   }
 
   const total = data.reduce((sum, d) => sum + d.count, 0)

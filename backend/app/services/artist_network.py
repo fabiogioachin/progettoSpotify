@@ -89,6 +89,24 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
     # Count clusters
     cluster_ids = set(c["cluster"] for c in clusters)
 
+    # Compute dominant genre per cluster for meaningful names
+    cluster_genres = defaultdict(lambda: defaultdict(int))
+    cluster_map = {c["id"]: c["cluster"] for c in clusters}
+    for nid, node in nodes.items():
+        cid = cluster_map.get(nid)
+        if cid is not None:
+            for g in node.get("genres", []):
+                cluster_genres[cid][g] += 1
+
+    cluster_names = {}
+    for cid in sorted(cluster_ids):
+        genres = cluster_genres.get(cid, {})
+        if genres:
+            top_genre = max(genres, key=genres.get)
+            cluster_names[cid] = top_genre.replace("-", " ").title()
+        else:
+            cluster_names[cid] = f"Cluster {cid + 1}"
+
     # Genre summary for the network
     genre_counter = defaultdict(int)
     for n in nodes.values():
@@ -100,6 +118,7 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
         "nodes": list(nodes.values()),
         "edges": edges,
         "clusters": clusters,
+        "cluster_names": cluster_names,
         "bridges": bridges[:5],
         "top_genres": [{"genre": g, "count": c} for g, c in top_genres],
         "metrics": {
