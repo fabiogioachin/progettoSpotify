@@ -70,10 +70,14 @@ async def discover(
     if not top_items:
         return {
             "recommendations": [],
-            "outliers": [],
+            "hidden_gems": [],
+            "new_discoveries": [],
+            "related_suggestions": [],
             "centroid": {},
             "genre_distribution": {},
             "popularity_distribution": [],
+            "has_audio_features": False,
+            "recommendations_source": "recent_discoveries",
         }
 
     top_ids = [t["id"] for t in top_items]
@@ -94,40 +98,25 @@ async def discover(
         for g, c in genre_counter.most_common(12)
     } if total_genres else {}
 
-    # 4. Outlier — usa features se disponibili, altrimenti popolarita'
-    outliers = []
-    if has_features and centroid:
-        for tid, feat in top_features.items():
-            dist = _euclidean_distance(centroid, feat)
-            track_info = next((t for t in top_items if t["id"] == tid), None)
-            if track_info:
-                outliers.append({
-                    "id": tid,
-                    "name": track_info["name"],
-                    "artist": track_info["artists"][0]["name"] if track_info.get("artists") else "",
-                    "album_image": (track_info.get("album", {}).get("images", [{}])[0].get("url")
-                                    if track_info.get("album", {}).get("images") else None),
-                    "distance": round(dist, 3),
-                    "metric_label": "distanza audio",
-                })
-        outliers.sort(key=lambda x: x["distance"], reverse=True)
-    else:
-        # Fallback: trova hidden gems (brani meno popolari nella tua top)
-        avg_pop = sum(t.get("popularity", 0) for t in top_items) / len(top_items)
-        for t in top_items:
-            pop = t.get("popularity", 0)
-            diff = abs(pop - avg_pop)
-            outliers.append({
+    # 4. Chicche Nascoste — bottom quartile di popolarita' tra i tuoi top
+    all_pops = sorted(t.get("popularity", 0) for t in top_items)
+    q1_index = max(1, len(all_pops) // 4)
+    q1_threshold = all_pops[q1_index - 1]  # 25th percentile
+
+    hidden_gems = []
+    for t in top_items:
+        pop = t.get("popularity", 0)
+        if pop <= q1_threshold:
+            hidden_gems.append({
                 "id": t["id"],
                 "name": t["name"],
                 "artist": t["artists"][0]["name"] if t.get("artists") else "",
                 "album_image": (t.get("album", {}).get("images", [{}])[0].get("url")
                                 if t.get("album", {}).get("images") else None),
-                "distance": round(diff / 100, 3),
-                "metric_label": "hidden gem" if pop < avg_pop else "mainstream",
+                "popularity": pop,
+                "metric_label": f"Pop. {pop}",
             })
-        # Ordina: meno popolari prima (hidden gems)
-        outliers.sort(key=lambda x: x.get("distance", 0), reverse=True)
+    hidden_gems.sort(key=lambda x: x["popularity"])
 
     # 5. Scoperte recenti: brani in short_term non presenti in medium_term
     medium_ids = set(top_ids)
@@ -147,7 +136,7 @@ async def discover(
 
     # 6. Raccomandazioni: prova l'API Spotify, fallback a scoperte recenti
     recommendations = []
-    recommendations_source = "spotify"  # "spotify" o "recent_discoveries"
+    recommendations_source = "spotify"
     seed_tracks = top_ids[:5]
     known_artist_ids = set()
     for t in top_items:
@@ -179,15 +168,70 @@ async def discover(
         recommendations = new_discoveries[:20]
         recommendations_source = "recent_discoveries"
 
-    # Se non ci sono raccomandazioni ne' scoperte, usa artisti correlati
     if not recommendations:
         recommendations = new_discoveries[:20]
         recommendations_source = "recent_discoveries"
 
-    # Ordinamento: nuovi artisti prima, poi per popolarita' decrescente
     recommendations.sort(key=lambda x: (not x.get("is_new_artist", False), -(x.get("popularity", 0))))
 
-    # 7. Distribuzione popolarita'
+    # 7. Da Artisti Simili — brani da artisti correlati ai tuoi preferiti
+    related_suggestions = []
+    top_artist_ids_list = [a["id"] for a in top_artists[:8]]
+    top_artist_names = {a["id"]: a.get("name", "") for a in top_artists}
+
+    sem = asyncio.Semaphore(3)
+
+    async def _fetch_related_tracks(artist_id):
+        async with sem:
+            try:
+                related_data = await retry_with_backoff(
+                    client.get_related_artists, artist_id
+                )
+                related_list = related_data.get("artists", [])
+                results = []
+                for rel in related_list[:3]:
+                    rel_id = rel["id"]
+                    if rel_id in known_artist_ids:
+                        continue
+                    try:
+                        top_tr = await retry_with_backoff(
+                            client.get_artist_top_tracks, rel_id
+                        )
+                        tracks_list = top_tr.get("tracks", [])
+                        if tracks_list:
+                            best = tracks_list[0]
+                            results.append({
+                                "id": best["id"],
+                                "name": best["name"],
+                                "artist": rel.get("name", ""),
+                                "album": best.get("album", {}).get("name", ""),
+                                "album_image": (best.get("album", {}).get("images", [{}])[0].get("url")
+                                                if best.get("album", {}).get("images") else None),
+                                "popularity": best.get("popularity", 0),
+                                "related_to": top_artist_names.get(artist_id, ""),
+                            })
+                    except Exception:
+                        pass
+                return results
+            except Exception as exc:
+                logger.warning("Errore fetch related per %s: %s", artist_id, exc)
+                return []
+
+    related_tasks = [_fetch_related_tracks(aid) for aid in top_artist_ids_list]
+    related_results = await asyncio.gather(*related_tasks, return_exceptions=True)
+
+    seen_related_ids = set()
+    for result in related_results:
+        if isinstance(result, Exception):
+            continue
+        for item in result:
+            if item["id"] not in seen_related_ids:
+                seen_related_ids.add(item["id"])
+                related_suggestions.append(item)
+
+    related_suggestions.sort(key=lambda x: -x.get("popularity", 0))
+
+    # 8. Distribuzione popolarita'
     popularity_buckets = {"0-20": 0, "21-40": 0, "41-60": 0, "61-80": 0, "81-100": 0}
     for t in top_items:
         pop = t.get("popularity", 0)
@@ -208,7 +252,9 @@ async def discover(
 
     return {
         "recommendations": recommendations[:20],
-        "outliers": outliers[:10],
+        "hidden_gems": hidden_gems[:8],
+        "new_discoveries": new_discoveries[:10],
+        "related_suggestions": related_suggestions[:10],
         "centroid": {k: round(v, 3) for k, v in centroid.items()} if centroid else {},
         "genre_distribution": genre_distribution,
         "popularity_distribution": popularity_distribution,

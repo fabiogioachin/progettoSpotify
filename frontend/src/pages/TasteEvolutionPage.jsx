@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TrackCard from '../components/cards/TrackCard'
 import { Heart, TrendingUp, TrendingDown, Users, Music, RefreshCw, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
+import InfoTip from '../components/ui/InfoTip'
 
 export default function TasteEvolutionPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/taste-evolution')
@@ -47,13 +48,13 @@ export default function TasteEvolutionPage() {
             </div>
 
             {/* Overlap Distribution */}
-            <TasteOverlapBar data={overlapData} />
+            <TasteOverlapBar data={overlapData} tooltip="Quanti artisti ascolti in 1, 2 o tutti e 3 i periodi temporali" />
 
             {/* Artist Sections */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <ArtistColumn title="In Ascesa" icon={TrendingUp} iconColor="text-emerald-400" artists={artists.rising || []} emptyText="Nessun nuovo artista" />
-              <ArtistColumn title="Sempre Fedeli" icon={Heart} iconColor="text-accent" artists={artists.loyal || []} emptyText="Nessun artista fedele" />
-              <ArtistColumn title="In Calo" icon={TrendingDown} iconColor="text-red-400" artists={artists.falling || []} emptyText="Nessun artista in calo" />
+              <ArtistColumn title="In Ascesa" icon={TrendingUp} iconColor="text-emerald-400" artists={artists.rising || []} emptyText="Nessun nuovo artista" tooltip="Artisti entrati di recente nelle tue classifiche" />
+              <ArtistColumn title="Sempre Fedeli" icon={Heart} iconColor="text-accent" artists={artists.loyal || []} emptyText="Nessun artista fedele" tooltip="Artisti che ascolti stabilmente in tutti i periodi" />
+              <ArtistColumn title="In Calo" icon={TrendingDown} iconColor="text-red-400" artists={artists.falling || []} emptyText="Nessun artista in calo" tooltip="Artisti che stanno uscendo dalle tue classifiche" />
             </div>
 
             {/* Persistent Tracks */}
@@ -62,6 +63,7 @@ export default function TasteEvolutionPage() {
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <Music size={18} className="text-accent" />
                   Tracce che ascolti sempre
+                  <InfoTip text="Brani presenti nelle tue top in tutti i periodi" />
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {tracks.persistent.map((track, i) => (
@@ -89,6 +91,7 @@ export default function TasteEvolutionPage() {
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp size={18} className="text-emerald-400" />
                   Nuove scoperte
+                  <InfoTip text="Brani entrati di recente tra i tuoi preferiti" />
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {tracks.rising.slice(0, 10).map((track, i) => (
@@ -115,6 +118,7 @@ export default function TasteEvolutionPage() {
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Calendar size={18} className="text-spotify" />
                 Il Tuo Viaggio Musicale
+                <InfoTip text="Le tue playlist 'Your Top Songs' anno per anno" />
                 {years.length > 0 && (
                   <span className="text-text-muted text-xs font-normal ml-auto">{years.length} anni</span>
                 )}
@@ -204,12 +208,13 @@ export default function TasteEvolutionPage() {
   )
 }
 
-function ArtistColumn({ title, icon: Icon, iconColor, artists, emptyText }) {
+function ArtistColumn({ title, icon: Icon, iconColor, artists, emptyText, tooltip }) {
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
       <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
         <Icon size={18} className={iconColor} />
         {title}
+        {tooltip && <InfoTip text={tooltip} />}
         <span className="text-text-muted text-xs font-normal ml-auto">{artists.length}</span>
       </h3>
       {artists.length === 0 ? (

@@ -175,3 +175,6 @@ class SpotifyClient:
 
     async def get_related_artists(self, artist_id: str) -> dict:
         return await self.get(f"/artists/{artist_id}/related-artists")
+
+    async def get_artist_top_tracks(self, artist_id: str, market: str = "IT") -> dict:
+        return await self.get(f"/artists/{artist_id}/top-tracks", market=market)

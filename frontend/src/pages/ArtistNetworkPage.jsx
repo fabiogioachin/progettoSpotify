@@ -37,13 +37,13 @@ export default function ArtistNetworkPage() {
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} />
-              <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} />
-              <KPICard title="Cluster" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} />
-              <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} />
+              <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="Numero di artisti nella rete di connessioni" />
+              <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Legami tra artisti basati su generi e stili simili" />
+              <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti con gusti e generi affini" />
+              <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} tooltip="I tuoi artisti più ascoltati presenti nel grafo" />
             </div>
 
-            {/* Network Graph */}
+            {/* Network Graph — bubble chart, no legend */}
             <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} clusterNames={clusterNames} loading={loading} />
 
             {/* Genre Cloud */}
@@ -62,6 +62,7 @@ export default function ArtistNetworkPage() {
                         key={g.genre}
                         className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20`}
                         style={{ opacity }}
+                        title={`${g.count} artisti con questo genere`}
                       >
                         {g.genre}
                         <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
@@ -80,7 +81,7 @@ export default function ArtistNetworkPage() {
                   Artisti Ponte
                 </h3>
                 <p className="text-text-secondary text-sm mb-4">
-                  Artisti che collegano cluster di gusto diversi nel tuo ecosistema
+                  Artisti che collegano cerchie di gusto diverse nel tuo ecosistema
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {bridges.map((bridge, i) => (
@@ -94,7 +95,7 @@ export default function ArtistNetworkPage() {
                       )}
                       <div className="min-w-0">
                         <p className="text-text-primary text-sm font-medium truncate">{bridge.name}</p>
-                        <p className="text-accent text-xs">{bridge.bridge_score} conn. cross-cluster</p>
+                        <p className="text-accent text-xs">{bridge.bridge_score} conn. cross-cerchia</p>
                         {bridge.genres && bridge.genres.length > 0 && (
                           <p className="text-text-muted text-[10px] truncate mt-0.5">{bridge.genres.join(', ')}</p>
                         )}

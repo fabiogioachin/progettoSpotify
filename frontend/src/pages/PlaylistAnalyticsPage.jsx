@@ -37,10 +37,10 @@ export default function PlaylistAnalyticsPage() {
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <KPICard title="Totale Playlist" value={summary.total_playlists || 0} icon={ListMusic} delay={0} />
-              <KPICard title="Pubbliche" value={summary.public_count || 0} icon={Globe} delay={100} />
-              <KPICard title="Private" value={summary.private_count || 0} icon={Lock} delay={200} />
-              <KPICard title="Collaborative" value={summary.collaborative_count || 0} icon={Users} delay={300} />
+              <KPICard title="Totale Playlist" value={summary.total_playlists || 0} icon={ListMusic} delay={0} tooltip="Numero totale di playlist nel tuo profilo" />
+              <KPICard title="Pubbliche" value={summary.public_count || 0} icon={Globe} delay={100} tooltip="Playlist visibili a tutti su Spotify" />
+              <KPICard title="Private" value={summary.private_count || 0} icon={Lock} delay={200} tooltip="Playlist visibili solo a te" />
+              <KPICard title="Collaborative" value={summary.collaborative_count || 0} icon={Users} delay={300} tooltip="Playlist a cui altri utenti possono aggiungere brani" />
             </div>
 
             {/* Size Distribution */}

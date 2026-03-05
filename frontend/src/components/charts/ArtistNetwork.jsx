@@ -12,6 +12,11 @@ function formatFollowers(n) {
   return String(n)
 }
 
+function getRadius(popularity, isTop) {
+  const base = 4 + Math.sqrt((popularity || 10) / 100) * 20
+  return isTop ? base * 1.15 : base
+}
+
 export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], clusterNames = {}, title = 'Ecosistema Artisti', loading = false }) {
   const svgRef = useRef(null)
   const animRef = useRef(null)
@@ -20,7 +25,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
   const posRef = useRef([])
   const velRef = useRef([])
 
-  // Build cluster color map and node-to-cluster map
+  // Build cluster color map
   const clusterColorMap = useMemo(() => {
     const map = {}
     clusters.forEach(c => {
@@ -35,14 +40,12 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return map
   }, [clusters])
 
-  // Build node index map
-  const nodeIndex = useMemo(() => {
-    const map = {}
-    nodes.forEach((n, i) => { map[n.id] = i })
-    return map
+  // Precompute radii based on popularity
+  const radii = useMemo(() => {
+    return nodes.map(n => getRadius(n.popularity, n.is_top))
   }, [nodes])
 
-  // Initialize positions
+  // Bubble packing simulation (no edges — pure repulsion + center gravity + cluster cohesion)
   useEffect(() => {
     if (nodes.length === 0) return
 
@@ -51,9 +54,9 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     const cx = width / 2
     const cy = height / 2
 
-    const initPos = nodes.map((_, i) => ({
-      x: cx + (Math.random() - 0.5) * 300,
-      y: cy + (Math.random() - 0.5) * 250,
+    const initPos = nodes.map(() => ({
+      x: cx + (Math.random() - 0.5) * 250,
+      y: cy + (Math.random() - 0.5) * 200,
     }))
     const initVel = nodes.map(() => ({ x: 0, y: 0 }))
 
@@ -62,11 +65,9 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     setPositions([...initPos])
 
     let frameCount = 0
-    const maxFrames = 300
-    const damping = 0.85
-    const repulsion = 800
-    const attraction = 0.008
-    const centerForce = 0.01
+    const maxFrames = 350
+    const damping = 0.82
+    const centerForce = 0.015
 
     function simulate() {
       if (frameCount >= maxFrames) return
@@ -77,37 +78,39 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
 
       const forces = pos.map(() => ({ x: 0, y: 0 }))
 
-      // Repulsion (all pairs)
+      // Collision-aware repulsion (radius-based)
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
           const dx = pos[i].x - pos[j].x
           const dy = pos[i].y - pos[j].y
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const force = repulsion / (dist * dist)
-          const fx = (dx / dist) * force
-          const fy = (dy / dist) * force
-          forces[i].x += fx
-          forces[i].y += fy
-          forces[j].x -= fx
-          forces[j].y -= fy
+          const minDist = radii[i] + radii[j] + 4
+          if (dist < minDist * 2.5) {
+            const force = Math.max(200, (minDist * minDist)) / (dist * dist)
+            const fx = (dx / dist) * force
+            const fy = (dy / dist) * force
+            forces[i].x += fx
+            forces[i].y += fy
+            forces[j].x -= fx
+            forces[j].y -= fy
+          }
         }
       }
 
-      // Attraction (edges)
-      for (const edge of edges) {
-        const si = nodeIndex[edge.source]
-        const ti = nodeIndex[edge.target]
-        if (si === undefined || ti === undefined) continue
-        const dx = pos[ti].x - pos[si].x
-        const dy = pos[ti].y - pos[si].y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        const force = dist * attraction
-        const fx = (dx / dist) * force
-        const fy = (dy / dist) * force
-        forces[si].x += fx
-        forces[si].y += fy
-        forces[ti].x -= fx
-        forces[ti].y -= fy
+      // Cluster cohesion: same-cluster nodes attract gently
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          if (nodeClusterMap[nodes[i].id] === nodeClusterMap[nodes[j].id]) {
+            const dx = pos[j].x - pos[i].x
+            const dy = pos[j].y - pos[i].y
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1
+            const force = dist * 0.003
+            forces[i].x += (dx / dist) * force
+            forces[i].y += (dy / dist) * force
+            forces[j].x -= (dx / dist) * force
+            forces[j].y -= (dy / dist) * force
+          }
+        }
       }
 
       // Center gravity
@@ -122,8 +125,9 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
         vel[i].y = (vel[i].y + forces[i].y) * damping
         pos[i].x += vel[i].x
         pos[i].y += vel[i].y
-        pos[i].x = Math.max(20, Math.min(width - 20, pos[i].x))
-        pos[i].y = Math.max(20, Math.min(height - 20, pos[i].y))
+        const r = radii[i]
+        pos[i].x = Math.max(r + 5, Math.min(width - r - 5, pos[i].x))
+        pos[i].y = Math.max(r + 5, Math.min(height - r - 5, pos[i].y))
       }
 
       frameCount++
@@ -139,11 +143,11 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
     }
-  }, [nodes, edges, nodeIndex])
+  }, [nodes, radii, nodeClusterMap])
 
   const handleMouseEnter = useCallback((node, pos) => {
     const clusterId = nodeClusterMap[node.id]
-    const clusterLabel = clusterId != null ? (clusterNames[clusterId] || `Cluster ${clusterId + 1}`) : null
+    const clusterLabel = clusterId != null ? (clusterNames[clusterId] || `Cerchia ${clusterId + 1}`) : null
     setTooltip({ ...node, x: pos.x, y: pos.y, clusterLabel })
   }, [nodeClusterMap, clusterNames])
 
@@ -170,38 +174,20 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     <div className="glow-card bg-surface rounded-xl p-5 relative">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
       <svg ref={svgRef} viewBox="0 0 700 500" className="w-full h-auto" style={{ maxHeight: '500px' }}>
-        {/* Edges */}
-        {edges.map((edge, i) => {
-          const si = nodeIndex[edge.source]
-          const ti = nodeIndex[edge.target]
-          if (si === undefined || ti === undefined || !positions[si] || !positions[ti]) return null
-          return (
-            <line
-              key={`e-${i}`}
-              x1={positions[si].x}
-              y1={positions[si].y}
-              x2={positions[ti].x}
-              y2={positions[ti].y}
-              stroke="#ffffff"
-              strokeOpacity={0.06}
-              strokeWidth={1}
-            />
-          )
-        })}
-        {/* Nodes */}
+        {/* Bubbles — size proportional to popularity */}
         {nodes.map((node, i) => {
           if (!positions[i]) return null
           const color = clusterColorMap[node.id] || '#6366f1'
-          const r = node.is_top ? 10 : 5
+          const r = radii[i]
           return (
             <g key={node.id}>
               {node.is_top && (
                 <circle
                   cx={positions[i].x}
                   cy={positions[i].y}
-                  r={r + 4}
+                  r={r + 3}
                   fill={color}
-                  fillOpacity={0.15}
+                  fillOpacity={0.12}
                 />
               )}
               <circle
@@ -209,9 +195,10 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                 cy={positions[i].y}
                 r={r}
                 fill={color}
-                fillOpacity={node.is_top ? 0.9 : 0.5}
-                stroke={node.is_top ? '#ffffff' : 'none'}
-                strokeWidth={node.is_top ? 1.5 : 0}
+                fillOpacity={node.is_top ? 0.85 : 0.45}
+                stroke={node.is_top ? '#ffffff' : color}
+                strokeWidth={node.is_top ? 1.5 : 0.5}
+                strokeOpacity={node.is_top ? 0.8 : 0.3}
                 className="cursor-pointer transition-all duration-200"
                 onMouseEnter={() => handleMouseEnter(node, positions[i])}
                 onMouseLeave={handleMouseLeave}
@@ -219,14 +206,15 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
             </g>
           )
         })}
-        {/* Node labels for top artists */}
+        {/* Labels for top artists */}
         {nodes.map((node, i) => {
           if (!node.is_top || !positions[i]) return null
+          const r = radii[i]
           return (
             <text
               key={`label-${node.id}`}
               x={positions[i].x}
-              y={positions[i].y - 16}
+              y={positions[i].y - r - 5}
               textAnchor="middle"
               fill="#e0e0e0"
               fontSize={10}
@@ -267,15 +255,6 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
           </div>
         </div>
       )}
-      {/* Cluster Legend */}
-      <div className="flex flex-wrap gap-3 mt-3">
-        {[...new Set(clusters.map(c => c.cluster))].slice(0, 8).map(clusterId => (
-          <div key={clusterId} className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
-            <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cluster ${clusterId + 1}`}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

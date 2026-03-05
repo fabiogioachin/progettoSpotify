@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import InfoTip from '../ui/InfoTip'
 
 const OVERLAP_COLORS = ['#6a6a6a', '#6366f1', '#1DB954']
 
@@ -8,7 +9,7 @@ const OVERLAP_DESCRIPTIONS = {
   'Fedelissimi': 'Artisti presenti in tutti e tre i periodi — il cuore del tuo gusto musicale',
 }
 
-export default function TasteOverlapBar({ data = [], title = 'Distribuzione Artisti per Periodo', loading = false }) {
+export default function TasteOverlapBar({ data = [], title = 'Distribuzione Artisti per Periodo', loading = false, tooltip }) {
   if (loading) {
     return (
       <div className="glow-card bg-surface rounded-xl p-5">
@@ -28,9 +29,12 @@ export default function TasteOverlapBar({ data = [], title = 'Distribuzione Arti
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
-      <h3 className="text-text-primary font-display font-semibold mb-1">{title}</h3>
+      <h3 className="text-text-primary font-display font-semibold mb-1 flex items-center gap-1">
+        {title}
+        {tooltip && <InfoTip text={tooltip} />}
+      </h3>
       <p className="text-text-muted text-xs mb-4">
-        In quanti periodi (ultimo mese, 6 mesi, sempre) compaiono i tuoi artisti
+        In quanti periodi (1M, 6M, All) compaiono i tuoi artisti
       </p>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>

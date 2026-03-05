@@ -105,7 +105,7 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
             top_genre = max(genres, key=genres.get)
             cluster_names[cid] = top_genre.replace("-", " ").title()
         else:
-            cluster_names[cid] = f"Cluster {cid + 1}"
+            cluster_names[cid] = f"Cerchia {cid + 1}"
 
     # Genre summary for the network
     genre_counter = defaultdict(int)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ListMusic } from 'lucide-react'
+import { ListMusic, Music, BarChart3 } from 'lucide-react'
 import PlaylistComparison from '../components/charts/PlaylistComparison'
 import AudioRadar from '../components/charts/AudioRadar'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -32,7 +32,11 @@ export default function PlaylistComparePage() {
   }
 
   const playlistNames = {}
-  playlists.forEach((p) => { playlistNames[p.id] = p.name })
+  const playlistImages = {}
+  playlists.forEach((p) => {
+    playlistNames[p.id] = p.name
+    playlistImages[p.id] = p.image
+  })
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -41,7 +45,7 @@ export default function PlaylistComparePage() {
             Confronto Playlist
           </h1>
           <p className="text-text-secondary text-sm">
-            Seleziona da 2 a 4 playlist per confrontare i profili audio
+            Seleziona da 2 a 4 playlist per confrontare profili, brani e generi
           </p>
         </div>
 
@@ -109,7 +113,7 @@ export default function PlaylistComparePage() {
               const hasFeatures = comparison.comparisons.some(c => c.analyzed_count > 0)
               return (
                 <div className="space-y-6 animate-fade-in">
-                  {/* Tabella riassuntiva — sempre visibile */}
+                  {/* Summary table */}
                   <div className="glow-card bg-surface rounded-xl p-5 overflow-x-auto">
                     <h3 className="text-text-primary font-display font-semibold mb-4">
                       Riepilogo
@@ -119,12 +123,12 @@ export default function PlaylistComparePage() {
                         <tr className="border-b border-border">
                           <th className="text-left text-text-muted py-2 px-3">Playlist</th>
                           <th className="text-center text-text-muted py-2 px-3">Brani</th>
-                          <th className="text-center text-text-muted py-2 px-3">Analizzati</th>
+                          <th className="text-center text-text-muted py-2 px-3">Pop. media</th>
                           {hasFeatures && (
                             <>
                               <th className="text-center text-text-muted py-2 px-3">Energia</th>
-                              <th className="text-center text-text-muted py-2 px-3">Positività</th>
-                              <th className="text-center text-text-muted py-2 px-3">Ballabilità</th>
+                              <th className="text-center text-text-muted py-2 px-3">Positivit&agrave;</th>
+                              <th className="text-center text-text-muted py-2 px-3">Ballabilit&agrave;</th>
                             </>
                           )}
                         </tr>
@@ -139,7 +143,7 @@ export default function PlaylistComparePage() {
                               {comp.track_count}
                             </td>
                             <td className="py-2 px-3 text-center text-text-secondary">
-                              {comp.analyzed_count}
+                              {comp.popularity_stats?.avg || '—'}
                             </td>
                             {hasFeatures && (
                               <>
@@ -165,7 +169,89 @@ export default function PlaylistComparePage() {
                     )}
                   </div>
 
-                  {/* Charts solo se features disponibili */}
+                  {/* Top Tracks per playlist */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {comparison.comparisons.map((comp) => {
+                      const tracks = comp.top_tracks || []
+                      if (tracks.length === 0) return null
+                      return (
+                        <div key={comp.playlist_id} className="glow-card bg-surface rounded-xl p-5">
+                          <div className="flex items-center gap-3 mb-4">
+                            {playlistImages[comp.playlist_id] ? (
+                              <img src={playlistImages[comp.playlist_id]} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-surface-hover flex items-center justify-center">
+                                <ListMusic size={16} className="text-text-muted" />
+                              </div>
+                            )}
+                            <div>
+                              <h4 className="text-text-primary font-display font-semibold text-sm">
+                                {playlistNames[comp.playlist_id] || comp.playlist_id}
+                              </h4>
+                              <p className="text-text-muted text-xs">Top 10 brani per popolarit&agrave;</p>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {tracks.map((t, i) => (
+                              <div key={t.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-hover transition-colors">
+                                <span className="w-5 text-center text-text-muted text-[10px] font-mono flex-shrink-0">{i + 1}</span>
+                                {t.album_image ? (
+                                  <img src={t.album_image} alt={t.name} className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                                ) : (
+                                  <div className="w-8 h-8 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
+                                    <Music size={12} className="text-text-muted" />
+                                  </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-text-primary text-xs truncate">{t.name}</p>
+                                  <p className="text-text-muted text-[10px] truncate">{t.artist}</p>
+                                </div>
+                                <span className="text-text-muted text-[10px] flex-shrink-0">Pop. {t.popularity}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Genre comparison */}
+                  {comparison.comparisons.some(c => Object.keys(c.genre_distribution || {}).length > 0) && (
+                    <div className="glow-card bg-surface rounded-xl p-5">
+                      <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                        <BarChart3 size={18} className="text-accent" />
+                        Generi a confronto
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {comparison.comparisons.map((comp) => {
+                          const genres = comp.genre_distribution || {}
+                          if (Object.keys(genres).length === 0) return null
+                          return (
+                            <div key={comp.playlist_id}>
+                              <p className="text-text-primary text-sm font-medium mb-2 truncate">
+                                {playlistNames[comp.playlist_id] || comp.playlist_id}
+                              </p>
+                              <div className="space-y-1.5">
+                                {Object.entries(genres).slice(0, 5).map(([genre, pct]) => (
+                                  <div key={genre}>
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <span className="text-text-muted text-[10px] truncate">{genre}</span>
+                                      <span className="text-text-secondary text-[10px] ml-1">{pct}%</span>
+                                    </div>
+                                    <div className="w-full h-1 bg-background rounded-full overflow-hidden">
+                                      <div className="h-full bg-accent rounded-full" style={{ width: `${pct}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Charts only if features available */}
                   {hasFeatures && (
                     <>
                       <PlaylistComparison

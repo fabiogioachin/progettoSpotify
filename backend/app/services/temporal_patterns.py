@@ -123,6 +123,13 @@ async def compute_temporal_patterns(
     # Listening streak (consecutive days)
     unique_days = sorted(set(p["datetime"].date() for p in plays))
     max_streak = _compute_streak(unique_days)
+    current_streak = _compute_current_streak(unique_days)
+
+    # Active days: which of the last 7 days had listening activity
+    from datetime import date, timedelta
+    today = date.today()
+    last_7 = [today - timedelta(days=6 - i) for i in range(7)]
+    active_days = [d in set(unique_days) for d in last_7]
 
     # Most played track
     track_counts = defaultdict(int)
@@ -154,7 +161,9 @@ async def compute_temporal_patterns(
         },
         "streak": {
             "max_streak": max_streak,
+            "current_streak": current_streak,
             "unique_days": len(unique_days),
+            "active_days": active_days,
         },
         "most_played": {
             "track_name": most_played[0],
@@ -248,6 +257,30 @@ def _compute_streak(sorted_dates: list) -> int:
     return max_streak
 
 
+def _compute_current_streak(sorted_dates: list) -> int:
+    """Calcola la streak corrente (giorni consecutivi fino a oggi/ieri)."""
+    from datetime import date, timedelta
+
+    if not sorted_dates:
+        return 0
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+
+    # La streak e' attiva se l'ultimo giorno e' oggi o ieri
+    if sorted_dates[-1] != today and sorted_dates[-1] != yesterday:
+        return 0
+
+    streak = 1
+    for i in range(len(sorted_dates) - 1, 0, -1):
+        diff = (sorted_dates[i] - sorted_dates[i - 1]).days
+        if diff == 1:
+            streak += 1
+        else:
+            break
+    return streak
+
+
 def _empty_result():
     return {
         "heatmap": {
@@ -267,7 +300,7 @@ def _empty_result():
             "weekend_plays": 0,
             "weekday_pct": 0,
         },
-        "streak": {"max_streak": 0, "unique_days": 0},
+        "streak": {"max_streak": 0, "current_streak": 0, "unique_days": 0, "active_days": [False] * 7},
         "most_played": {"track_name": "", "count": 0},
         "top_tracks": [],
         "total_plays": 0,

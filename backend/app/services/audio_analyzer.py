@@ -25,7 +25,8 @@ async def compute_profile(
 
     if not items:
         return {"features": {}, "genres": {}, "track_count": 0,
-                "popularity_avg": 0, "unique_artists": 0, "top_artist": "—"}
+                "popularity_avg": 0, "artist_popularity_avg": 0,
+                "unique_artists": 0, "top_artist": "—"}
 
     track_ids = [t["id"] for t in items]
 
@@ -34,12 +35,34 @@ async def compute_profile(
     popularity_avg = round(sum(popularities) / len(popularities), 1) if popularities else 0
 
     artist_counter = Counter()
+    artist_ids_unique = set()
     for t in items:
         for a in t.get("artists", []):
             if a.get("name"):
                 artist_counter[a["name"]] += 1
+            if a.get("id"):
+                artist_ids_unique.add(a["id"])
     unique_artists = len(artist_counter)
     top_artist = artist_counter.most_common(1)[0][0] if artist_counter else "—"
+
+    # Popolarita' artisti: fetch profili artisti per ottenere artist.popularity
+    artist_popularity_avg = 0
+    artist_popularities = []
+    if artist_ids_unique:
+        artist_list = list(artist_ids_unique)
+        for i in range(0, len(artist_list), 50):
+            batch = artist_list[i:i + 50]
+            try:
+                resp = await retry_with_backoff(client.get_artists, batch)
+                for artist in resp.get("artists", []):
+                    if artist and artist.get("popularity") is not None:
+                        artist_popularities.append(artist["popularity"])
+            except Exception as exc:
+                logger.warning("Errore fetch artist popularity batch: %s", exc)
+        if artist_popularities:
+            artist_popularity_avg = round(
+                sum(artist_popularities) / len(artist_popularities), 1
+            )
 
     # Audio features (possono essere vuote se API deprecata)
     features = await get_or_fetch_features(db, client, track_ids)
@@ -53,7 +76,7 @@ async def compute_profile(
     tempos = [f["tempo"] for f in features.values() if f.get("tempo") is not None]
     averages["tempo"] = round(sum(tempos) / len(tempos), 1) if tempos else 0
 
-    # Distribuzione generi (dai top artists)
+    # Distribuzione generi (dai top artists — riusa dati gia' fetchati se possibile)
     genres = await _extract_genres(client, items)
 
     return {
@@ -61,6 +84,7 @@ async def compute_profile(
         "genres": genres,
         "track_count": len(items),
         "popularity_avg": popularity_avg,
+        "artist_popularity_avg": artist_popularity_avg,
         "unique_artists": unique_artists,
         "top_artist": top_artist,
     }
@@ -191,8 +215,11 @@ async def _extract_genres(client: SpotifyClient, tracks: list[dict]) -> dict[str
             for artist in resp.get("artists", []):
                 if artist and artist.get("genres"):
                     all_genres.extend(artist["genres"])
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Errore fetch generi artisti batch %d-%d: %s",
+                i, i + len(batch), exc,
+            )
 
     if not all_genres:
         return {}

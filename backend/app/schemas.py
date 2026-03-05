@@ -79,11 +79,30 @@ class PlaylistListResponse(BaseModel):
     total: int
 
 
+class PlaylistTrackResponse(BaseModel):
+    id: str
+    name: str
+    artist: str
+    album: str = ""
+    album_image: str | None = None
+    popularity: int = 0
+    duration_ms: int = 0
+
+
+class PlaylistTracksResponse(BaseModel):
+    tracks: list[PlaylistTrackResponse]
+    total: int
+    playlist_id: str
+
+
 class PlaylistComparisonItem(BaseModel):
     playlist_id: str
     track_count: int
     analyzed_count: int
     averages: dict[str, float]
+    top_tracks: list[PlaylistTrackResponse] = []
+    popularity_stats: dict[str, float] = {}
+    genre_distribution: dict[str, float] = {}
 
 
 class PlaylistComparisonResponse(BaseModel):

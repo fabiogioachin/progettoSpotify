@@ -65,8 +65,8 @@ export default function TemporalPage() {
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <KPICard title="Ascolti Totali" value={totalPlays} icon={Headphones} delay={0} />
-              <KPICard title="Ora di Punta" value={peakHourLabel} icon={Calendar} delay={100} />
+              <KPICard title="Ascolti Totali" value={totalPlays} icon={Headphones} delay={0} tooltip="Numero totale di ascolti accumulati nel tempo" />
+              <KPICard title="Ora di Punta" value={peakHourLabel} icon={Calendar} delay={100} tooltip="L'ora del giorno in cui ascolti più musica" />
             </div>
 
             {/* Heatmap */}
