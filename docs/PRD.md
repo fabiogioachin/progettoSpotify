@@ -65,6 +65,13 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Metriche comparative (audio features se disponibili, altrimenti messaggio informativo)
 - Rendering condizionale: mostra confronto features solo quando i dati audio sono disponibili
 
+### 5.7 Scopri (`/discovery`)
+- Distribuzione generi (treemap) — sempre disponibile via artist genres
+- Distribuzione popolarità (istogramma a barre) — fallback quando MoodScatter non ha features
+- Hidden gems: brani meno popolari tra i preferiti (fallback outlier basato su popolarità anziché distanza audio)
+- Raccomandazioni: API Spotify se disponibile, altrimenti "Scoperte Recenti" (brani in short_term non presenti in medium_term)
+- Flag trasparenza `recommendations_source`: il frontend etichetta chiaramente la sorgente dei suggerimenti
+
 ## 6. Stack Spotify API (Non Deprecato)
 - `GET /me/top/artists` — top artists (3 time ranges, max 50)
 - `GET /me/top/tracks` — top tracks (3 time ranges, max 50)

@@ -25,7 +25,7 @@ export default function AudioRadar({ features, title = 'Profilo Audio', loading 
     && Object.entries(features).some(([k, v]) => k !== 'tempo' && v && v > 0)
 
   if (!hasNonZeroFeatures) {
-    return null
+    return <EmptyState />
   }
 
   const data = Object.entries(RADAR_LABELS).map(([key, label]) => ({
@@ -71,3 +71,10 @@ export default function AudioRadar({ features, title = 'Profilo Audio', loading 
   )
 }
 
+function EmptyState() {
+  return (
+    <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[380px]">
+      <p className="text-text-muted text-sm">Nessun dato disponibile</p>
+    </div>
+  )
+}

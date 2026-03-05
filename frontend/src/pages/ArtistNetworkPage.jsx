@@ -72,6 +72,32 @@ export default function ArtistNetworkPage() {
               </div>
             )}
 
+            {/* Genre Cloud */}
+            {topGenres.length > 0 && (
+              <div className="glow-card bg-surface rounded-xl p-5">
+                <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                  <Music size={18} className="text-accent" />
+                  Generi dominanti nel tuo ecosistema
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {topGenres.map((g, i) => {
+                    const size = i < 3 ? 'text-sm px-3 py-1.5' : 'text-xs px-2 py-1'
+                    const opacity = Math.max(0.4, 1 - (i * 0.08))
+                    return (
+                      <span
+                        key={g.genre}
+                        className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20`}
+                        style={{ opacity }}
+                      >
+                        {g.genre}
+                        <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Bridge Artists */}
             {bridges.length > 0 && (
               <div className="glow-card bg-surface rounded-xl p-5">
