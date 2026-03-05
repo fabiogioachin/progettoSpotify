@@ -8,17 +8,18 @@ const api = axios.create({
   },
 })
 
-// Interceptor: retry su 429, redirect a login su 401
+// Interceptor: retry su 429 (solo se Retry-After <= 30s), redirect a login su 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config
 
-    // Retry on 429 (rate limited) — max 2 retries with exponential backoff
     if (error.response?.status === 429 && (!config._retryCount || config._retryCount < 2)) {
+      const retryAfter = parseInt(error.response.headers['retry-after'] || '0', 10)
+      // Se Spotify è in ban mode (Retry-After > 30s) non riprovare — mostra errore
+      if (retryAfter > 30) return Promise.reject(error)
       config._retryCount = (config._retryCount || 0) + 1
-      const retryAfter = error.response.headers['retry-after']
-      const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * config._retryCount
+      const delay = retryAfter > 0 ? retryAfter * 1000 : 1000 * config._retryCount
       await new Promise((resolve) => setTimeout(resolve, delay))
       return api(config)
     }

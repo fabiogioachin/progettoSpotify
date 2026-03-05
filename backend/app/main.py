@@ -25,7 +25,7 @@ from app.routers import (
     temporal,
 )
 from app.services.background_tasks import sync_recent_plays
-from app.utils.rate_limiter import APIRateLimiter
+from app.utils.rate_limiter import APIRateLimiter, RateLimitError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +69,18 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_exception_handler(request, exc: RateLimitError):
+    """Propaga i 429 di Spotify al frontend con il corretto Retry-After."""
+    retry_after = int(exc.retry_after) if exc.retry_after else 60
+    logger.warning("Spotify rate limit propagato al frontend: Retry-After=%ds", retry_after)
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Spotify rate limit attivo. Riprova tra {retry_after} secondi."},
+        headers={"Retry-After": str(retry_after)},
+    )
 
 # Rate Limiter (prima di CORS per intercettare richieste eccessive)
 app.add_middleware(APIRateLimiter, requests_per_minute=120)

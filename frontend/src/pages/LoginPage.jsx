@@ -1,8 +1,16 @@
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { BarChart3, Music2, Sparkles, TrendingUp } from 'lucide-react'
 
 export default function LoginPage() {
   const { login } = useAuth()
+  const [connecting, setConnecting] = useState(false)
+
+  function handleLogin() {
+    if (connecting) return
+    setConnecting(true)
+    login() // redirect a Spotify — la pagina lascia il dominio, non serve reset
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
@@ -72,11 +80,12 @@ export default function LoginPage() {
 
         {/* CTA */}
         <button
-          onClick={login}
-          className="inline-flex items-center gap-3 px-8 py-4 bg-spotify hover:bg-spotify/90 text-white rounded-full font-semibold text-lg transition-all duration-300 hover:shadow-xl hover:shadow-spotify/20 hover:scale-105 active:scale-100"
+          onClick={handleLogin}
+          disabled={connecting}
+          className="inline-flex items-center gap-3 px-8 py-4 bg-spotify hover:bg-spotify/90 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100 text-white rounded-full font-semibold text-lg transition-all duration-300 hover:shadow-xl hover:shadow-spotify/20 hover:scale-105 active:scale-100"
         >
           <SpotifyIcon />
-          Connetti Spotify
+          {connecting ? 'Connessione in corso…' : 'Connetti Spotify'}
         </button>
 
         <p className="text-text-muted text-xs mt-4">

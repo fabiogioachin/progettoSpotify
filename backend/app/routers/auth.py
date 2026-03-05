@@ -1,10 +1,12 @@
 """Router autenticazione OAuth Spotify."""
 
 import asyncio
+import hashlib
 import hmac
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
@@ -22,8 +24,38 @@ from app.utils.token_manager import encrypt_token
 
 logger = logging.getLogger(__name__)
 
+_snapshot_running: set[int] = set()
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+# --- OAuth state helpers (stateless, HMAC-signed) ---
+
+def _sign_state(nonce: str) -> str:
+    """Crea state firmato: nonce.signature (sopravvive a restart/reload)."""
+    sig = hmac.new(
+        settings.session_secret.encode(),
+        nonce.encode(),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+    return f"{nonce}.{sig}"
+
+
+def _verify_state(state: str) -> bool:
+    """Verifica che lo state sia stato firmato dal nostro server."""
+    parts = state.rsplit(".", 1)
+    if len(parts) != 2:
+        return False
+    nonce, sig = parts
+    expected = hmac.new(
+        settings.session_secret.encode(),
+        nonce.encode(),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+    return hmac.compare_digest(sig, expected)
+
+
+# --- Cookie helpers ---
 
 def set_session_cookie(response: Response, user_id: int):
     """Imposta il cookie di sessione firmato."""
@@ -42,12 +74,14 @@ def set_session_cookie(response: Response, user_id: int):
     )
 
 
+# --- Routes ---
+
 @router.get("/spotify/login")
 async def spotify_login(request: Request):
     """Redirect a Spotify per autorizzazione OAuth."""
-    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    state = _sign_state(nonce)
 
-    # Salva state nel cookie temporaneo
     params = {
         "client_id": settings.spotify_client_id,
         "response_type": "code",
@@ -56,18 +90,9 @@ async def spotify_login(request: Request):
         "state": state,
         "show_dialog": "false",
     }
-    auth_url = f"{SPOTIFY_AUTH_URL}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
+    auth_url = f"{SPOTIFY_AUTH_URL}?{urlencode(params)}"
 
-    response = RedirectResponse(url=auth_url)
-    response.set_cookie(
-        key="oauth_state",
-        value=state,
-        httponly=True,
-        samesite="lax",
-        max_age=600,
-        path="/",
-    )
-    return response
+    return RedirectResponse(url=auth_url)
 
 
 @router.get("/spotify/callback")
@@ -82,9 +107,8 @@ async def spotify_callback(
     if error:
         return RedirectResponse(url=f"{settings.frontend_url}?error={error}")
 
-    # Verifica state (timing-safe comparison)
-    stored_state = request.cookies.get("oauth_state")
-    if not state or not stored_state or not hmac.compare_digest(state, stored_state):
+    # Verifica state (HMAC-signed, stateless — niente cookie, niente memory)
+    if not state or not _verify_state(state):
         return RedirectResponse(url=f"{settings.frontend_url}?error=state_mismatch")
 
     # Scambia code per token
@@ -101,6 +125,7 @@ async def spotify_callback(
         )
 
     if token_resp.status_code != 200:
+        logger.warning("Token exchange failed: %s %s", token_resp.status_code, token_resp.text)
         return RedirectResponse(url=f"{settings.frontend_url}?error=token_exchange_failed")
 
     token_data = token_resp.json()
@@ -111,14 +136,17 @@ async def spotify_callback(
     # Ottieni profilo utente (retry su 429 con Retry-After)
     profile_resp = None
     async with httpx.AsyncClient() as client:
-        for attempt in range(3):
+        for attempt in range(5):
             profile_resp = await client.get(
                 "https://api.spotify.com/v1/me",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             if profile_resp.status_code == 429:
-                retry_after = int(profile_resp.headers.get("Retry-After", 2))
-                await asyncio.sleep(min(retry_after, 5))
+                retry_after = int(profile_resp.headers.get("Retry-After", 5))
+                logger.warning(
+                    "GET /v1/me → 429 (attempt %d/5), Retry-After=%ds", attempt + 1, retry_after
+                )
+                await asyncio.sleep(retry_after)
                 continue
             break
 
@@ -174,7 +202,6 @@ async def spotify_callback(
     # Imposta cookie di sessione e redirect al frontend
     response = RedirectResponse(url=settings.frontend_url)
     set_session_cookie(response, user.id)
-    response.delete_cookie("oauth_state", path="/")
     return response
 
 
@@ -208,11 +235,16 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
 
 
 async def _try_daily_snapshot(user_id: int):
-    """Wrapper non-blocking per save_daily_snapshot."""
+    """Wrapper non-blocking per save_daily_snapshot. Un solo task attivo per user."""
+    if user_id in _snapshot_running:
+        return
+    _snapshot_running.add(user_id)
     try:
         await save_daily_snapshot(user_id)
     except Exception as exc:
         logger.warning("Daily snapshot fallito per user_id=%d: %s", user_id, exc)
+    finally:
+        _snapshot_running.discard(user_id)
 
 
 @router.post("/logout")
