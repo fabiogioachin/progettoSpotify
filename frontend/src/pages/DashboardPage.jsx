@@ -19,13 +19,11 @@ export default function DashboardPage() {
       )
 
   const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/analytics/trends')
-    const { data: featuresData, loading: featuresLoading, error: featuresError } = useSpotifyData(
-          '/api/analytics/features',
-      { time_range: period }
-        )
-
-  // Fetch streak data from temporal API
   const { data: temporalData } = useSpotifyData('/api/temporal')
+  const { data: featuresData, loading: featuresLoading, error: featuresError } = useSpotifyData(
+    '/api/analytics/features',
+    { time_range: period }
+  )
 
   const tracks = topData?.tracks || []
       const features = featuresData?.features || {}
@@ -35,7 +33,7 @@ export default function DashboardPage() {
                   // KPI calculations — solo dati reali sempre disponibili
                   const trackCount = topData?.total || tracks.length || 0
 
-  // Streak: giorni consecutivi di ascolto
+  // Streak di ascolto
   const streak = temporalData?.streak?.max_streak || 0
 
   // Artisti unici: preferisci backend, fallback dal conteggio tracks
@@ -56,88 +54,90 @@ export default function DashboardPage() {
     const hasError = topError || trendsError || featuresError
 
   return (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          {/* Header row */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div>
-                                <h1 className="text-2xl font-display font-bold text-text-primary">Dashboard</h1>h1>
-                                <p className="text-text-secondary text-sm">Panoramica del tuo profilo musicale</p>p>
-                      </div>div>
-                      <PeriodSelector value={period} onChange={setPeriod} />
-              </div>div>
-        
-          {isLoading ? (
-                  <LoadingSpinner />
-                ) : (
-                  <>
-                    {hasError && (
-                                <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">
-                                              Errore nel caricamento dei dati. Riprova tra qualche istante.
-                                </div>div>
-                            )}
-                  
-                    {/* KPI Row — dati reali sempre disponibili */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                                        <KPICard
-                                                        title="Brani analizzati"
-                                                        value={trackCount}
-                                                        icon={Music}
-                                                        delay={0}
-                                                      />
-                                        <KPICard
-                                                        title="Streak di ascolto"
-                                                        value={streak}
-                                                        suffix=" giorni"
-                                                        icon={Flame}
-                                                        delay={100}
-                                                        tooltip="Giorni consecutivi in cui hai ascoltato musica. Vai ai Pattern Temporali per i dettagli"
-                                                        link="/temporal#streak"
-                                                      />
-                              {topGenre && (
-                                  <KPICard
-                                                    title="Genere top"
-                                                    value={topGenre}
-                                                    suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
-                                                    icon={Disc3}
-                                                    delay={200}
-                                                    tooltip="Il genere musicale più frequente tra i tuoi artisti"
-                                                  />
-                                )}
-                                        <KPICard
-                                                        title="Artisti unici"
-                                                        value={uniqueArtists}
-                                                        icon={Users}
-                                                        delay={300}
-                                                      />
-                            </div>div>
-                  
-                    {/* Trend Timeline — full width */}
-                            <TrendTimeline trends={trends} />
-                  
-                    {/* Radar + Top Tracks — 2 columns */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        <AudioRadar features={features} />
-                            
-                                        <div className="glow-card bg-surface rounded-xl p-5">
-                                                      <h3 className="text-text-primary font-display font-semibold mb-4">
-                                                                      Top 50 Brani
-                                                      </h3>h3>
-                                                      <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
-                                                        {tracks.slice(0, 50).map((track, i) => (
-                                      <TrackCard key={track.id} track={track} index={i} />
-                                    ))}
-                                                        {tracks.length === 0 && null}
-                                                      </div>div>
-                                        </div>div>
-                            </div>div>
-                  
-                    {/* Genre Treemap + Export */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        <GenreTreemap genres={genres} />
-                                        <ClaudeExportPanel />
-                            </div>div>
-                  </>>
-                )}
-        </main>main>
-      )
-}</></main>
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Header row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-text-primary">Dashboard</h1>
+            <p className="text-text-secondary text-sm">Panoramica del tuo profilo musicale</p>
+          </div>
+          <PeriodSelector value={period} onChange={setPeriod} />
+        </div>
+
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : (
+          <>
+            {hasError && (
+              <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">
+                Errore nel caricamento dei dati. Riprova tra qualche istante.
+              </div>
+            )}
+
+            {/* KPI Row — dati reali sempre disponibili */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <KPICard
+                title="Brani analizzati"
+                value={trackCount}
+                icon={Music}
+                delay={0}
+                tooltip="Numero di brani nel tuo periodo di ascolto selezionato"
+              />
+              <KPICard
+                title="Streak di ascolto"
+                value={streak}
+                suffix=" giorni"
+                icon={Flame}
+                delay={100}
+                tooltip="Giorni consecutivi in cui hai ascoltato musica. Vai ai Pattern Temporali per i dettagli"
+                link="/temporal#streak"
+              />
+              {topGenre && (
+                <KPICard
+                  title="Genere top"
+                  value={topGenre}
+                  suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
+                  icon={Disc3}
+                  delay={200}
+                  tooltip="Il genere musicale più frequente tra i tuoi artisti"
+                />
+              )}
+              <KPICard
+                title="Artisti unici"
+                value={uniqueArtists}
+                icon={Users}
+                delay={300}
+                tooltip="Numero di artisti diversi tra i tuoi brani più ascoltati"
+              />
+            </div>
+
+            {/* Trend Timeline — full width */}
+            <TrendTimeline trends={trends} />
+
+            {/* Radar + Top Tracks — 2 columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <AudioRadar features={features} />
+
+              <div className="glow-card bg-surface rounded-xl p-5">
+                <h3 className="text-text-primary font-display font-semibold mb-4">
+                  Top 50 Brani
+                </h3>
+                <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+                  {tracks.slice(0, 50).map((track, i) => (
+                    <TrackCard key={track.id} track={track} index={i} />
+                  ))}
+                  {tracks.length === 0 && null}
+                </div>
+              </div>
+            </div>
+
+            {/* Genre Treemap + Export */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <GenreTreemap genres={genres} />
+              <ClaudeExportPanel />
+            </div>
+          </>
+        )}
+    </main>
+  )
+}
