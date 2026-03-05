@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Text, UniqueConstraint
 
 from app.database import Base
 
@@ -44,4 +44,21 @@ class RecentPlay(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "track_spotify_id", "played_at", name="uq_user_track_played"),
+    )
+
+
+class UserSnapshot(Base):
+    """Snapshot giornaliero dei top artists/tracks dell'utente per confronti temporali."""
+
+    __tablename__ = "user_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    captured_at = Column(Date, nullable=False, default=lambda: date.today())
+    top_artists_json = Column(Text, nullable=False, default="[]")
+    top_tracks_json = Column(Text, nullable=False, default="[]")
+    recent_plays_count = Column(Integer, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "captured_at", name="uq_user_snapshot_date"),
     )

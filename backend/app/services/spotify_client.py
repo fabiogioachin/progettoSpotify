@@ -89,14 +89,20 @@ class SpotifyClient:
         await self.db.commit()
 
     async def _request(self, method: str, url: str, **kwargs) -> Any:
-        """Esegue una richiesta autenticata alla Spotify API."""
+        """Esegue una richiesta autenticata alla Spotify API con retry su 401."""
         access_token = await self._get_valid_token()
         headers = {"Authorization": f"Bearer {access_token}"}
 
         resp = await self._client.request(method, url, headers=headers, **kwargs)
 
+        # Su 401, tenta un refresh forzato e riprova una volta
         if resp.status_code == 401:
-            raise SpotifyAuthError("Token non valido")
+            access_token = await self._force_refresh()
+            headers = {"Authorization": f"Bearer {access_token}"}
+            resp = await self._client.request(method, url, headers=headers, **kwargs)
+            if resp.status_code == 401:
+                raise SpotifyAuthError("Token non valido dopo refresh")
+
         if resp.status_code == 429:
             retry_after = float(resp.headers.get("Retry-After", "1"))
             raise RateLimitError(retry_after)
@@ -105,6 +111,21 @@ class SpotifyClient:
 
         resp.raise_for_status()
         return resp.json()
+
+    async def _force_refresh(self) -> str:
+        """Forza il refresh del token ignorando la scadenza. Restituisce il nuovo access_token."""
+        async with self._refresh_lock:
+            result = await self.db.execute(
+                select(SpotifyToken).where(SpotifyToken.user_id == self.user_id)
+            )
+            token_record = result.scalar_one_or_none()
+            if not token_record:
+                raise SpotifyAuthError("Nessun token trovato per l'utente")
+            await self._refresh_token(token_record)
+            try:
+                return decrypt_token(token_record.access_token_encrypted)
+            except InvalidToken:
+                raise SpotifyAuthError("Token corrotto dopo refresh")
 
     async def get(self, endpoint: str, **params) -> Any:
         url = f"{SPOTIFY_API}{endpoint}"

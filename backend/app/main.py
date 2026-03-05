@@ -4,6 +4,8 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
@@ -22,6 +24,7 @@ from app.routers import (
     taste_evolution,
     temporal,
 )
+from app.services.background_tasks import sync_recent_plays
 from app.utils.rate_limiter import APIRateLimiter
 
 logging.basicConfig(
@@ -30,6 +33,8 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
@@ -40,7 +45,22 @@ async def lifespan(app: FastAPI):
     logger.info("Database inizializzato")
     if not settings.cookie_secure and not settings.frontend_url.startswith("http://127"):
         logger.warning("SECURITY: cookie_secure=False su ambiente non-localhost. Impostare COOKIE_SECURE=true in produzione.")
+
+    # APScheduler: sync ascolti recenti ogni 60 minuti
+    scheduler.add_job(
+        sync_recent_plays,
+        trigger=IntervalTrigger(minutes=60),
+        id="sync_recent_plays",
+        name="Sync ascolti recenti ogni 60 minuti",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("APScheduler avviato — sync_recent_plays ogni 60 minuti")
+
     yield
+
+    scheduler.shutdown(wait=False)
+    logger.info("APScheduler arrestato")
 
 
 app = FastAPI(

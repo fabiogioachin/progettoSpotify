@@ -12,15 +12,18 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Backend**: FastAPI (async) + SQLAlchemy async + SQLite
 - **Frontend**: React 18 + Vite + Tailwind CSS + Recharts
 - **Auth**: OAuth2 PKCE con Spotify
-- **Deploy**: locale (dev), predisposto per Docker
+- **Deploy**: Docker Compose operativo (backend: uvicorn, frontend: nginx porta 5173)
 
 ## 4. Limitazioni API Spotify
 - **Deprecati** (non usati): Audio Features, Audio Analysis, Recommendations
 - **Sempre disponibili**: Artist genres/popularity/followers, Track popularity/preview_url, Top Artists/Tracks, Recently Played, Playlists, Related Artists
 - **Time ranges fissi**: short_term (~4 settimane), medium_term (~6 mesi), long_term (storico completo)
+- **Nessuna granularità custom via API**: Spotify non espone time ranges intermedi (es. 2 settimane, 3 mesi). L'unico modo è accumulare dati localmente e computare range personalizzati
 - **Recently played**: max 50 items (hard limit API)
-- **Workaround accumulo**: modello `RecentPlay` in DB — ogni visita alla pagina Temporal salva nuovi ascolti, lo storico cresce nel tempo
+- **Workaround accumulo**: modello `RecentPlay` in DB — sync automatico ogni 60 minuti via APScheduler + salvataggio ad ogni visita pagina Temporal. Lo storico cresce nel tempo
+- **Workaround range custom**: con sufficiente storico accumulato in `RecentPlay`, si possono computare range arbitrari (ultimi 7 giorni, 2 settimane, 3 mesi) filtrando per `played_at` nel DB anziché affidarsi ai time ranges API
 - **Workaround storico**: playlist "Your Top Songs 20XX" per dati multi-anno
+- **Workaround snapshot giornalieri**: modello `UserSnapshot` salva top_artists/top_tracks JSON una volta al giorno → confronto settimana-su-settimana e mese-su-mese senza dipendere dai time ranges API
 
 ## 5. Funzionalità
 
@@ -62,13 +65,6 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Metriche comparative (audio features se disponibili, altrimenti messaggio informativo)
 - Rendering condizionale: mostra confronto features solo quando i dati audio sono disponibili
 
-### 5.7 Scopri (`/discovery`)
-- Distribuzione generi (treemap) — sempre disponibile via artist genres
-- Distribuzione popolarità (istogramma a barre) — fallback quando MoodScatter non ha features
-- Hidden gems: brani meno popolari tra i preferiti (fallback outlier basato su popolarità anziché distanza audio)
-- Raccomandazioni: API Spotify se disponibile, altrimenti "Scoperte Recenti" (brani in short_term non presenti in medium_term)
-- Flag trasparenza `recommendations_source`: il frontend etichetta chiaramente la sorgente dei suggerimenti
-
 ## 6. Stack Spotify API (Non Deprecato)
 - `GET /me/top/artists` — top artists (3 time ranges, max 50)
 - `GET /me/top/tracks` — top tracks (3 time ranges, max 50)
@@ -89,6 +85,12 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Font: Space Grotesk (display) + Inter (body)
 - Sidebar: 240px, always visible desktop, collapsible mobile
 
+### 7.1 Animazioni e Transizioni Moderne
+- **Scroll-driven animations**: fade-in e slide-up per KPI cards e sezioni al scroll (CSS `@scroll-timeline` o Framer Motion `useInView`)
+- **View Transitions API**: transizioni animate tra route (fade/slide) per navigazione fluida tra pagine
+- **Skeleton loaders**: placeholder che rispecchiano la forma del componente finale (card, lista, grafico) al posto degli spinner generici
+- **Staggered list animations**: animazioni d'ingresso sfalsate per liste e griglie (TopTracks, ArtistCards) con Framer Motion `staggerChildren`
+
 ## 8. Decisioni Architetturali
 - Nessuna dipendenza esterna per grafici complessi (force-directed = SVG puro)
 - asyncio.Semaphore per rate limiting API calls parallele
@@ -103,3 +105,10 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Rendering condizionale frontend**: flag `has_audio_features` e `recommendations_source` dal backend → il frontend mostra alternative appropriate (popolarità, generi) quando le API deprecate falliscono
 - **AudioRadar all-zero detection**: rileva features con tutti valori a 0 → mostra messaggio "dati non disponibili" anziché radar piatto
 - **Nessun dato finto**: tutti i valori default sono 0/null/vuoto, mai valori plausibili che potrebbero fuorviare l'utente
+
+### 8.2 Architettura Dati Storici
+- **UserSnapshot giornaliero**: modello `UserSnapshot` salva una volta al giorno (al primo login) i top_artists e top_tracks come JSON serializzato + timestamp
+- **Campi**: `id`, `user_id`, `captured_at` (date, unico per utente), `top_artists_json`, `top_tracks_json`, `recent_plays_count`
+- **Confronti temporali**: con snapshot giornalieri si possono calcolare diff settimana-su-settimana e mese-su-mese senza dipendere dai 3 time ranges fissi di Spotify
+- **Endpoint**: `GET /api/snapshots/diff?period=week` restituisce delta tra snapshot (artisti saliti/scesi, nuovi brani, brani usciti dalla top)
+- **Vantaggio**: dati owned dall'utente, non soggetti a deprecazione API, granularità temporale arbitraria

@@ -1,6 +1,8 @@
 """Router autenticazione OAuth Spotify."""
 
+import asyncio
 import hmac
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -14,8 +16,11 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies import get_session_user_id
 from app.models.user import SpotifyToken, User
+from app.services.background_tasks import save_daily_snapshot
 from app.services.spotify_client import SCOPES, SPOTIFY_AUTH_URL, SPOTIFY_TOKEN_URL
 from app.utils.token_manager import encrypt_token
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -179,6 +184,9 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if not user:
         return {"authenticated": False}
 
+    # Snapshot giornaliero (non-blocking, best-effort)
+    asyncio.create_task(_try_daily_snapshot(user.id))
+
     return {
         "authenticated": True,
         "user": {
@@ -190,6 +198,14 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
             "country": user.country,
         },
     }
+
+
+async def _try_daily_snapshot(user_id: int):
+    """Wrapper non-blocking per save_daily_snapshot."""
+    try:
+        await save_daily_snapshot(user_id)
+    except Exception as exc:
+        logger.warning("Daily snapshot fallito per user_id=%d: %s", user_id, exc)
 
 
 @router.post("/logout")
