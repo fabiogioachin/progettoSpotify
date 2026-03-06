@@ -1,9 +1,6 @@
 ---
 name: async-service-review
-description: >
-  Review asyncio patterns in the FastAPI backend: gather error handling,
-  Semaphore usage, race conditions, SpotifyAuthError propagation.
-  Project-specific skill.
+description: Review asyncio patterns in the FastAPI backend — gather error handling, Semaphore usage, race conditions, SpotifyAuthError propagation. Project-specific skill.
 ---
 
 # Async Service Review

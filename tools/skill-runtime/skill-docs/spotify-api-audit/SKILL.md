@@ -1,9 +1,6 @@
 ---
 name: spotify-api-audit
-description: >
-  Audit Spotify API usage for deprecated endpoints, rate limiting patterns,
-  error handling, and token management. Project-specific skill for the
-  Spotify Listening Intelligence app.
+description: Audit Spotify API usage for deprecated endpoints, rate limiting patterns, error handling, and token management. Project-specific skill for the Spotify Listening Intelligence app.
 ---
 
 # Spotify API Audit

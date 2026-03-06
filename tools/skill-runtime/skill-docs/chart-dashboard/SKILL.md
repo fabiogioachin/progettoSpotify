@@ -1,9 +1,6 @@
 ---
 name: chart-dashboard
-description: >
-  Reference patterns for dark-themed analytics dashboards using Recharts, custom SVG,
-  and Tailwind CSS. Covers chart configuration, responsive grids, data transformations,
-  Spotify color palette, and animation patterns. Not an audit — provides patterns to follow.
+description: Reference patterns for dark-themed analytics dashboards using Recharts, custom SVG, and Tailwind CSS. Covers chart configuration, responsive grids, data transformations, Spotify color palette, and animation patterns. Not an audit — provides patterns to follow.
 ---
 
 # Chart Dashboard Skill

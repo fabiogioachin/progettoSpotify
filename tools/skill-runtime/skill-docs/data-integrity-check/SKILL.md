@@ -1,9 +1,6 @@
 ---
 name: data-integrity-check
-description: >
-  Verify no hardcoded fake data, proper fallback flags, API response
-  transparency. Ensures all displayed data comes from real API calls.
-  Project-specific skill.
+description: Verify no hardcoded fake data, proper fallback flags, API response transparency. Ensures all displayed data comes from real API calls. Project-specific skill.
 ---
 
 # Data Integrity Check

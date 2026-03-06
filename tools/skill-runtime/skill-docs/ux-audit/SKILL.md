@@ -1,9 +1,6 @@
 ---
 name: ux-audit
-description: >
-  Single-pass 4-agent UX/UI review covering usability, visual consistency, information architecture,
-  and domain fitness. Use for frontend reviews, pre-launch UX checks, or after major UI changes.
-  Always run AFTER platform-architecture, BEFORE code-audit when both are selected.
+description: Single-pass 4-agent UX/UI review covering usability, visual consistency, information architecture, and domain fitness. Use for frontend reviews, pre-launch UX checks, or after major UI changes. Always run AFTER platform-architecture, BEFORE code-audit.
 ---
 
 # UX Audit Skill

@@ -37,5 +37,8 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 
+# Claude Code (local config)
+.claude/
+
 # Skill Runtime state files
 tools/skill-runtime/state/*.json

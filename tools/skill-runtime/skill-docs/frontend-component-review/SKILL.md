@@ -1,9 +1,6 @@
 ---
 name: frontend-component-review
-description: >
-  Review React components: hooks usage, Tailwind patterns, Italian localization
-  consistency, custom SVG visualizations, accessibility.
-  Project-specific skill.
+description: Review React components — hooks usage, Tailwind patterns, Italian localization consistency, custom SVG visualizations, accessibility. Project-specific skill.
 ---
 
 # Frontend Component Review

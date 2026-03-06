@@ -1,10 +1,6 @@
 ---
 name: dx-knowledge
-description: >
-  Run a single-pass 3-agent review covering developer experience, documentation, and dependency health.
-  Use during onboarding new devs, pre-release, or when docs are stale. Most token-efficient skill —
-  output is textual/documentary. Single pass, no iteration. Trigger when user mentions README,
-  documentation, onboarding, DX, deps, outdated packages, or open source preparation.
+description: Run a single-pass 3-agent review covering developer experience, documentation, and dependency health. Use during onboarding, pre-release, or when docs are stale. Single pass, no iteration. Trigger on README, documentation, onboarding, DX, deps, or open source preparation.
 ---
 
 # DX & Knowledge Skill

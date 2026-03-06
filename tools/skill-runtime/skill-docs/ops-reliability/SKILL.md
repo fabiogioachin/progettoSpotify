@@ -1,11 +1,6 @@
 ---
 name: ops-reliability
-description: >
-  Run a single-pass 3-agent ops audit covering DevOps/infra, observability, and reliability.
-  Use pre-deploy, post-incident, or as a monthly periodic check. Token-efficient because agents
-  only receive infra files (Dockerfile, docker-compose, .github/, config), not the full codebase.
-  Single round — no iteration needed. Trigger when user mentions deploy, CI/CD, Docker, logging,
-  monitoring, alerts, incident, reliability, or production readiness.
+description: Run a single-pass 3-agent ops audit covering DevOps/infra, observability, and reliability. Use pre-deploy, post-incident, or as a monthly periodic check. Token-efficient — agents only receive infra files. Trigger on deploy, CI/CD, Docker, logging, monitoring, or production readiness.
 ---
 
 # Ops Reliability Skill

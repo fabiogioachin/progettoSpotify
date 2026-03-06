@@ -1,11 +1,6 @@
 ---
 name: platform-architecture
-description: >
-  Run a single-pass 4-agent architectural review covering extensibility, coupling, API design,
-  and DB schema. Use before adding significant features, every ~2 weeks, when code "resists"
-  changes, or before a major refactor. This skill does NOT iterate — one round of findings
-  is enough. Always run BEFORE code-audit to eliminate entire classes of defects upstream.
-  High token cost but high ROI: prevents technical debt.
+description: Run a single-pass 4-agent architectural review covering extensibility, coupling, API design, and DB schema. Use before adding significant features or major refactors. Single round, no iteration. Always run BEFORE code-audit. High token cost but high ROI.
 ---
 
 # Platform Architecture Skill

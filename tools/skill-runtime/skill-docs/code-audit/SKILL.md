@@ -1,10 +1,6 @@
 ---
 name: code-audit
-description: >
-  Iterative 4-agent code audit covering bugs, performance, security, and maintainability.
-  Up to 4 rounds: audit → classify → fix → verify → repeat until clean.
-  Use for PR reviews, pre-deploy checks, periodic quality sweeps.
-  Always run AFTER platform-architecture and ux-audit when both are selected.
+description: Iterative 4-agent code audit covering bugs, performance, security, and maintainability. Up to 4 rounds. Use for PR reviews, pre-deploy checks, periodic quality sweeps. Always run AFTER platform-architecture and ux-audit when both are selected.
 ---
 
 # Code Audit Skill

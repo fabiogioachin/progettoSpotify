@@ -26,7 +26,7 @@ Dashboard di analisi musicale personale che va oltre Spotify Wrapped. Collega il
 
 - Python 3.12+
 - Node.js 20+
-- Un'app Spotify Developer (vedi [SPOTIFY_SETUP.md](./SPOTIFY_SETUP.md))
+- Un'app Spotify Developer (vedi [docs/SPOTIFY_SETUP.md](./docs/SPOTIFY_SETUP.md))
 
 ### 1. Configura le variabili d'ambiente
 
@@ -93,9 +93,14 @@ spotify-intelligence/
 │   │   └── lib/              # API client, chart config
 │   ├── package.json
 │   └── Dockerfile
+├── docs/
+│   ├── PRD.md                   # Product Requirements
+│   └── SPOTIFY_SETUP.md         # Guida setup Spotify Developer
+├── tasks/
+│   ├── todo.md                  # Task list
+│   └── lessons.md               # Lessons learned
 ├── docker-compose.yml
-├── .env.example
-└── SPOTIFY_SETUP.md
+└── .env.example
 ```
 
 ## API Endpoints

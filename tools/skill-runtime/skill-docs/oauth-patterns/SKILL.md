@@ -1,9 +1,6 @@
 ---
 name: oauth-patterns
-description: >
-  Reference patterns for OAuth 2.0 implementation, focused on Spotify's Authorization Code
-  Flow with PKCE. Covers token management, refresh logic, session security, and Fernet encryption.
-  Use when implementing or reviewing auth flows. Not an audit — provides patterns to follow.
+description: Reference patterns for OAuth 2.0 implementation, focused on Spotify's Authorization Code Flow with PKCE. Covers token management, refresh logic, session security, and Fernet encryption. Not an audit — provides patterns to follow.
 ---
 
 # OAuth Patterns Skill
