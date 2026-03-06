@@ -42,6 +42,3 @@ htmlcov/
 !.claude/settings.json
 !.claude/hooks/
 !.claude/skills/
-
-# Skill Runtime state files
-tools/skill-runtime/state/*.json
