@@ -37,8 +37,11 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 
-# Claude Code (local config)
-.claude/
+# Claude Code (local config only — shared settings and hooks are tracked)
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/skills/
 
 # Skill Runtime state files
 tools/skill-runtime/state/*.json

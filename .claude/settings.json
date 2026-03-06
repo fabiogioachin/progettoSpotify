@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd backend && ruff check *)",
+      "Bash(cd backend && ruff format *)",
+      "Bash(cd backend && pytest*)",
+      "Bash(cd frontend && npm run lint)",
+      "Bash(cd frontend && npm run build)",
+      "Bash(cd frontend && npm install)",
+      "Bash(curl -s http://127.0.0.1:8001/*)",
+      "Bash(docker-compose *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-critical-files.sh\"",
+            "timeout": 10,
+            "statusMessage": "Verifica file protetti..."
+          },
+          {
+            "type": "prompt",
+            "prompt": "You are a security reviewer for a Spotify OAuth web application.\n\nA file edit/write is about to happen. Here is the tool input:\n\n$ARGUMENTS\n\nFIRST: check if the target file_path is an auth/security file. Auth/security files are ONLY those matching: auth.py, dependencies.py, token_manager.py, rate_limiter.py, config.py.\n\nIf the file is NOT in that list, respond immediately: {\"ok\": true}\n\nIf the file IS an auth/security file, verify these invariants are preserved:\n1. SpotifyAuthError is re-raised before any generic 'except Exception' in Spotify-calling code\n2. Token encryption (Fernet) is not weakened, bypassed, or removed\n3. Session cookie signing (itsdangerous) is preserved\n4. CORS allow_origins is not set to '*' or broadened beyond frontend_url\n5. Rate limiter is not disabled or weakened\n6. No secrets, credentials, or tokens are hardcoded\n7. Cookie secure flag logic is preserved\n\nRespond {\"ok\": true} if the change is safe.\nRespond {\"ok\": false, \"reason\": \"explanation\"} if a security invariant would be broken.",
+            "model": "claude-haiku",
+            "timeout": 30,
+            "statusMessage": "Security check auth file..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-linter.sh\"",
+            "timeout": 60,
+            "async": true,
+            "statusMessage": "Linting..."
+          },
+          {
+            "type": "agent",
+            "prompt": "A file was just modified in this Spotify analytics project. Here is the tool output:\n\n$ARGUMENTS\n\nFIRST: check if the modified file is in the auth/security domain. Auth/security files are: auth.py, dependencies.py, token_manager.py, rate_limiter.py, config.py, main.py (only its middleware/CORS section).\n\nIf the file is NOT auth/security related, respond: {\"ok\": true}\n\nIf it IS a security file, perform a thorough review:\n1. Read the full modified file using the Read tool\n2. Verify SpotifyAuthError is re-raised before generic Exception handlers in all try/except blocks that call SpotifyClient\n3. Confirm Fernet token encryption is intact (no plaintext tokens)\n4. Check CORS allow_origins is restricted to settings.frontend_url only\n5. Verify rate limiter middleware is still applied in main.py\n6. Confirm no hardcoded secrets or credentials anywhere\n7. Check session cookie signing is preserved with proper secure/httponly flags\n\nRespond {\"ok\": true, \"reason\": \"summary of what was verified\"} if secure.\nRespond {\"ok\": false, \"reason\": \"detailed description of security issue\"} if problems found.",
+            "model": "claude-haiku",
+            "timeout": 120,
+            "statusMessage": "Security audit..."
+          }
+        ]
+      }
+    ]
+  }
+}

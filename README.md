@@ -4,9 +4,9 @@ Dashboard di analisi musicale personale che va oltre Spotify Wrapped. Collega il
 
 ## Funzionalita'
 
-- **Dashboard**: KPI animati, profilo audio radar, trend temporali, distribuzione generi
+- **Dashboard**: KPI reali animati, profilo audio radar, trend temporali, distribuzione generi
 - **Confronto Playlist**: confronta fino a 4 playlist con grafici comparativi
-- **Discovery**: mappa mood (valence vs energy), brani outlier, suggerimenti personalizzati
+- **Discovery**: mappa mood, brani outlier, suggerimenti personalizzati
 - **Export per Claude**: genera un prompt strutturato con i tuoi dati per analisi narrativa con Claude AI
 
 ## Stack Tecnologico
