@@ -21,7 +21,7 @@ export default function PlaylistComparison({ comparisons, playlistNames = {}, lo
   }
 
   if (!comparisons || comparisons.length === 0) {
-    return <EmptyState />
+    return null
   }
 
   // Trasforma dati: una riga per feature, una colonna per playlist
@@ -75,14 +75,6 @@ export default function PlaylistComparison({ comparisons, playlistNames = {}, lo
           ))}
         </BarChart>
       </ResponsiveContainer>
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[480px]">
-      <p className="text-text-muted text-sm">Seleziona almeno 2 playlist per il confronto</p>
     </div>
   )
 }

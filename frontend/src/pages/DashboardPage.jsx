@@ -126,7 +126,7 @@ export default function DashboardPage() {
                   {tracks.slice(0, 50).map((track, i) => (
                     <TrackCard key={track.id} track={track} index={i} />
                   ))}
-                  {tracks.length === 0 && null}
+
                 </div>
               </div>
             </div>

@@ -97,11 +97,7 @@ export default function DiscoveryPage() {
                       </span>
                     </div>
                   ))}
-                  {outliers.length === 0 && (
-                    <p className="text-text-muted text-sm text-center py-4">
-                      Nessun outlier trovato
-                    </p>
-                  )}
+
                 </div>
               </div>
             </div>
@@ -154,11 +150,7 @@ export default function DiscoveryPage() {
                     </div>
                   </div>
                 ))}
-                {recommendations.length === 0 && (
-                  <p className="text-text-muted text-sm col-span-full text-center py-8">
-                    Nessun suggerimento disponibile
-                  </p>
-                )}
+
               </div>
             </div>
           </>
@@ -169,11 +161,7 @@ export default function DiscoveryPage() {
 
 function PopularityDistribution({ data }) {
   if (!data || data.length === 0) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[300px]">
-        <p className="text-text-muted text-sm">Nessun dato di popolarità disponibile</p>
-      </div>
-    )
+    return null
   }
 
   return (

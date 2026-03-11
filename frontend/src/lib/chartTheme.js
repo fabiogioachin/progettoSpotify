@@ -1,20 +1,5 @@
 // Colori e configurazione per i chart Recharts — dark theme Spotify-style
 
-export const CHART_COLORS = {
-  accent: '#6366f1',
-  accentLight: '#818cf8',
-  accentSoft: '#a5b4fc',
-  spotify: '#1DB954',
-  energy: '#f59e0b',
-  valence: '#10b981',
-  danceability: '#6366f1',
-  acousticness: '#06b6d4',
-  instrumentalness: '#8b5cf6',
-  liveness: '#ec4899',
-  speechiness: '#f97316',
-  tempo: '#ef4444',
-}
-
 export const FEATURE_COLORS = {
   energy: '#f59e0b',
   valence: '#10b981',

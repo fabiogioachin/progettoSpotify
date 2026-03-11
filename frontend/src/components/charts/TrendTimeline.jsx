@@ -24,7 +24,7 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
   }
 
   if (!trends || trends.length === 0) {
-    return <EmptyState />
+    return null
   }
 
   // Controlla se le features audio sono disponibili (non tutte zero)
@@ -150,14 +150,6 @@ function PopularityTrend({ trends, title }) {
           <Bar dataKey="tracks" fill={COLORS.tracks} radius={[4, 4, 0, 0]} animationDuration={1500} />
         </BarChart>
       </ResponsiveContainer>
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div className="glow-card bg-surface rounded-xl p-5 flex items-center justify-center h-[380px]">
-      <p className="text-text-muted text-sm">Nessun trend disponibile</p>
     </div>
   )
 }

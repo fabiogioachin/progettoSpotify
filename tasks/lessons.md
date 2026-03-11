@@ -81,6 +81,19 @@
 - **Prevention**: wrap non-critical writes in inner try/except with logger.warning
 - **Rule**: distinguish critical vs non-critical DB operations — non-critical must never block the response
 
+## Health Scan — March 2026
+
+### Key Findings
+- `/health` found 16 issues: 6 dead code, 0 dependency, 10 UI convention violations
+- All dependencies clean — no unused, no circular imports, no duplicates
+- Main theme: empty-state messages violating the "hide rather than show" convention
+- One copy-paste bug: duplicate genre cloud section in ArtistNetworkPage
+
+### Detection Signals
+- `{x.length === 0 && null}` is dead code — JSX expressions that evaluate to nothing should be removed entirely, not replaced with `null`
+- When `/health --fix` replaces `<EmptyState />` with `return null`, the now-unused `EmptyState` function must also be removed
+- Unused icon imports (e.g. `ChevronDown`) survive health scans — a follow-up `/refactor` catches these
+
 ### Data Integrity Checklist
 - [ ] All displayed data comes from real API calls (no mocks, no hardcoded values)
 - [ ] Missing data defaults to 0/null/empty, never to a plausible fake value

@@ -3,7 +3,7 @@ import KPICard from '../components/cards/KPICard'
 import TasteOverlapBar from '../components/charts/TasteOverlapBar'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TrackCard from '../components/cards/TrackCard'
-import { Heart, TrendingUp, TrendingDown, Users, Music, RefreshCw, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
+import { Heart, TrendingUp, TrendingDown, Users, Music, RefreshCw, Calendar, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
 
 export default function TasteEvolutionPage() {

@@ -8,8 +8,6 @@ export const FEATURE_LABELS = {
   speechiness: 'Parlato',
 }
 
-export const FEATURE_KEYS = Object.keys(FEATURE_LABELS)
-
 export const TIME_PERIODS = [
   { value: 'short_term', label: 'Ultimo mese' },
   { value: 'medium_term', label: '6 mesi' },

@@ -1,24 +1,8 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, Integer, String
 
 from app.database import Base
-
-
-class Track(Base):
-    __tablename__ = "tracks"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    spotify_id = Column(String(255), unique=True, nullable=False, index=True)
-    name = Column(String(500), nullable=False)
-    artist_name = Column(String(500))
-    artist_id = Column(String(255))
-    album_name = Column(String(500))
-    album_image_url = Column(Text)
-    duration_ms = Column(Integer)
-    popularity = Column(Integer)
-    preview_url = Column(Text)
-    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class AudioFeatures(Base):
