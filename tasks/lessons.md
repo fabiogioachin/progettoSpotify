@@ -94,9 +94,89 @@
 - When `/health --fix` replaces `<EmptyState />` with `return null`, the now-unused `EmptyState` function must also be removed
 - Unused icon imports (e.g. `ChevronDown`) survive health scans — a follow-up `/refactor` catches these
 
+## Playlist Compare Migration — March 2026
+
+### Root Cause
+- `PlaylistComparePage` depended entirely on deprecated Audio Features API → showed empty data
+- `get_or_fetch_features` catches the 403 silently → `analyzed_count: 0` → frontend hides everything
+
+### Fix Pattern
+- Enrich compare endpoint with always-available data: popularity stats, genre distribution, top tracks
+- Keep audio features as optional bonus (shown only when `analyzed_count > 0`)
+- Fetch playlist name from Spotify API instead of relying on frontend-side mapping
+- Reuse `get_artists` batch pattern (same as `_extract_genres` in audio_analyzer) for genre extraction
+
+### Key Lesson
+- When building features, always have a primary data path that uses non-deprecated APIs
+- Audio features should be a secondary enrichment, never the only data source
+- `get_or_fetch_features` still calls the deprecated API for cache misses — future improvement: skip API call entirely, only use DB cache
+
+### Failure Mode: Unhandled exceptions cause 500
+- **Signal**: `except SpotifyAuthError` as only handler in outer try block — `RateLimitError` and `SpotifyServerError` from `retry_with_backoff` bubble up unhandled → FastAPI returns generic 500
+- **Prevention**: every router endpoint that calls Spotify API must catch `SpotifyAuthError`, `RateLimitError`, `SpotifyServerError`, AND generic `Exception` (with `logger.exception` for debugging)
+- **Rule**: when adding `retry_with_backoff` calls, remember it re-raises `RateLimitError`/`SpotifyServerError` after max retries — these MUST be caught at the router level
+- **Pattern**:
+  ```python
+  except SpotifyAuthError:
+      raise HTTPException(401, "Sessione scaduta")
+  except RateLimitError as e:
+      raise HTTPException(429, ..., headers={"Retry-After": ...})
+  except SpotifyServerError:
+      raise HTTPException(502, "Spotify non disponibile")
+  except Exception as exc:
+      logger.exception("...: %s", exc)
+      raise HTTPException(500, "Errore durante ...")
+  ```
+
+### Failure Mode: Spotify Feb 2026 dev mode migration
+- **Signal**: `GET /playlists/{id}` returns 200 but response lacks `tracks` field entirely. `GET /playlists/{id}/tracks` returns 403.
+- **Root cause**: Spotify Feb 2026 migration renamed `/playlists/{id}/tracks` → `/playlists/{id}/items`. The full playlist endpoint (`GET /playlists/{id}`) no longer includes tracks in dev mode.
+- **Fix**: use `GET /playlists/{pid}/items` (new endpoint) for playlist tracks. Within each item object, the track data field is renamed from `"track"` to `"item"` — use `item.get("item") or item.get("track")` for backwards compat.
+- **Batch endpoints removed**: `GET /artists?ids=...`, `GET /tracks?ids=...`, `GET /albums?ids=...` are all removed in dev mode. Use individual endpoints (`GET /artists/{id}`) with semaphore + asyncio.gather.
+- **Limitation**: only first 100 items per playlist request. Cap individual artist fetches to ~15 per playlist (reduced from 30 due to dev mode rate limits).
+- **Affected files**: `playlists.py`, `playlist_analytics.py`, `historical_tops.py`, `audio_analyzer.py`
+- **Rule**: always check Spotify migration guide before assuming endpoint availability. Use `/items` not `/tracks`.
+- **Reference**: https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
+
+### Failure Mode: retry_with_backoff dorme per ore su 429 con retry_after enorme
+- **Signal**: log mostra `Rate limited, retry in 75582.0s` → il request si blocca per ore/giorni. La pagina resta vuota perché il backend non risponde mai.
+- **Root cause**: `retry_with_backoff` usava `e.retry_after` senza cap. Spotify dev mode restituisce `retry_after=75582s` (~21 ore). Il codice eseguiva `asyncio.sleep(75582)` per ogni tentativo × `max_retries=3` = potenzialmente 63 ore di attesa.
+- **Fix**: aggiunto parametro `max_retry_after=30.0` a `retry_with_backoff`. Se `retry_after > max_retry_after`, fallisce immediatamente (raise `RateLimitError`). Ridotto Semaphore da 5→2 e cap artisti da 30→15 per artist fetches.
+- **Rule**: mai fare `asyncio.sleep(retry_after)` senza un cap massimo. Un retry_after > 60s significa "non riprovare adesso" — fallire subito è meglio che bloccare il server.
+- **Corollary**: Semaphore controlla la concorrenza ma non il rate nel tempo. 5 richieste simultanee che partono nello stesso istante sono un burst — in dev mode, usare Semaphore(2) max.
+
+### Failure Mode: Task marcato completato senza verifica live
+- **Signal**: task marcato `[x]` nel todo.md dopo aver applicato fix al codice, ma senza mai verificare che i dati reali arrivino correttamente al frontend
+- **Prevention**: un fix non è completo finché non è verificato con dati reali. Il ciclo è: codice → test/lint → verifica live con dati reali → solo allora marcare completato
+- **Rule**: mai marcare un bug fix come completato basandosi solo su "il codice è corretto". Serve conferma dall'utente o dal log che i dati fluiscono end-to-end
+
+### Failure Mode: Audio Features 403 confonde la diagnosi
+- **Signal**: log mostra `403 Forbidden` su `GET /audio-features` → sembra il bug, ma è un red herring. L'API è deprecata e il 403 è gestito. Il vero problema è altrove (es. tracks non parsate da `/items`)
+- **Prevention**: distinguere errori attesi (API deprecate) da errori reali. Se audio features 403 è già gestito con try/except, il problema è nel data path primario (popularity, genres, top tracks)
+- **Rule**: quando il tracelog mostra un errore, verificare prima se è già gestito nel codice prima di investigare
+
+### Failure Mode: API call budget non controllato — burst triggera rate limit
+- **Signal**: compare endpoint con 4 playlist generava ~70 chiamate API (4 metadata + 4 items + 60 artist fetches). Ogni playlist creava il proprio Semaphore e i propri artist IDs — artisti condivisi tra playlist venivano fetchati N volte.
+- **Root cause**: genre fetch per artista era per-playlist (non deduplicato). Con 4 playlist da 100 brani ciascuna, ~15 artisti × 4 = 60 chiamate solo per i generi.
+- **Fix**: ristrutturato compare in 3 fasi: (1) fetch tracks per tutte le playlist, (2) deduplica artisti globalmente + fetch generi una volta sola (cap 20 artisti totali), (3) costruisci risultati usando cache generi. Chiamate ridotte da ~70 a ~30.
+- **Rule**: prima di ogni `asyncio.gather` con N chiamate API, calcolare il worst-case budget. Se > 30 chiamate, ristrutturare con dedup e caching in-memory.
+- **Pattern**: per dati condivisi tra iterazioni (generi artista, metadata playlist), raccogliere IDs unici prima, fetchare una volta, usare da cache.
+
+### Failure Mode: chiamate Spotify senza retry_with_backoff
+- **Signal**: `historical_tops.py` e `background_tasks.py` chiamavano `client.get_playlists()`, `client.get_recently_played()`, `client.get_top_artists()` direttamente senza `retry_with_backoff` — un 429 o 5xx non veniva ritentato.
+- **Fix**: wrappato tutte le chiamate in `retry_with_backoff`.
+- **Rule**: ogni chiamata a SpotifyClient deve passare per `retry_with_backoff` — il 429 handling di `SpotifyClient._request` alza `RateLimitError`, che `retry_with_backoff` gestisce con backoff.
+
 ### Data Integrity Checklist
 - [ ] All displayed data comes from real API calls (no mocks, no hardcoded values)
 - [ ] Missing data defaults to 0/null/empty, never to a plausible fake value
 - [ ] Fallback data sources are explicitly labeled in the UI
 - [ ] Each `asyncio.gather` call has per-coroutine error handling
 - [ ] SpotifyAuthError is re-raised before generic Exception in every router/service
+- [ ] Every router catches RateLimitError and SpotifyServerError (not just SpotifyAuthError)
+- [ ] Never use `/playlists/{id}/tracks` — use `/playlists/{id}/items` instead
+- [ ] Never use batch `GET /artists?ids=` — use individual `GET /artists/{id}` with semaphore
+- [ ] All Semaphore values ≤ 2 for Spotify API calls (dev mode burst protection)
+- [ ] Every SpotifyClient call wrapped in `retry_with_backoff` (no direct `client.get_*` without retry)
+- [ ] Compare/analytics endpoints dedup shared data (artist IDs) across iterations before fetching
+- [ ] Global artist fetch cap ≤ 20 per endpoint invocation

@@ -1,5 +1,6 @@
 """Aggregazione e analisi audio features."""
 
+import asyncio
 import json
 import logging
 from collections import Counter
@@ -181,18 +182,26 @@ async def _extract_genres(client: SpotifyClient, tracks: list[dict]) -> dict[str
     if not artist_ids:
         return {}
 
-    # Fetch artisti in batch
+    # Fetch artists individually (batch GET /artists removed in dev mode Feb 2026)
     all_genres: list[str] = []
-    artist_list = list(artist_ids)
-    for i in range(0, len(artist_list), 50):
-        batch = artist_list[i : i + 50]
-        try:
-            resp = await retry_with_backoff(client.get_artists, batch)
-            for artist in resp.get("artists", []):
-                if artist and artist.get("genres"):
-                    all_genres.extend(artist["genres"])
-        except Exception:
-            pass
+    artist_list = list(artist_ids)[:15]  # cap to limit API calls (reduced for dev mode rate limits)
+    sem = asyncio.Semaphore(2)
+
+    async def _fetch_genres(aid: str) -> list[str]:
+        async with sem:
+            try:
+                artist = await retry_with_backoff(client.get_artist, aid)
+                return artist.get("genres", [])
+            except Exception:
+                return []
+
+    results = await asyncio.gather(
+        *[_fetch_genres(aid) for aid in artist_list],
+        return_exceptions=True,
+    )
+    for r in results:
+        if isinstance(r, list):
+            all_genres.extend(r)
 
     if not all_genres:
         return {}

@@ -53,19 +53,14 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
             artists = set()
             release_dates = []
             added_dates = []
-            off = 0
-            while True:
-                try:
-                    data = await retry_with_backoff(
-                        client.get_playlist_tracks, pid, limit=100, offset=off
-                    )
-                except SpotifyAuthError:
-                    raise  # Auth errors must propagate
-                except Exception as exc:
-                    logger.warning("Errore fetch tracce playlist %s offset %d: %s", pid, off, exc)
-                    break
+            try:
+                # Use /items endpoint (Feb 2026: /tracks renamed to /items)
+                data = await retry_with_backoff(
+                    client.get, f"/playlists/{pid}/items", limit=100
+                )
                 for item in data.get("items", []):
-                    track = item.get("track")
+                    # Feb 2026: field renamed from "track" to "item"
+                    track = item.get("item") or item.get("track")
                     if not track or not track.get("id"):
                         continue
                     track_ids.append(track["id"])
@@ -79,10 +74,10 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
                     added_at = item.get("added_at")
                     if added_at:
                         added_dates.append(added_at)
-                fetched = len(data.get("items", []))
-                if fetched < 100 or len(track_ids) >= 300:
-                    break
-                off += 100
+            except SpotifyAuthError:
+                raise
+            except Exception as exc:
+                logger.warning("Errore fetch playlist %s: %s", pid, exc)
             return pid, track_ids, artists, release_dates, added_dates
 
     tasks = [fetch_playlist_data(p) for p in playlists_to_analyze]

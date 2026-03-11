@@ -75,9 +75,23 @@ Data fetching: `useSpotifyData(endpoint)` hook → Axios client with 429 retry i
 ## Spotify API Constraints
 
 - **Audio Features** and **Recommendations** endpoints are **DEPRECATED** — do not use for new features
+- **Feb 2026 dev mode migration**: `/playlists/{id}/tracks` renamed to **`/playlists/{id}/items`** — old endpoint returns 403. Full playlist endpoint (`GET /playlists/{id}`) no longer includes tracks in dev mode.
+- **Batch endpoints removed in dev mode**: `GET /artists?ids=`, `GET /tracks?ids=`, `GET /albums?ids=` — use individual endpoints with semaphore + asyncio.gather
 - Time ranges: only `short_term` (~4w), `medium_term` (~6m), `long_term` (all) — no custom ranges
 - Recently played: max 50 items — workaround is DB accumulation via `RecentPlay` model
-- Always available: popularity, genres, track/artist metadata, related artists, artist top tracks
+- Always available: popularity, genres, track/artist metadata, related artists
+
+## File Organization
+
+Root must stay clean — only essential project config (`CLAUDE.md`, `docker-compose.yml`, `.gitignore`, etc.). Before creating any new file, evaluate where it belongs:
+
+- `backend/app/` — all backend source code
+- `frontend/src/` — all frontend source code
+- `tasks/` — operational tracking: `todo.md`, `lessons.md`, generated reports (`HEALTH-REPORT.md`)
+- `docs/` — project documentation (`PRD.md`)
+- `data/` — runtime data, SQLite (gitignored)
+
+Never drop files in root. If a new category emerges, create a subdirectory.
 
 ## Conventions
 

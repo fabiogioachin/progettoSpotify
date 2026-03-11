@@ -1,6 +1,8 @@
 """Wrapper per Spotify Web API con gestione automatica token refresh e rate limiting."""
 
 import asyncio
+import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -14,6 +16,8 @@ from cryptography.fernet import InvalidToken
 
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 from app.utils.token_manager import decrypt_token, encrypt_token
+
+logger = logging.getLogger(__name__)
 
 SPOTIFY_API = "https://api.spotify.com/v1"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -31,6 +35,12 @@ SCOPES = [
 
 
 class SpotifyClient:
+    # Global cooldown shared across all instances — when any request gets a 429
+    # with retry_after > _COOLDOWN_THRESHOLD, all subsequent requests fail immediately
+    # without hitting Spotify (to avoid increasing the retry_after further).
+    _cooldown_until: float = 0.0  # epoch timestamp
+    _COOLDOWN_THRESHOLD: float = 10 * 60  # 10 minutes: if retry_after exceeds this, activate global cooldown
+
     def __init__(self, db: AsyncSession, user_id: int):
         self.db = db
         self.user_id = user_id
@@ -90,6 +100,16 @@ class SpotifyClient:
 
     async def _request(self, method: str, url: str, **kwargs) -> Any:
         """Esegue una richiesta autenticata alla Spotify API con retry su 401."""
+        # Global cooldown check — don't hit Spotify if we're in cooldown
+        now = time.monotonic()
+        if SpotifyClient._cooldown_until > now:
+            remaining = SpotifyClient._cooldown_until - now
+            logger.warning(
+                "Global cooldown active (%.0fs remaining) — skipping request to %s",
+                remaining, url,
+            )
+            raise RateLimitError(remaining)
+
         access_token = await self._get_valid_token()
         headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -105,6 +125,14 @@ class SpotifyClient:
 
         if resp.status_code == 429:
             retry_after = float(resp.headers.get("Retry-After", "1"))
+            # If retry_after exceeds threshold, activate global cooldown
+            # to prevent further requests from making it worse
+            if retry_after > self._COOLDOWN_THRESHOLD:
+                SpotifyClient._cooldown_until = now + retry_after
+                logger.warning(
+                    "Spotify rate limit with retry_after=%.0fs — activating global cooldown for %.0f min",
+                    retry_after, retry_after / 60,
+                )
             raise RateLimitError(retry_after)
         if resp.status_code >= 500:
             raise SpotifyServerError(f"Spotify server error: {resp.status_code}")

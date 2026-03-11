@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 
-async def retry_with_backoff(coro_func, *args, max_retries: int = 3, base_delay: float = 1.0, **kwargs):
+async def retry_with_backoff(coro_func, *args, max_retries: int = 3, base_delay: float = 1.0, max_retry_after: float = 30.0, **kwargs):
     """Esegue una coroutine con backoff esponenziale su errori 429/5xx."""
     for attempt in range(max_retries + 1):
         try:
@@ -19,6 +19,12 @@ async def retry_with_backoff(coro_func, *args, max_retries: int = 3, base_delay:
                 raise
             delay = base_delay * (2 ** attempt)
             retry_after = e.retry_after or delay
+            if retry_after > max_retry_after:
+                logger.warning(
+                    "Rate limited with retry_after=%.0fs (exceeds cap of %.0fs) — failing immediately",
+                    retry_after, max_retry_after,
+                )
+                raise
             logger.warning(f"Rate limited, retry in {retry_after}s (attempt {attempt + 1})")
             await asyncio.sleep(retry_after)
         except SpotifyServerError:

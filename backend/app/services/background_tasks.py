@@ -14,7 +14,7 @@ from app.database import async_session
 from app.models.listening_history import RecentPlay, UserSnapshot
 from app.models.user import SpotifyToken, User
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError
+from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ async def _sync_user_recent_plays(db: AsyncSession, user_id: int):
     """Sincronizza ascolti recenti per un singolo utente."""
     client = SpotifyClient(db, user_id)
     try:
-        data = await client.get_recently_played(limit=50)
+        data = await retry_with_backoff(client.get_recently_played, limit=50)
         items = data.get("items", [])
 
         stored = 0
@@ -116,8 +116,8 @@ async def save_daily_snapshot(user_id: int):
         # Fetch top artists e top tracks da Spotify
         client = SpotifyClient(db, user_id)
         try:
-            top_artists_data = await client.get_top_artists(time_range="short_term", limit=50)
-            top_tracks_data = await client.get_top_tracks(time_range="short_term", limit=50)
+            top_artists_data = await retry_with_backoff(client.get_top_artists, time_range="short_term", limit=50)
+            top_tracks_data = await retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50)
 
             # Serializza solo i campi essenziali
             artists_summary = [

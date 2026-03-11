@@ -3,6 +3,8 @@
 import asyncio
 import re
 
+from app.utils.rate_limiter import retry_with_backoff
+
 
 async def get_historical_top_songs(client) -> dict:
     """Cerca playlist 'Your Top Songs YYYY' e ne estrae i brani."""
@@ -11,7 +13,7 @@ async def get_historical_top_songs(client) -> dict:
     offset = 0
     limit = 50
     while True:
-        data = await client.get_playlists(limit=limit, offset=offset)
+        data = await retry_with_backoff(client.get_playlists, limit=limit, offset=offset)
         items = data.get("items") or []
         all_playlists.extend(items)
         if not data.get("next") or len(items) < limit:
@@ -42,39 +44,33 @@ async def get_historical_top_songs(client) -> dict:
     # Sort by year ascending
     matched.sort(key=lambda x: x["year"])
 
-    # 3. Fetch tracks for each playlist (parallel, semaphore 3)
-    sem = asyncio.Semaphore(3)
+    # 3. Fetch tracks for each playlist (sequential to respect rate limits)
+    sem = asyncio.Semaphore(2)
 
     async def fetch_tracks(pl_info):
         async with sem:
             tracks = []
-            offset = 0
-            while True:
-                data = await client.get_playlist_tracks(
-                    pl_info["playlist_id"], limit=100, offset=offset
-                )
-                items = data.get("items") or []
-                for item in items:
-                    t = item.get("track")
-                    if not t or not t.get("id"):
-                        continue
-                    tracks.append({
-                        "name": t.get("name", ""),
-                        "artist": t["artists"][0]["name"] if t.get("artists") else "",
-                        "album": t.get("album", {}).get("name", ""),
-                        "album_image": (t.get("album", {}).get("images") or [{}])[0].get("url"),
-                    })
-                if not data.get("next") or len(items) < 100:
-                    break
-                offset += 100
-                if offset > 500:
-                    break
+            # Use /items endpoint (Feb 2026: /tracks renamed to /items)
+            data = await retry_with_backoff(
+                client.get, f"/playlists/{pl_info['playlist_id']}/items", limit=100
+            )
+            for item in data.get("items", []):
+                # Feb 2026: field renamed from "track" to "item"
+                t = item.get("item") or item.get("track")
+                if not t or not t.get("id"):
+                    continue
+                tracks.append({
+                    "name": t.get("name", ""),
+                    "artist": t["artists"][0]["name"] if t.get("artists") else "",
+                    "album": t.get("album", {}).get("name", ""),
+                    "album_image": (t.get("album", {}).get("images") or [{}])[0].get("url"),
+                })
             return {
                 "year": pl_info["year"],
                 "playlist_name": pl_info["playlist_name"],
                 "image": pl_info["image"],
                 "track_count": len(tracks),
-                "tracks": tracks[:100],  # cap at 100
+                "tracks": tracks[:100],
             }
 
     tasks = [fetch_tracks(pl) for pl in matched]

@@ -36,7 +36,7 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
     edges = []
     seen_edges = set()
 
-    sem = asyncio.Semaphore(5)
+    sem = asyncio.Semaphore(2)
 
     async def fetch_related(artist_id):
         async with sem:

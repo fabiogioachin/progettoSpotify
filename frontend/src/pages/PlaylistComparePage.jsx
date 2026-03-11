@@ -1,10 +1,21 @@
 import { useState, useEffect } from 'react'
-import { ListMusic } from 'lucide-react'
+import { ListMusic, TrendingUp, Music, Tag } from 'lucide-react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import PlaylistComparison from '../components/charts/PlaylistComparison'
 import AudioRadar from '../components/charts/AudioRadar'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { usePlaylistCompare } from '../hooks/usePlaylistCompare'
+import { PLAYLIST_COLORS, TOOLTIP_STYLE } from '../lib/chartTheme'
 
 export default function PlaylistComparePage() {
   const { data: playlistsData, loading: playlistsLoading } = useSpotifyData('/api/playlists')
@@ -41,7 +52,7 @@ export default function PlaylistComparePage() {
             Confronto Playlist
           </h1>
           <p className="text-text-secondary text-sm">
-            Seleziona da 2 a 4 playlist per confrontare i profili audio
+            Seleziona da 2 a 4 playlist per confrontare
           </p>
         </div>
 
@@ -106,10 +117,38 @@ export default function PlaylistComparePage() {
             {comparing && <LoadingSpinner />}
 
             {comparison && (() => {
-              const hasFeatures = comparison.comparisons.some(c => c.analyzed_count > 0)
+              const comps = comparison.comparisons
+              const hasFeatures = comps.some(c => c.analyzed_count > 0)
+
+              // Popularity chart data
+              const popData = comps.map((c, idx) => ({
+                name: c.playlist_name || playlistNames[c.playlist_id] || `Playlist ${idx + 1}`,
+                'Pop. media': c.popularity_stats?.avg ?? 0,
+                'Pop. min': c.popularity_stats?.min ?? 0,
+                'Pop. max': c.popularity_stats?.max ?? 0,
+              }))
+
+              // Genre chart data — collect all unique genres across playlists
+              const allGenres = new Set()
+              comps.forEach(c => {
+                Object.keys(c.genre_distribution || {}).forEach(g => allGenres.add(g))
+              })
+              const topGenres = [...allGenres].slice(0, 8)
+              const genreData = topGenres.map(genre => {
+                const row = { genre }
+                comps.forEach((c, idx) => {
+                  const name = c.playlist_name || playlistNames[c.playlist_id] || `Playlist ${idx + 1}`
+                  row[name] = c.genre_distribution?.[genre] ?? 0
+                })
+                return row
+              })
+              const genreBarNames = comps.map(
+                (c, idx) => c.playlist_name || playlistNames[c.playlist_id] || `Playlist ${idx + 1}`
+              )
+
               return (
                 <div className="space-y-6 animate-fade-in">
-                  {/* Tabella riassuntiva — sempre visibile */}
+                  {/* Summary table */}
                   <div className="glow-card bg-surface rounded-xl p-5 overflow-x-auto">
                     <h3 className="text-text-primary font-display font-semibold mb-4">
                       Riepilogo
@@ -119,7 +158,8 @@ export default function PlaylistComparePage() {
                         <tr className="border-b border-border">
                           <th className="text-left text-text-muted py-2 px-3">Playlist</th>
                           <th className="text-center text-text-muted py-2 px-3">Brani</th>
-                          <th className="text-center text-text-muted py-2 px-3">Analizzati</th>
+                          <th className="text-center text-text-muted py-2 px-3">Pop. media</th>
+                          <th className="text-center text-text-muted py-2 px-3">Genere principale</th>
                           {hasFeatures && (
                             <>
                               <th className="text-center text-text-muted py-2 px-3">Energia</th>
@@ -130,54 +170,166 @@ export default function PlaylistComparePage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {comparison.comparisons.map((comp) => (
-                          <tr key={comp.playlist_id} className="border-b border-border/50">
-                            <td className="py-2 px-3 text-text-primary font-medium">
-                              {playlistNames[comp.playlist_id] || comp.playlist_id}
-                            </td>
-                            <td className="py-2 px-3 text-center text-text-secondary">
-                              {comp.track_count}
-                            </td>
-                            <td className="py-2 px-3 text-center text-text-secondary">
-                              {comp.analyzed_count}
-                            </td>
-                            {hasFeatures && (
-                              <>
-                                <td className="py-2 px-3 text-center text-text-secondary">
-                                  {Math.round((comp.averages?.energy ?? 0) * 100)}%
-                                </td>
-                                <td className="py-2 px-3 text-center text-text-secondary">
-                                  {Math.round((comp.averages?.valence ?? 0) * 100)}%
-                                </td>
-                                <td className="py-2 px-3 text-center text-text-secondary">
-                                  {Math.round((comp.averages?.danceability ?? 0) * 100)}%
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        ))}
+                        {comps.map((comp, idx) => {
+                          const genres = Object.entries(comp.genre_distribution || {})
+                          const topGenre = genres.length > 0
+                            ? genres.sort((a, b) => b[1] - a[1])[0][0]
+                            : '—'
+                          return (
+                            <tr key={comp.playlist_id} className="border-b border-border/50">
+                              <td className="py-2 px-3 text-text-primary font-medium">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: PLAYLIST_COLORS[idx % PLAYLIST_COLORS.length] }}
+                                  />
+                                  {comp.playlist_name || playlistNames[comp.playlist_id] || comp.playlist_id}
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-center text-text-secondary">
+                                {comp.track_count}
+                              </td>
+                              <td className="py-2 px-3 text-center text-text-secondary">
+                                {comp.popularity_stats?.avg ?? 0}
+                              </td>
+                              <td className="py-2 px-3 text-center text-text-secondary capitalize">
+                                {topGenre}
+                              </td>
+                              {hasFeatures && (
+                                <>
+                                  <td className="py-2 px-3 text-center text-text-secondary">
+                                    {Math.round((comp.averages?.energy ?? 0) * 100)}%
+                                  </td>
+                                  <td className="py-2 px-3 text-center text-text-secondary">
+                                    {Math.round((comp.averages?.valence ?? 0) * 100)}%
+                                  </td>
+                                  <td className="py-2 px-3 text-center text-text-secondary">
+                                    {Math.round((comp.averages?.danceability ?? 0) * 100)}%
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
-                    {!hasFeatures && (
-                      <p className="text-text-muted text-xs text-center mt-3">
-                        Profili audio non disponibili — le audio features di Spotify non sono al momento accessibili.
-                      </p>
-                    )}
                   </div>
 
-                  {/* Charts solo se features disponibili */}
+                  {/* Popularity comparison bar chart */}
+                  <div className="glow-card bg-surface rounded-xl p-5">
+                    <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                      <TrendingUp size={18} className="text-accent" />
+                      Confronto Popolarità
+                    </h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={popData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fill: '#b3b3b3', fontSize: 11 }}
+                          axisLine={{ stroke: '#282828' }}
+                        />
+                        <YAxis
+                          domain={[0, 100]}
+                          tick={{ fill: '#b3b3b3', fontSize: 12 }}
+                          axisLine={{ stroke: '#282828' }}
+                        />
+                        <Tooltip {...TOOLTIP_STYLE} />
+                        <Bar dataKey="Pop. media" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={1200} />
+                        <Bar dataKey="Pop. min" fill="#4b5563" radius={[4, 4, 0, 0]} animationDuration={1200} animationBegin={200} />
+                        <Bar dataKey="Pop. max" fill="#10b981" radius={[4, 4, 0, 0]} animationDuration={1200} animationBegin={400} />
+                        <Legend wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Genre distribution comparison */}
+                  {genreData.length > 0 && (
+                    <div className="glow-card bg-surface rounded-xl p-5">
+                      <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                        <Tag size={18} className="text-accent" />
+                        Distribuzione Generi
+                      </h3>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={genreData} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+                          <XAxis
+                            type="number"
+                            domain={[0, 'auto']}
+                            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+                            axisLine={{ stroke: '#282828' }}
+                            tickFormatter={(v) => `${v}%`}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="genre"
+                            tick={{ fill: '#b3b3b3', fontSize: 11 }}
+                            axisLine={{ stroke: '#282828' }}
+                            width={75}
+                          />
+                          <Tooltip
+                            {...TOOLTIP_STYLE}
+                            formatter={(val) => [`${val}%`, '']}
+                          />
+                          <Legend wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }} />
+                          {genreBarNames.map((name, idx) => (
+                            <Bar
+                              key={name}
+                              dataKey={name}
+                              fill={PLAYLIST_COLORS[idx % PLAYLIST_COLORS.length]}
+                              radius={[0, 4, 4, 0]}
+                              animationDuration={1200}
+                              animationBegin={idx * 200}
+                            />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* Top tracks per playlist */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {comps.map((comp, idx) => {
+                      const name = comp.playlist_name || playlistNames[comp.playlist_id] || `Playlist ${idx + 1}`
+                      return (
+                        <div key={comp.playlist_id} className="glow-card bg-surface rounded-xl p-5">
+                          <h3 className="text-text-primary font-display font-semibold mb-3 flex items-center gap-2">
+                            <Music size={16} className="text-accent" />
+                            <span className="truncate">{name}</span>
+                            <span className="text-text-muted text-xs font-normal ml-auto">Top 5</span>
+                          </h3>
+                          <div className="space-y-2">
+                            {(comp.top_tracks || []).map((track, tIdx) => (
+                              <div key={tIdx} className="flex items-center gap-3 py-1.5">
+                                <span className="text-text-muted text-xs w-5 text-right">{tIdx + 1}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-text-primary text-sm truncate">{track.name}</p>
+                                  <p className="text-text-muted text-xs truncate">{track.artist}</p>
+                                </div>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
+                                  Pop. {track.popularity}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Audio features charts — only when available */}
                   {hasFeatures && (
                     <>
                       <PlaylistComparison
-                        comparisons={comparison.comparisons}
+                        comparisons={comps}
                         playlistNames={playlistNames}
                       />
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {comparison.comparisons.map((comp, idx) => (
+                        {comps.map((comp, idx) => (
                           <AudioRadar
                             key={comp.playlist_id}
                             features={comp.averages}
-                            title={playlistNames[comp.playlist_id] || `Playlist ${idx + 1}`}
+                            title={comp.playlist_name || playlistNames[comp.playlist_id] || `Playlist ${idx + 1}`}
                           />
                         ))}
                       </div>
