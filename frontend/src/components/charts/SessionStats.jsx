@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { Headphones, Music, Clock, Zap } from 'lucide-react'
 
 export default function SessionStats({
@@ -19,13 +19,6 @@ export default function SessionStats({
     weekday_pct = 50,
   } = patterns
 
-  // Animated bars: trigger width transition after mount
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 100)
-    return () => clearTimeout(timer)
-  }, [])
-
   const avgDurationRounded = Math.round(avg_duration_minutes)
   const avgTracksRounded = Math.round(avg_tracks_per_session)
   const avgDurationPct = Math.min((avg_duration_minutes / 60) * 100, 100)
@@ -33,7 +26,12 @@ export default function SessionStats({
   const weekendPct = 100 - weekday_pct
 
   return (
-    <div className="glow-card bg-surface rounded-xl p-6 animate-slide-up">
+    <motion.div
+      className="glow-card bg-surface rounded-xl p-6"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 mb-6">
         <Headphones size={20} className="text-accent" />
@@ -48,7 +46,7 @@ export default function SessionStats({
           label="Sessione media"
           value={avgDurationRounded}
           suffix="min"
-          barPct={mounted ? avgDurationPct : 0}
+          barPct={avgDurationPct}
           barColor="bg-accent"
         />
 
@@ -58,7 +56,7 @@ export default function SessionStats({
           label="Tracce per sessione"
           value={avgTracksRounded}
           suffix=""
-          barPct={mounted ? avgTracksPct : 0}
+          barPct={avgTracksPct}
           barColor="bg-accent"
         />
 
@@ -100,9 +98,11 @@ export default function SessionStats({
               <span className="text-text-muted text-xs">{weekday_plays.toLocaleString('it-IT')} ascolti</span>
             </div>
             <div className="h-3 bg-background rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent rounded-full transition-all duration-1000 ease-out"
-                style={{ width: mounted ? `${weekday_pct}%` : '0%' }}
+              <motion.div
+                className="h-full bg-accent rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${weekday_pct}%` }}
+                transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
               />
             </div>
           </div>
@@ -114,9 +114,11 @@ export default function SessionStats({
               <span className="text-text-muted text-xs">{weekend_plays.toLocaleString('it-IT')} ascolti</span>
             </div>
             <div className="h-3 bg-background rounded-full overflow-hidden">
-              <div
-                className="h-full bg-spotify rounded-full transition-all duration-1000 ease-out"
-                style={{ width: mounted ? `${weekendPct}%` : '0%' }}
+              <motion.div
+                className="h-full bg-spotify rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${weekendPct}%` }}
+                transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
               />
             </div>
           </div>
@@ -138,7 +140,7 @@ export default function SessionStats({
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -157,9 +159,11 @@ function StatCard({ icon: Icon, label, value, suffix, barPct, barColor }) {
         {suffix && <span className="text-text-secondary text-sm mb-1">{suffix}</span>}
       </div>
       <div className="h-2 bg-background rounded-full overflow-hidden">
-        <div
-          className={`h-full ${barColor} rounded-full transition-all duration-1000 ease-out`}
-          style={{ width: `${barPct}%` }}
+        <motion.div
+          className={`h-full ${barColor} rounded-full`}
+          initial={{ width: 0 }}
+          animate={{ width: `${barPct}%` }}
+          transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
         />
       </div>
     </div>

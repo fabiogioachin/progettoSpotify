@@ -9,7 +9,14 @@ from starlette.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 
-async def retry_with_backoff(coro_func, *args, max_retries: int = 3, base_delay: float = 1.0, max_retry_after: float = 30.0, **kwargs):
+async def retry_with_backoff(
+    coro_func,
+    *args,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_retry_after: float = 30.0,
+    **kwargs,
+):
     """Esegue una coroutine con backoff esponenziale su errori 429/5xx."""
     for attempt in range(max_retries + 1):
         try:
@@ -17,21 +24,26 @@ async def retry_with_backoff(coro_func, *args, max_retries: int = 3, base_delay:
         except RateLimitError as e:
             if attempt == max_retries:
                 raise
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             retry_after = e.retry_after or delay
             if retry_after > max_retry_after:
                 logger.warning(
                     "Rate limited with retry_after=%.0fs (exceeds cap of %.0fs) — failing immediately",
-                    retry_after, max_retry_after,
+                    retry_after,
+                    max_retry_after,
                 )
                 raise
-            logger.warning("Rate limited, retry in %ss (attempt %d)", retry_after, attempt + 1)
+            logger.warning(
+                "Rate limited, retry in %ss (attempt %d)", retry_after, attempt + 1
+            )
             await asyncio.sleep(retry_after)
         except SpotifyServerError:
             if attempt == max_retries:
                 raise
-            delay = base_delay * (2 ** attempt)
-            logger.warning("Server error, retry in %ss (attempt %d)", delay, attempt + 1)
+            delay = base_delay * (2**attempt)
+            logger.warning(
+                "Server error, retry in %ss (attempt %d)", delay, attempt + 1
+            )
             await asyncio.sleep(delay)
 
 
@@ -55,7 +67,9 @@ class APIRateLimiter(BaseHTTPMiddleware):
     # Paths exempted from rate limiting (lightweight, essential endpoints)
     EXEMPT_PATHS = {"/auth/me", "/health"}
 
-    def __init__(self, app, requests_per_minute: int = 60):
+    MAX_TRACKED_IPS = 10_000
+
+    def __init__(self, app, requests_per_minute: int = 120):
         super().__init__(app)
         self.rpm = requests_per_minute
         self._requests: dict[str, list[float]] = defaultdict(list)
@@ -66,16 +80,30 @@ class APIRateLimiter(BaseHTTPMiddleware):
         if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)
 
-        # Use IP as key (session cookie can be very long)
+        # Use IP as key — ProxyHeadersMiddleware already rewrites request.client.host
+        # when BEHIND_PROXY=true, so we always use request.client.host (no manual
+        # X-Forwarded-For parsing, which would allow rate limit bypass via spoofing)
         key = request.client.host if request.client else "unknown"
         now = time.time()
         window = 60.0
 
         # Periodic cleanup of stale keys (every 5 minutes)
         if now - self._last_cleanup > 300:
-            stale = [k for k, v in self._requests.items() if not v or now - v[-1] > window]
+            stale = [
+                k for k, v in self._requests.items() if not v or now - v[-1] > window
+            ]
             for k in stale:
                 del self._requests[k]
+
+            # Hard cap: evict oldest entries (only during cleanup, not every request)
+            if len(self._requests) > self.MAX_TRACKED_IPS:
+                sorted_keys = sorted(
+                    self._requests.keys(),
+                    key=lambda k: self._requests[k][-1] if self._requests[k] else 0,
+                )
+                for k in sorted_keys[: len(self._requests) - self.MAX_TRACKED_IPS]:
+                    del self._requests[k]
+
             self._last_cleanup = now
 
         # Clean old entries for this key

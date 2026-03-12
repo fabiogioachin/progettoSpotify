@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -18,6 +19,14 @@ from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServ
 from app.utils.token_manager import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
+
+SPOTIFY_ID_RE = re.compile(r"^[a-zA-Z0-9]{15,25}$")
+
+
+def _validate_spotify_id(spotify_id: str) -> None:
+    if not SPOTIFY_ID_RE.match(spotify_id):
+        raise ValueError(f"Invalid Spotify ID: {spotify_id!r}")
+
 
 SPOTIFY_API = "https://api.spotify.com/v1"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -39,7 +48,9 @@ class SpotifyClient:
     # with retry_after > _COOLDOWN_THRESHOLD, all subsequent requests fail immediately
     # without hitting Spotify (to avoid increasing the retry_after further).
     _cooldown_until: float = 0.0  # epoch timestamp
-    _COOLDOWN_THRESHOLD: float = 10 * 60  # 10 minutes: if retry_after exceeds this, activate global cooldown
+    _COOLDOWN_THRESHOLD: float = (
+        10 * 60
+    )  # 10 minutes: if retry_after exceeds this, activate global cooldown
 
     def __init__(self, db: AsyncSession, user_id: int):
         self.db = db
@@ -94,7 +105,9 @@ class SpotifyClient:
         token_record.access_token_encrypted = encrypt_token(data["access_token"])
         if "refresh_token" in data:
             token_record.refresh_token_encrypted = encrypt_token(data["refresh_token"])
-        token_record.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=data["expires_in"])
+        token_record.expires_at = datetime.now(timezone.utc).replace(
+            tzinfo=None
+        ) + timedelta(seconds=data["expires_in"])
         token_record.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await self.db.commit()
 
@@ -106,7 +119,8 @@ class SpotifyClient:
             remaining = SpotifyClient._cooldown_until - now
             logger.warning(
                 "Global cooldown active (%.0fs remaining) — skipping request to %s",
-                remaining, url,
+                remaining,
+                url,
             )
             raise RateLimitError(remaining)
 
@@ -131,7 +145,8 @@ class SpotifyClient:
                 SpotifyClient._cooldown_until = now + retry_after
                 logger.warning(
                     "Spotify rate limit with retry_after=%.0fs — activating global cooldown for %.0f min",
-                    retry_after, retry_after / 60,
+                    retry_after,
+                    retry_after / 60,
                 )
             raise RateLimitError(retry_after)
         if resp.status_code >= 500:
@@ -164,10 +179,14 @@ class SpotifyClient:
     async def get_me(self) -> dict:
         return await self.get("/me")
 
-    async def get_top_tracks(self, time_range: str = "medium_term", limit: int = 50) -> dict:
+    async def get_top_tracks(
+        self, time_range: str = "medium_term", limit: int = 50
+    ) -> dict:
         return await self.get("/me/top/tracks", time_range=time_range, limit=limit)
 
-    async def get_top_artists(self, time_range: str = "medium_term", limit: int = 50) -> dict:
+    async def get_top_artists(
+        self, time_range: str = "medium_term", limit: int = 50
+    ) -> dict:
         return await self.get("/me/top/artists", time_range=time_range, limit=limit)
 
     async def get_recently_played(self, limit: int = 50) -> dict:
@@ -183,16 +202,10 @@ class SpotifyClient:
     async def get_playlists(self, limit: int = 50, offset: int = 0) -> dict:
         return await self.get("/me/playlists", limit=limit, offset=offset)
 
-    async def get_recommendations(self, seed_tracks: list[str], limit: int = 20, **kwargs) -> dict:
-        return await self.get(
-            "/recommendations",
-            seed_tracks=",".join(seed_tracks[:5]),
-            limit=limit,
-            **kwargs,
-        )
-
     async def get_artist(self, artist_id: str) -> dict:
+        _validate_spotify_id(artist_id)
         return await self.get(f"/artists/{artist_id}")
 
     async def get_related_artists(self, artist_id: str) -> dict:
+        _validate_spotify_id(artist_id)
         return await self.get(f"/artists/{artist_id}/related-artists")

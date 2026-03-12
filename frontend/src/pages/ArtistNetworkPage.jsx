@@ -46,16 +46,16 @@ export default function ArtistNetworkPage() {
             {/* KPI Cards */}
             <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StaggerItem>
-                <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="Numero di artisti visualizzati nella rete, basato sui tuoi ascolti e le loro connessioni" />
+                <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="I tuoi top 15 artisti (periodo 6M) più fino a 10 artisti correlati per ciascuno, secondo l'API Related Artists di Spotify" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Relazioni tra artisti: generi condivisi o artisti correlati secondo Spotify" />
+                <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Ogni connessione indica che Spotify considera i due artisti correlati (Related Artists API). Non basato su generi condivisi" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti strettamente collegati tra loro nel tuo ecosistema musicale" />
+                <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti che formano una rete connessa. Il nome della cerchia è il genere dominante tra gli artisti del gruppo" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} tooltip="Artisti con la popolarità più alta nel tuo grafo" />
+                <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} tooltip="I tuoi artisti più ascoltati (top 15 dal periodo 6M) usati come punto di partenza per costruire la rete" />
               </StaggerItem>
             </StaggerContainer>
 

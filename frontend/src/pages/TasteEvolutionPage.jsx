@@ -54,16 +54,16 @@ export default function TasteEvolutionPage() {
             {/* KPI Cards */}
             <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StaggerItem>
-                <KPICard title="Fedeltà" value={metrics.loyalty_score || 0} suffix="%" icon={Heart} delay={0} tooltip="Percentuale di artisti che ascolti stabilmente in più periodi" />
+                <KPICard title="Fedeltà" value={metrics.loyalty_score || 0} suffix="%" icon={Heart} delay={0} tooltip="Quanti dei tuoi artisti dell'ultimo mese ascolti anche a 6 mesi e da sempre. Formula: artisti in comune tra 1M, 6M e All ÷ artisti 1M × 100" link="#loyal-artists" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Turnover" value={metrics.turnover_rate || 0} suffix="%" icon={RefreshCw} delay={100} tooltip="Percentuale di artisti nuovi rispetto al periodo precedente" />
+                <KPICard title="Turnover" value={metrics.turnover_rate || 0} suffix="%" icon={RefreshCw} delay={100} tooltip="Quanti artisti nell'ultimo mese non c'erano nei tuoi 6 mesi. Formula: (artisti solo in 1M, non in 6M) ÷ artisti 1M × 100" link="#rising-artists" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Artisti Fedeli" value={(artists.loyal || []).length} icon={Users} delay={200} tooltip="Artisti presenti nelle tue classifiche in tutti e tre i periodi" />
+                <KPICard title="Artisti Fedeli" value={(artists.loyal || []).length} icon={Users} delay={200} tooltip="Artisti presenti nei tuoi top 50 in tutti e 3 i periodi Spotify: ultimo mese, 6 mesi e da sempre. Clicca per vederli" link="#loyal-artists" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} tooltip="Brani che restano tra i tuoi preferiti in più periodi temporali" />
+                <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} tooltip="Brani che compaiono nei tuoi top 50 in tutti e 3 i periodi (1M, 6M, All). Clicca per vederli" link="#persistent-tracks" />
               </StaggerItem>
             </StaggerContainer>
 
@@ -73,10 +73,10 @@ export default function TasteEvolutionPage() {
             {/* Artist Sections */}
             <StaggerContainer className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StaggerItem>
-                <ArtistColumn title="In Ascesa" icon={TrendingUp} iconColor="text-emerald-400" artists={artists.rising || []} emptyText="Nessun nuovo artista" tooltip="Artisti che sono entrati di recente nelle tue classifiche e stanno guadagnando ascolti" />
+                <ArtistColumn id="rising-artists" title="In Ascesa" icon={TrendingUp} iconColor="text-emerald-400" artists={artists.rising || []} emptyText="Nessun nuovo artista" tooltip="Artisti che sono entrati di recente nelle tue classifiche e stanno guadagnando ascolti" />
               </StaggerItem>
               <StaggerItem>
-                <ArtistColumn title="Sempre Fedeli" icon={Heart} iconColor="text-accent" artists={artists.loyal || []} emptyText="Nessun artista fedele" tooltip="Artisti presenti nelle tue classifiche in tutti e tre i periodi temporali" />
+                <ArtistColumn id="loyal-artists" title="Sempre Fedeli" icon={Heart} iconColor="text-accent" artists={artists.loyal || []} emptyText="Nessun artista fedele" tooltip="Artisti presenti nelle tue classifiche in tutti e tre i periodi temporali" />
               </StaggerItem>
               <StaggerItem>
                 <ArtistColumn title="In Calo" icon={TrendingDown} iconColor="text-red-400" artists={artists.falling || []} emptyText="Nessun artista in calo" tooltip="Artisti che erano nelle tue classifiche ma che stai ascoltando meno di recente" />
@@ -85,7 +85,7 @@ export default function TasteEvolutionPage() {
 
             {/* Persistent Tracks */}
             {(tracks.persistent || []).length > 0 && (
-              <div className="glow-card bg-surface rounded-xl p-5">
+              <div id="persistent-tracks" className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <Music size={18} className="text-accent" />
                   Tracce che ascolti sempre
@@ -235,13 +235,13 @@ export default function TasteEvolutionPage() {
   )
 }
 
-function ArtistColumn({ title, icon: Icon, iconColor, artists, emptyText, tooltip }) {
+function ArtistColumn({ id, title, icon: Icon, iconColor, artists, emptyText, tooltip }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const hoverTimer = useRef(null)
 
   return (
-    <div className="glow-card bg-surface rounded-xl p-5">
+    <div id={id} className="glow-card bg-surface rounded-xl p-5">
       <h3
         className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2"
         onMouseEnter={() => { if (tooltip) hoverTimer.current = setTimeout(() => setShowTooltip(true), 1000) }}

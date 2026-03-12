@@ -129,7 +129,7 @@ export default function ClaudeExportPanel() {
 
             <button
               onClick={handleDownload}
-              className="py-2.5 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 border border-border text-text-secondary hover:text-text-primary hover:border-border-hover transition-all duration-300"
+              className="py-2.5 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 border border-border text-text-secondary hover:text-text-primary hover:border-surface-hover transition-all duration-300"
               title="Scarica come file .md"
             >
               <Download size={16} />
@@ -140,7 +140,7 @@ export default function ClaudeExportPanel() {
               href="https://claude.ai"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 border border-border text-text-secondary hover:text-text-primary hover:border-border-hover transition-all duration-300"
+              className="flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 border border-border text-text-secondary hover:text-text-primary hover:border-surface-hover transition-all duration-300"
             >
               <ExternalLink size={16} />
               Apri Claude

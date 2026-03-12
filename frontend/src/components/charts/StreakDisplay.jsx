@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { Flame, Star, Trophy, Award, Crown } from 'lucide-react'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -11,7 +11,7 @@ const MILESTONES = [
 ]
 
 export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays = [] }) {
-  const progressPct = useMemo(() => Math.min((streak / 30) * 100, 100), [streak])
+  const progressPct = Math.min((streak / 30) * 100, 100)
 
   // SVG circle math for progress ring
   const ringSize = 120
@@ -21,26 +21,13 @@ export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays =
   const dashOffset = circumference - (progressPct / 100) * circumference
 
   return (
-    <div className="glow-card bg-surface rounded-xl p-6 animate-slide-up">
-      <style>{`
-        @keyframes flicker {
-          0%, 100% { transform: scale(1) rotate(-1deg); opacity: 0.9; }
-          25% { transform: scale(1.02) rotate(1deg); opacity: 1; }
-          50% { transform: scale(0.98) rotate(0deg); opacity: 0.95; }
-          75% { transform: scale(1.01) rotate(-0.5deg); opacity: 1; }
-        }
-        .flame-animated {
-          animation: flicker 2s ease-in-out infinite;
-          transform-origin: center bottom;
-        }
-        @keyframes ringGrow {
-          0% { stroke-dashoffset: ${circumference}; }
-        }
-        .progress-ring-circle {
-          animation: ringGrow 1.2s ease-out forwards;
-          transition: stroke-dashoffset 0.8s ease-out;
-        }
-      `}</style>
+    <motion.div
+      className="glow-card bg-surface rounded-xl p-6"
+      style={{ '--circumference': circumference }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-6">
@@ -185,6 +172,6 @@ export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays =
           })}
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

@@ -33,12 +33,14 @@ export default function SlideOutro({ data }) {
     a.href = url
     a.download = 'my-wrapped-2026.png'
     a.click()
+    canvas.remove()
   }
 
   const handleShare = async () => {
     if (!cardRef.current) return
+    let canvas = null
     try {
-      const canvas = await html2canvas(cardRef.current, {
+      canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#121212',
         scale: 2,
       })
@@ -50,6 +52,8 @@ export default function SlideOutro({ data }) {
       }
     } catch {
       // Fallback to download
+    } finally {
+      if (canvas) canvas.remove()
     }
     handleDownload()
   }
@@ -74,7 +78,7 @@ export default function SlideOutro({ data }) {
         transition={{ duration: 0.5, delay: 0.2 }}
       >
         <div className="space-y-5">
-          {stats.map((stat, i) => (
+          {stats.map((stat) => (
             <div key={stat.label} className="flex justify-between items-center">
               <span className="text-text-secondary text-sm">{stat.label}</span>
               <span className="text-text-primary font-display font-bold text-lg">

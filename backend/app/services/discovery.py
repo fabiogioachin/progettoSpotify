@@ -19,6 +19,12 @@ from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 logger = logging.getLogger(__name__)
 
 
+def _album_image(track: dict) -> str | None:
+    """Estrae l'URL della prima immagine dell'album di un brano."""
+    images = track.get("album", {}).get("images")
+    return images[0].get("url") if images else None
+
+
 def _euclidean_distance(a: dict, b: dict) -> float:
     """Distanza euclidea normalizzata tra due profili audio."""
     total = 0.0
@@ -60,7 +66,9 @@ async def discover(
     )
 
     top_data, artists_data, short_data = await asyncio.gather(
-        top_tracks_task, top_artists_task, short_tracks_task,
+        top_tracks_task,
+        top_artists_task,
+        short_tracks_task,
         return_exceptions=True,
     )
     # Re-raise auth errors; gracefully degrade on other failures
@@ -100,10 +108,11 @@ async def discover(
         for g in artist.get("genres", []):
             genre_counter[g] += 1
     total_genres = sum(genre_counter.values())
-    genre_distribution = {
-        g: round(c / total_genres * 100, 1)
-        for g, c in genre_counter.most_common(12)
-    } if total_genres else {}
+    genre_distribution = (
+        {g: round(c / total_genres * 100, 1) for g, c in genre_counter.most_common(12)}
+        if total_genres
+        else {}
+    )
 
     # 4. Outlier — usa features se disponibili, altrimenti popolarita'
     outliers = []
@@ -112,15 +121,18 @@ async def discover(
             dist = _euclidean_distance(centroid, feat)
             track_info = next((t for t in top_items if t["id"] == tid), None)
             if track_info:
-                outliers.append({
-                    "id": tid,
-                    "name": track_info["name"],
-                    "artist": track_info["artists"][0]["name"] if track_info.get("artists") else "",
-                    "album_image": (track_info.get("album", {}).get("images", [{}])[0].get("url")
-                                    if track_info.get("album", {}).get("images") else None),
-                    "distance": round(dist, 3),
-                    "metric_label": "distanza audio",
-                })
+                outliers.append(
+                    {
+                        "id": tid,
+                        "name": track_info["name"],
+                        "artist": track_info["artists"][0]["name"]
+                        if track_info.get("artists")
+                        else "",
+                        "album_image": _album_image(track_info),
+                        "distance": round(dist, 3),
+                        "metric_label": "distanza audio",
+                    }
+                )
         outliers.sort(key=lambda x: x["distance"], reverse=True)
     else:
         # Fallback: trova hidden gems (brani meno popolari nella tua top)
@@ -128,15 +140,16 @@ async def discover(
         for t in top_items:
             pop = t.get("popularity", 0)
             diff = abs(pop - avg_pop)
-            outliers.append({
-                "id": t["id"],
-                "name": t["name"],
-                "artist": t["artists"][0]["name"] if t.get("artists") else "",
-                "album_image": (t.get("album", {}).get("images", [{}])[0].get("url")
-                                if t.get("album", {}).get("images") else None),
-                "distance": round(diff / 100, 3),
-                "metric_label": "hidden gem" if pop < avg_pop else "mainstream",
-            })
+            outliers.append(
+                {
+                    "id": t["id"],
+                    "name": t["name"],
+                    "artist": t["artists"][0]["name"] if t.get("artists") else "",
+                    "album_image": _album_image(t),
+                    "distance": round(diff / 100, 3),
+                    "metric_label": "hidden gem" if pop < avg_pop else "mainstream",
+                }
+            )
         # Ordina: meno popolari prima (hidden gems)
         outliers.sort(key=lambda x: x.get("distance", 0), reverse=True)
 
@@ -145,58 +158,26 @@ async def discover(
     new_discoveries = []
     for t in short_items:
         if t["id"] not in medium_ids:
-            new_discoveries.append({
-                "id": t["id"],
-                "name": t["name"],
-                "artist": t["artists"][0]["name"] if t.get("artists") else "",
-                "album": t.get("album", {}).get("name", ""),
-                "album_image": (t.get("album", {}).get("images", [{}])[0].get("url")
-                                if t.get("album", {}).get("images") else None),
-                "popularity": t.get("popularity", 0),
-                "is_new_artist": True,
-            })
+            new_discoveries.append(
+                {
+                    "id": t["id"],
+                    "name": t["name"],
+                    "artist": t["artists"][0]["name"] if t.get("artists") else "",
+                    "album": t.get("album", {}).get("name", ""),
+                    "album_image": _album_image(t),
+                    "popularity": t.get("popularity", 0),
+                    "is_new_artist": True,
+                }
+            )
 
-    # 6. Raccomandazioni: prova l'API Spotify, fallback a scoperte recenti
-    recommendations = []
-    recommendations_source = "spotify"  # "spotify" o "recent_discoveries"
-    seed_tracks = top_ids[:5]
-    known_artist_ids = set()
-    for t in top_items:
-        for a in t.get("artists", []):
-            if a.get("id"):
-                known_artist_ids.add(a["id"])
-
-    try:
-        rec_data = await retry_with_backoff(
-            client.get_recommendations, seed_tracks=seed_tracks, limit=20
-        )
-        for track in rec_data.get("tracks", []):
-            track_artist_ids = {a["id"] for a in track.get("artists", []) if a.get("id")}
-            is_new = not track_artist_ids.intersection(known_artist_ids)
-            recommendations.append({
-                "id": track["id"],
-                "name": track["name"],
-                "artist": track["artists"][0]["name"] if track.get("artists") else "",
-                "album": track.get("album", {}).get("name", ""),
-                "album_image": (track.get("album", {}).get("images", [{}])[0].get("url")
-                                if track.get("album", {}).get("images") else None),
-                "popularity": track.get("popularity", 0),
-                "preview_url": track.get("preview_url"),
-                "is_new_artist": is_new,
-                "distance_from_profile": None,
-            })
-    except Exception as exc:
-        logger.info("Recommendations API non disponibile: %s — uso scoperte recenti", exc)
-        recommendations = new_discoveries[:20]
-        recommendations_source = "recent_discoveries"
-
-    # Se non ci sono raccomandazioni ne' scoperte, usa artisti correlati
-    if not recommendations:
-        recommendations = new_discoveries[:20]
-        recommendations_source = "recent_discoveries"
+    # 6. Raccomandazioni: endpoint /recommendations deprecato, uso scoperte recenti
+    recommendations = new_discoveries[:20]
+    recommendations_source = "recent_discoveries"
 
     # Ordinamento: nuovi artisti prima, poi per popolarita' decrescente
-    recommendations.sort(key=lambda x: (not x.get("is_new_artist", False), -(x.get("popularity", 0))))
+    recommendations.sort(
+        key=lambda x: (not x.get("is_new_artist", False), -(x.get("popularity", 0)))
+    )
 
     # 7. Distribuzione popolarita'
     popularity_buckets = {"0-20": 0, "21-40": 0, "41-60": 0, "61-80": 0, "81-100": 0}

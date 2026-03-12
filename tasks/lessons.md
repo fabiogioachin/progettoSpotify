@@ -188,6 +188,23 @@
 - Sidebar desktop stays static (CSS `hidden lg:flex`) — only mobile gets AnimatePresence. No performance cost on desktop.
 - `StaggerContainer` stagger interval set to 40ms — fast enough to feel fluid, slow enough to see the cascade
 
+## Deferred Items Implementation — March 2026
+
+### Security: X-Forwarded-For bypass
+- **Signal**: rate limiter manually parsing `X-Forwarded-For` header allows any client to spoof IPs and bypass rate limits
+- **Fix**: let `ProxyHeadersMiddleware` (gated behind `BEHIND_PROXY=true`) rewrite `request.client.host` — rate limiter just reads `request.client.host`, never touches headers directly
+- **Rule**: never manually parse proxy headers in application code — use middleware that validates the trust chain
+
+### Security: Dict eviction must not run on every request
+- **Signal**: sorted eviction running outside the periodic cleanup block = O(n log n) per request under load
+- **Fix**: moved eviction inside the 5-minute cleanup block
+- **Rule**: expensive maintenance operations (sorting, GC) should be amortized on a timer, not triggered per-request
+
+### Spotify ID validation
+- **Signal**: Spotify IDs are typically 22 chars but not guaranteed — some older/special IDs differ
+- **Fix**: regex `{15,25}` instead of strict `{22}`
+- **Rule**: when validating third-party IDs that come from the same API's responses, be lenient — false rejections are worse than accepting a slightly malformed ID
+
 ### Data Integrity Checklist
 - [ ] All displayed data comes from real API calls (no mocks, no hardcoded values)
 - [ ] Missing data defaults to 0/null/empty, never to a plausible fake value
@@ -244,3 +261,43 @@
 ### Pattern: Stale closure in useCallback with JSON.stringify
 - When `params` is a new object each render but `stableParams = JSON.stringify(params)` is the dep, parse stableParams inside the callback instead of closing over `params`
 - This avoids the latent risk of the closure holding a stale `params` ref
+
+## Verification Round — March 2026
+
+### SpotifyAuthError in get_or_fetch_features
+- The health scan found `except Exception` swallowing `SpotifyAuthError` at `audio_analyzer.py:285` — a pre-existing bug
+- This was inside a batch loop for audio features, not a top-level handler, so previous health scans missed it
+- **Rule**: when adding `_safe_compute` or `_safe_fetch` wrappers that re-raise `SpotifyAuthError`, verify that the functions they wrap ALSO propagate auth errors correctly — the wrapper only helps if the inner code doesn't swallow the error first
+- **Rule**: `except SpotifyAuthError: raise` must be checked at EVERY level of the call chain, not just the outermost handler
+
+### useMemo for simple arithmetic is overhead
+- `useMemo(() => Math.min(x / 30 * 100, 100), [x])` — the memo cost (allocation, dep comparison) exceeds the computation cost
+- **Rule**: only use `useMemo` when the computation is expensive (>1ms) or when the result is passed as a prop to a memoized child
+
+### useEffect deps should match semantic identity
+- `useEffect` with `[nodes, edges, nodeIndex, dataKey]` where `dataKey` already captures nodes+edges identity is misleading
+- The effect had an early return guarded by `dataKey`, making the extra deps redundant but confusing
+- **Rule**: useEffect deps should contain the minimal set that represents when the effect should re-run semantically
+
+### preventDefault on keyboard scroll handlers
+- Space key triggers browser scroll by default on interactive elements
+- When `onKeyDown` handles Space to trigger a custom action (like scrollIntoView), always call `e.preventDefault()` to suppress the browser default
+
+## Health Report Backend Suggestions — March 2026
+
+### S-2: Removed deprecated get_recommendations
+- `SpotifyClient.get_recommendations` called `/recommendations` which always fails (deprecated Feb 2026)
+- `discovery.py` had a try/except that caught the failure and fell back to `new_discoveries` every time — wasting an API call
+- Fix: removed the method entirely, discovery.py now goes straight to `new_discoveries[:20]` fallback
+- Rule: when an API is deprecated and the fallback is always used, remove the dead code path entirely
+
+### S-4: Aligned rate_limiter default RPM
+- `APIRateLimiter.__init__` had `requests_per_minute=60` but `main.py` always passed `120`
+- The mismatch was harmless (explicit param overrides default) but misleading for anyone reading rate_limiter.py in isolation
+- Rule: defaults should match the app's actual configuration to reduce cognitive load
+
+### S-5: Parallelized compute_trends with asyncio.gather
+- `compute_trends` ran 3 `compute_profile` calls sequentially — each hitting Spotify API
+- Refactored to `asyncio.gather` with `_safe_compute` wrapper (re-raises SpotifyAuthError, returns None on other failures)
+- Profiles that fail are excluded from results (graceful degradation)
+- Rule: when calling the same async function N times with different params and no data dependency, always parallelize

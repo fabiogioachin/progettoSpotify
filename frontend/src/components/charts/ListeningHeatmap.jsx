@@ -99,25 +99,6 @@ export default function ListeningHeatmap({ data = [], dayLabels = [], hourLabels
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
-      <style>{`
-        @keyframes heatmapRowFadeIn {
-          0% { opacity: 0; transform: translateY(8px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-        .heatmap-row {
-          animation: heatmapRowFadeIn 0.4s ease-out both;
-        }
-        .heatmap-cell {
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .heatmap-cell:hover {
-          transform: scale(1.2);
-          box-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
-          z-index: 10;
-          position: relative;
-        }
-      `}</style>
-
       {/* Title */}
       <h3 className="text-text-primary font-display font-semibold text-lg mb-4">{title}</h3>
 

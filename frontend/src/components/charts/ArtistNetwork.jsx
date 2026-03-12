@@ -42,9 +42,20 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return map
   }, [nodes])
 
+  // Stable data key to avoid restarting simulation when references change but data is the same
+  const dataKey = useMemo(() => {
+    const nodeIds = nodes.map(n => n.id).sort().join(',')
+    const edgeIds = edges.map(e => `${e.source}-${e.target}`).sort().join(',')
+    return `${nodeIds}|${edgeIds}`
+  }, [nodes, edges])
+  const prevDataKeyRef = useRef(null)
+
   // Initialize positions
   useEffect(() => {
     if (nodes.length === 0) return
+    // Skip simulation restart if the actual data hasn't changed
+    if (prevDataKeyRef.current === dataKey) return
+    prevDataKeyRef.current = dataKey
 
     const width = 700
     const height = 500
@@ -139,7 +150,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
     }
-  }, [nodes, edges, nodeIndex])
+  }, [dataKey, nodeIndex])
 
   const handleMouseEnter = useCallback((node, pos) => {
     const clusterId = nodeClusterMap[node.id]
@@ -169,7 +180,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
   return (
     <div className="glow-card bg-surface rounded-xl p-5 relative">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-      <svg ref={svgRef} viewBox="0 0 700 500" className="w-full h-auto" style={{ maxHeight: '500px' }}>
+      <svg ref={svgRef} viewBox="0 0 700 500" className="w-full h-auto" style={{ maxHeight: '500px' }} role="img" aria-label="Grafo delle connessioni tra artisti">
         {/* Edges */}
         {edges.map((edge, i) => {
           const si = nodeIndex[edge.source]
@@ -212,9 +223,19 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                 fillOpacity={node.is_top ? 0.9 : 0.5}
                 stroke={node.is_top ? '#ffffff' : 'none'}
                 strokeWidth={node.is_top ? 1.5 : 0}
-                className="cursor-pointer transition-all duration-200"
+                className="artist-node cursor-pointer"
+                role="button"
+                tabIndex={0}
+                aria-label={node.name}
                 onMouseEnter={() => handleMouseEnter(node, positions[i])}
                 onMouseLeave={handleMouseLeave}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleMouseEnter(node, positions[i])
+                  }
+                }}
+                onBlur={handleMouseLeave}
               />
             </g>
           )

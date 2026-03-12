@@ -27,7 +27,7 @@ export default function KPICard({ title, value, suffix = '', trend, icon: Icon, 
   const animatedValue = useAnimatedValue(
     typeof value === 'number' ? value : null,
     1200,
-    value % 1 !== 0 ? 1 : 0
+    typeof value === 'number' && value % 1 !== 0 ? 1 : 0
   )
 
   const displayValue = typeof value === 'number' ? animatedValue : value
@@ -96,6 +96,19 @@ export default function KPICard({ title, value, suffix = '', trend, icon: Icon, 
   )
 
   if (link) {
+    if (link.startsWith('#')) {
+      return (
+        <div
+          className="block"
+          role="button"
+          tabIndex={0}
+          onClick={() => { document.getElementById(link.slice(1))?.scrollIntoView({ behavior: 'smooth' }) }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById(link.slice(1))?.scrollIntoView({ behavior: 'smooth' }) } }}
+        >
+          {cardContent}
+        </div>
+      )
+    }
     return <Link to={link} className="block">{cardContent}</Link>
   }
   return cardContent

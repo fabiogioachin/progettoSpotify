@@ -34,6 +34,10 @@ jobs:
         run: |
           cd frontend
           npm install
+      - name: Lint with ESLint
+        run: |
+          cd frontend
+          npm run lint
       - name: Build
         run: |
           cd frontend

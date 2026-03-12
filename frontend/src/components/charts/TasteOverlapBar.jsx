@@ -30,7 +30,7 @@ export default function TasteOverlapBar({ data = [], title = 'Distribuzione Arti
     <div className="glow-card bg-surface rounded-xl p-5">
       <h3 className="text-text-primary font-display font-semibold mb-1">{title}</h3>
       <p className="text-text-muted text-xs mb-4">
-        In quanti periodi (ultimo mese, 6 mesi, sempre) compaiono i tuoi artisti
+        In quanti dei 3 periodi Spotify (1M, 6M, All) compare ciascun artista tra i tuoi top 50
       </p>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>

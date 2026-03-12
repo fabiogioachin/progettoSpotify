@@ -21,18 +21,28 @@ async def compute_profile(
     db: AsyncSession, client: SpotifyClient, time_range: str = "medium_term"
 ) -> dict:
     """Calcola il profilo audio completo dell'utente per un periodo."""
-    data = await retry_with_backoff(client.get_top_tracks, time_range=time_range, limit=50)
+    data = await retry_with_backoff(
+        client.get_top_tracks, time_range=time_range, limit=50
+    )
     items = data.get("items", [])
 
     if not items:
-        return {"features": {}, "genres": {}, "track_count": 0,
-                "popularity_avg": 0, "unique_artists": 0, "top_artist": "—"}
+        return {
+            "features": {},
+            "genres": {},
+            "track_count": 0,
+            "popularity_avg": 0,
+            "unique_artists": 0,
+            "top_artist": "—",
+        }
 
     track_ids = [t["id"] for t in items]
 
     # Stats sempre disponibili (non dipendono da audio features)
     popularities = [t.get("popularity", 0) for t in items]
-    popularity_avg = round(sum(popularities) / len(popularities), 1) if popularities else 0
+    popularity_avg = (
+        round(sum(popularities) / len(popularities), 1) if popularities else 0
+    )
 
     artist_counter = Counter()
     for t in items:
@@ -67,38 +77,63 @@ async def compute_profile(
     }
 
 
+async def _safe_compute(coro, time_range: str):
+    """Una chiamata fallita non deve crashare l'intero endpoint trends."""
+    try:
+        return await coro
+    except SpotifyAuthError:
+        raise
+    except Exception as exc:
+        logger.warning("compute_profile(%s) fallito: %s", time_range, exc)
+        return None
+
+
 async def compute_trends(
     db: AsyncSession, client: SpotifyClient, user_id: int
 ) -> list[dict]:
     """Calcola i trend confrontando short, medium e long term."""
-    trends = []
-    for time_range in ["short_term", "medium_term", "long_term"]:
-        profile = await compute_profile(db, client, time_range)
-        trends.append({
-            "period": time_range,
-            "label": {
-                "short_term": "Ultimo mese",
-                "medium_term": "Ultimi 6 mesi",
-                "long_term": "Sempre",
-            }[time_range],
-            **profile,
-        })
+    labels = {
+        "short_term": "Ultimo mese",
+        "medium_term": "Ultimi 6 mesi",
+        "long_term": "Sempre",
+    }
+    time_ranges = ["short_term", "medium_term", "long_term"]
 
+    profiles = await asyncio.gather(
+        *[_safe_compute(compute_profile(db, client, tr), tr) for tr in time_ranges]
+    )
+
+    trends = []
+    for tr, profile in zip(time_ranges, profiles):
+        if profile is not None:
+            trends.append({"period": tr, "label": labels[tr], **profile})
     return trends
 
 
-async def save_snapshot(
-    db: AsyncSession, user_id: int, period: str, profile: dict
-):
+async def save_snapshot(db: AsyncSession, user_id: int, period: str, profile: dict):
     """Salva uno snapshot delle medie per tracking storico (max 1 per giorno/periodo)."""
     from datetime import datetime, timezone
+
+    from sqlalchemy import func
 
     features = profile.get("features", {})
     genres = profile.get("genres", {})
     today = datetime.now(timezone.utc).date()
 
-    # Check if snapshot already exists for this user/period/day
-    from sqlalchemy import func
+    fields = {
+        "avg_energy": features.get("energy"),
+        "avg_valence": features.get("valence"),
+        "avg_danceability": features.get("danceability"),
+        "avg_acousticness": features.get("acousticness"),
+        "avg_instrumentalness": features.get("instrumentalness"),
+        "avg_speechiness": features.get("speechiness"),
+        "avg_liveness": features.get("liveness"),
+        "avg_tempo": features.get("tempo"),
+        "top_genre": max(genres, key=genres.get) if genres else None,
+        "genre_distribution": json.dumps(genres) if genres else None,
+        "track_count": profile.get("track_count", 0),
+    }
+
     result = await db.execute(
         select(ListeningSnapshot).where(
             ListeningSnapshot.user_id == user_id,
@@ -109,41 +144,15 @@ async def save_snapshot(
     existing = result.scalar_one_or_none()
 
     if existing:
-        # Update existing snapshot
-        existing.avg_energy = features.get("energy")
-        existing.avg_valence = features.get("valence")
-        existing.avg_danceability = features.get("danceability")
-        existing.avg_acousticness = features.get("acousticness")
-        existing.avg_instrumentalness = features.get("instrumentalness")
-        existing.avg_speechiness = features.get("speechiness")
-        existing.avg_liveness = features.get("liveness")
-        existing.avg_tempo = features.get("tempo")
-        existing.top_genre = max(genres, key=genres.get) if genres else None
-        existing.genre_distribution = json.dumps(genres) if genres else None
-        existing.track_count = profile.get("track_count", 0)
+        for attr, value in fields.items():
+            setattr(existing, attr, value)
     else:
-        snapshot = ListeningSnapshot(
-            user_id=user_id,
-            period=period,
-            avg_energy=features.get("energy"),
-            avg_valence=features.get("valence"),
-            avg_danceability=features.get("danceability"),
-            avg_acousticness=features.get("acousticness"),
-            avg_instrumentalness=features.get("instrumentalness"),
-            avg_speechiness=features.get("speechiness"),
-            avg_liveness=features.get("liveness"),
-            avg_tempo=features.get("tempo"),
-            top_genre=max(genres, key=genres.get) if genres else None,
-            genre_distribution=json.dumps(genres) if genres else None,
-            track_count=profile.get("track_count", 0),
-        )
+        snapshot = ListeningSnapshot(user_id=user_id, period=period, **fields)
         db.add(snapshot)
     await db.commit()
 
 
-async def get_historical_snapshots(
-    db: AsyncSession, user_id: int
-) -> list[dict]:
+async def get_historical_snapshots(db: AsyncSession, user_id: int) -> list[dict]:
     """Recupera gli snapshot storici dell'utente."""
     result = await db.execute(
         select(ListeningSnapshot)
@@ -171,7 +180,9 @@ async def get_historical_snapshots(
     ]
 
 
-async def _extract_genres(client: SpotifyClient, tracks: list[dict]) -> dict[str, float]:
+async def _extract_genres(
+    client: SpotifyClient, tracks: list[dict]
+) -> dict[str, float]:
     """Estrae distribuzione generi dagli artisti dei brani."""
     artist_ids = set()
     for t in tracks:
@@ -184,7 +195,9 @@ async def _extract_genres(client: SpotifyClient, tracks: list[dict]) -> dict[str
 
     # Fetch artists individually (batch GET /artists removed in dev mode Feb 2026)
     all_genres: list[str] = []
-    artist_list = list(artist_ids)[:15]  # cap to limit API calls (reduced for dev mode rate limits)
+    artist_list = list(artist_ids)[
+        :15
+    ]  # cap to limit API calls (reduced for dev mode rate limits)
     sem = asyncio.Semaphore(2)
 
     async def _fetch_genres(aid: str) -> list[str]:
@@ -211,8 +224,7 @@ async def _extract_genres(client: SpotifyClient, tracks: list[dict]) -> dict[str
     counter = Counter(all_genres)
     total = sum(counter.values())
     return {
-        genre: round(count / total * 100, 1)
-        for genre, count in counter.most_common(15)
+        genre: round(count / total * 100, 1) for genre, count in counter.most_common(15)
     }
 
 
@@ -259,8 +271,15 @@ async def get_or_fetch_features(
                     db.add(af)
                     cached[feat["id"]] = af
                 await db.commit()
+            except SpotifyAuthError:
+                raise
             except Exception as exc:
-                logger.warning("Failed to fetch audio features batch %d-%d: %s", i, i + len(batch), exc)
+                logger.warning(
+                    "Failed to fetch audio features batch %d-%d: %s",
+                    i,
+                    i + len(batch),
+                    exc,
+                )
 
     # Converti in dizionari
     features_map = {}

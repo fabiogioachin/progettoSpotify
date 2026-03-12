@@ -44,8 +44,12 @@ async def lifespan(app: FastAPI):
     os.makedirs("data", exist_ok=True)
     await init_db()
     logger.info("Database inizializzato")
-    if not settings.cookie_secure and not settings.frontend_url.startswith("http://127"):
-        logger.warning("SECURITY: cookie_secure=False su ambiente non-localhost. Impostare COOKIE_SECURE=true in produzione.")
+    if not settings.cookie_secure and not settings.frontend_url.startswith(
+        "http://127"
+    ):
+        logger.warning(
+            "SECURITY: cookie_secure=False su ambiente non-localhost. Impostare COOKIE_SECURE=true in produzione."
+        )
 
     # APScheduler: sync ascolti recenti ogni 60 minuti
     scheduler.add_job(
@@ -76,12 +80,23 @@ app = FastAPI(
 async def rate_limit_exception_handler(request, exc: RateLimitError):
     """Propaga i 429 di Spotify al frontend con il corretto Retry-After."""
     retry_after = int(exc.retry_after) if exc.retry_after else 60
-    logger.warning("Spotify rate limit propagato al frontend: Retry-After=%ds", retry_after)
+    logger.warning(
+        "Spotify rate limit propagato al frontend: Retry-After=%ds", retry_after
+    )
     return JSONResponse(
         status_code=429,
-        content={"detail": f"Spotify rate limit attivo. Riprova tra {retry_after} secondi."},
+        content={
+            "detail": f"Spotify rate limit attivo. Riprova tra {retry_after} secondi."
+        },
         headers={"Retry-After": str(retry_after)},
     )
+
+
+# Proxy support: trust X-Forwarded-For when behind a reverse proxy
+if os.getenv("BEHIND_PROXY", "").lower() == "true":
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 # Rate Limiter (prima di CORS per intercettare richieste eccessive)
 app.add_middleware(APIRateLimiter, requests_per_minute=120)
@@ -115,6 +130,7 @@ async def health():
     checks = {"database": "ok"}
     try:
         from sqlalchemy import text
+
         async with async_session() as session:
             await session.execute(text("SELECT 1"))
     except Exception as e:
@@ -123,4 +139,6 @@ async def health():
 
     status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
     status_code = 200 if status == "ok" else 503
-    return JSONResponse(content={"status": status, "checks": checks}, status_code=status_code)
+    return JSONResponse(
+        content={"status": status, "checks": checks}, status_code=status_code
+    )

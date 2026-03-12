@@ -1,5 +1,78 @@
 # Refactor Log
 
+## 2026-03-12 — Health Suggestion Fixes + KPI Deduplication
+
+Date: 2026-03-12
+Description: Resolve all 14 health report suggestions (3 backend + 11 frontend) + deduplicate DashboardPage KPI row + SVG accessibility
+Triggered by: `/feature` suggestions + `/health --fix` + `/refactor`
+Health findings: S-2, S-4, S-5 (backend), S-1–S-11 (frontend), UI-3, UI-5 (post-fix health scan)
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Slices planned | 2 (refactor phase) |
+| Slices completed | 2 |
+| Slices reverted | 0 |
+| Files changed | 19 total (4 backend + 13 frontend + 2 tasks) |
+| Verification | `ruff check` + `npm run build` + `npm run lint` |
+| Final status | ✅ all passing |
+
+### Changes — Feature Phase (parallel agents)
+
+**Backend:**
+| File | What Changed |
+|------|-------------|
+| `spotify_client.py` | Removed deprecated `get_recommendations` method (S-2) |
+| `discovery.py` | Removed wasted API call, direct `new_discoveries[:20]` (S-2) |
+| `rate_limiter.py` | Default RPM 60→120 to match main.py config (S-4) |
+| `audio_analyzer.py` | Parallelized `compute_trends` with `asyncio.gather` + `_safe_compute` wrapper (S-5) |
+
+**Frontend:**
+| File | What Changed |
+|------|-------------|
+| `KPICard.jsx` | Added `typeof value === 'number'` guard on `value % 1` (S-1) |
+| `ArtistNetwork.jsx` | `useMemo` dataKey + prevDataKeyRef to skip unnecessary simulation restarts (S-2), keyboard a11y on SVG nodes (S-3) |
+| `ListeningHeatmap.jsx` | Moved inline `<style>` to globals.css (S-4) |
+| `StreakDisplay.jsx` | Moved inline `<style>` to globals.css with `--circumference` CSS var (S-5), replaced `animate-slide-up` with framer-motion (S-7) |
+| `DashboardPage.jsx` | Progressive rendering — each section loads independently (S-6), fixed indentation (S-9) |
+| `PlaylistStatCard.jsx` | Replaced `animate-slide-up` with framer-motion `motion.div` (S-7) |
+| `SessionStats.jsx` | Replaced `animate-slide-up` with framer-motion `motion.div` (S-8) |
+| `ClaudeExportPanel.jsx` | Renamed `border-border-hover` → `border-surface-hover` (S-10) |
+| `SlideOutro.jsx` | Added `canvas.remove()` cleanup after html2canvas (S-11) |
+| `globals.css` | Added heatmap/streak CSS from extracted inline styles |
+
+### Changes — Health Auto-Fix Phase
+
+| File | What Changed |
+|------|-------------|
+| `globals.css` | Removed dead `.stagger-1–4` classes, removed conflicting `transition` on `.progress-ring-circle` |
+| `SlideOutro.jsx` | Removed dead `objectUrl` variable, removed unused `i` map param |
+| `ArtistNetwork.jsx` | Added `role="img" aria-label` to parent SVG |
+
+### Changes — Refactor Phase (sequential slices)
+
+| # | Description | Files | Status |
+|---|-------------|-------|--------|
+| 1 | Unified KPI row — eliminated loading/loaded branch duplication | DashboardPage.jsx | ✅ |
+| 2 | Replaced Tailwind `transition-all` on SVG circles with CSS `.artist-node` class | ArtistNetwork.jsx, globals.css | ✅ |
+
+### Changes — Verification Round
+
+| File | What Changed |
+|------|-------------|
+| `audio_analyzer.py:285` | **CRITICAL fix**: added `except SpotifyAuthError: raise` in `get_or_fetch_features` — auth errors were being swallowed |
+| `StreakDisplay.jsx` | Removed unnecessary `useMemo` for simple arithmetic + removed now-unused `react` import |
+| `ArtistNetwork.jsx:153` | Simplified useEffect deps to `[dataKey, nodeIndex]` (removed redundant `nodes`, `edges`) |
+| `KPICard.jsx:106` | Added `e.preventDefault()` on keyboard scroll handler to prevent Space from scrolling page |
+
+### Notes
+
+- ESLint warnings: 227 (pre-existing unused imports from earlier refactors)
+- One CRITICAL found during verification: `get_or_fetch_features` was missing SpotifyAuthError re-raise — this was a pre-existing bug exposed by the new `_safe_compute` wrapper
+
+---
+
 ## 2026-03-12 — Health Report Fixes
 
 Date: 2026-03-12

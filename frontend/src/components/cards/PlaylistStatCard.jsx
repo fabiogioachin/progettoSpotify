@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { Music, Users, Calendar, Clock } from 'lucide-react'
 
 export default function PlaylistStatCard({ playlist, index = 0 }) {
@@ -17,9 +18,11 @@ export default function PlaylistStatCard({ playlist, index = 0 }) {
   const concentrationPct = Math.round(playlist.artist_concentration * 100)
 
   return (
-    <div
-      className="glow-card bg-surface rounded-xl p-4 animate-slide-up"
-      style={{ animationDelay: `${index * 50}ms` }}
+    <motion.div
+      className="glow-card bg-surface rounded-xl p-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.05 }}
     >
       <div className="flex items-start gap-3 mb-3">
         {playlist.image ? (
@@ -63,7 +66,7 @@ export default function PlaylistStatCard({ playlist, index = 0 }) {
         <MiniStat icon={Calendar} label="Anno medio" value={freshnessLabel} />
         <MiniStat icon={Clock} label="Ultimo aggiornamento" value={stalenessLabel} />
       </div>
-    </div>
+    </motion.div>
   )
 }
 
