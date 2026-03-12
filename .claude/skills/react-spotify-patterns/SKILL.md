@@ -161,10 +161,19 @@ Palette Spotify-dark con accent indigo:
 - `.stagger-1` ... `.stagger-4`: animation delay 0.1s–0.4s
 - `.audio-bar`: barra animata per login page
 
-### Animations (Tailwind)
+### Animations (Framer Motion + Tailwind)
 
-- `animate-fade-in`: opacity 0→1, 0.5s
-- `animate-slide-up`: translate Y 20px→0 + fade, 0.5s
+**Framer Motion (primary):**
+- **Page transitions**: `AnimatePresence` in `AppLayout.jsx` — enter fade+slide-up (300ms), exit fade+slide-down (150ms)
+- **StaggerContainer + StaggerItem**: reusable wrappers (`components/ui/StaggerContainer.jsx`) — parent staggers children at 40ms, items fade+slide-up (300ms)
+- **KPICard whileInView**: scroll-driven fade-in, `viewport={{ once: true, margin: '-40px' }}`, delay from `delay` prop (ms→s)
+- **Sidebar mobile**: `AnimatePresence` + `motion.aside` (x: -240→0) + `motion.div` overlay (opacity fade)
+
+**Skeleton loaders** (`components/ui/Skeleton.jsx`):
+- `SkeletonKPICard`, `SkeletonTrackRow`, `SkeletonCard`, `SkeletonGrid` — replace LoadingSpinner in pages
+
+**Tailwind (legacy/supplementary):**
+- `animate-fade-in`: opacity 0→1, 0.5s (non-motion contexts)
 - `animate-pulse-glow`: box-shadow indigo pulsante
 - `animate-float`: translate Y oscillante (6s)
 

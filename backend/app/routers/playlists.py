@@ -93,15 +93,21 @@ async def compare_playlists(
                 )
                 playlist_name = playlist_data.get("name", "")
 
-                items_data = await retry_with_backoff(
-                    client.get, f"/playlists/{pid}/items",
-                    limit=100,
-                )
-                for item in items_data.get("items", []):
-                    t = item.get("item") or item.get("track")
-                    if t and t.get("id"):
-                        all_tracks.append(t)
-                        track_ids.append(t["id"])
+                offset = 0
+                while True:
+                    items_data = await retry_with_backoff(
+                        client.get, f"/playlists/{pid}/items",
+                        limit=50, offset=offset,
+                    )
+                    items = items_data.get("items", [])
+                    for item in items:
+                        t = item.get("item") or item.get("track")
+                        if t and t.get("id"):
+                            all_tracks.append(t)
+                            track_ids.append(t["id"])
+                    if not items_data.get("next") or len(items) < 50:
+                        break
+                    offset += 50
             except SpotifyAuthError:
                 raise
             except Exception:

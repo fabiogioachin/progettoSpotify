@@ -7,10 +7,12 @@ import {
   Users,
   ListMusic,
   BarChart3,
+  Sparkles,
   Menu,
   X,
 } from 'lucide-react'
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 const NAV_SECTIONS = [
   {
@@ -18,6 +20,7 @@ const NAV_SECTIONS = [
     items: [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { href: '/discovery', icon: Compass, label: 'Scopri' },
+      { href: '/wrapped', icon: Sparkles, label: 'Il Tuo Wrapped', special: true },
     ],
   },
   {
@@ -41,6 +44,67 @@ export default function Sidebar() {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const sidebarContent = (
+    <>
+      {/* Close button (mobile) */}
+      <div className="flex items-center justify-end p-3 lg:hidden">
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all"
+          aria-label="Chiudi menu"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Spacer to account for header height on desktop */}
+      <div className="hidden lg:block h-16 flex-shrink-0" />
+
+      {/* Nav sections */}
+      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.title}>
+            <h4 className="text-text-muted text-[10px] font-semibold uppercase tracking-widest px-3 mb-2">
+              {section.title}
+            </h4>
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive = location.pathname === item.href
+
+                return (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative
+                      ${
+                        item.special
+                          ? isActive
+                            ? 'bg-accent/20 text-accent'
+                            : 'bg-accent/10 text-accent hover:bg-accent/20'
+                          : isActive
+                            ? 'text-text-primary bg-surface-hover'
+                            : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+                      }`}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {/* Active indicator bar */}
+                    {isActive && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full" />
+                    )}
+                    <Icon size={18} className={isActive || item.special ? 'text-accent' : ''} />
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+    </>
+  )
+
   return (
     <>
       {/* Mobile toggle button */}
@@ -52,73 +116,40 @@ export default function Sidebar() {
         <Menu size={22} />
       </button>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/60 z-40"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      {/* Mobile overlay + sidebar with AnimatePresence */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              key="sidebar-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="lg:hidden fixed inset-0 bg-black/60 z-40"
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.aside
+              key="sidebar-mobile"
+              initial={{ x: -240 }}
+              animate={{ x: 0 }}
+              exit={{ x: -240 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="lg:hidden fixed top-0 left-0 h-full z-50 w-60 bg-surface border-r border-border flex flex-col"
+              aria-label="Navigazione laterale"
+            >
+              {sidebarContent}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
-      {/* Sidebar */}
+      {/* Desktop sidebar — always visible, no animation needed */}
       <aside
-        className={`fixed top-0 left-0 h-full z-50 w-60 bg-surface border-r border-border flex flex-col transition-transform duration-300 lg:translate-x-0 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className="hidden lg:flex fixed top-0 left-0 h-full z-50 w-60 bg-surface border-r border-border flex-col"
         aria-label="Navigazione laterale"
       >
-        {/* Close button (mobile) */}
-        <div className="flex items-center justify-end p-3 lg:hidden">
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all"
-            aria-label="Chiudi menu"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Spacer to account for header height on desktop */}
-        <div className="hidden lg:block h-16 flex-shrink-0" />
-
-        {/* Nav sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
-          {NAV_SECTIONS.map((section) => (
-            <div key={section.title}>
-              <h4 className="text-text-muted text-[10px] font-semibold uppercase tracking-widest px-3 mb-2">
-                {section.title}
-              </h4>
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon
-                  const isActive = location.pathname === item.href
-
-                  return (
-                    <Link
-                      key={item.href}
-                      to={item.href}
-                      onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative
-                        ${
-                          isActive
-                            ? 'text-text-primary bg-surface-hover'
-                            : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
-                        }`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {/* Active indicator bar */}
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full" />
-                      )}
-                      <Icon size={18} className={isActive ? 'text-accent' : ''} />
-                      {item.label}
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
+        {sidebarContent}
       </aside>
     </>
   )

@@ -1,7 +1,8 @@
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import KPICard from '../components/cards/KPICard'
 import ArtistNetwork from '../components/charts/ArtistNetwork'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music } from 'lucide-react'
 
 export default function ArtistNetworkPage() {
@@ -32,16 +33,31 @@ export default function ArtistNetworkPage() {
         )}
 
         {loading ? (
-          <LoadingSpinner />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonKPICard key={i} />
+              ))}
+            </div>
+            <SkeletonCard height="h-96" />
+          </div>
         ) : (
           <>
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} />
-              <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} />
-              <KPICard title="Cluster" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} />
-              <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} />
-            </div>
+            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <StaggerItem>
+                <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="Numero di artisti visualizzati nella rete, basato sui tuoi ascolti e le loro connessioni" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Relazioni tra artisti: generi condivisi o artisti correlati secondo Spotify" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti strettamente collegati tra loro nel tuo ecosistema musicale" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} tooltip="Artisti con la popolarità più alta nel tuo grafo" />
+              </StaggerItem>
+            </StaggerContainer>
 
             {/* Network Graph */}
             <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} clusterNames={clusterNames} loading={loading} />
@@ -53,22 +69,23 @@ export default function ArtistNetworkPage() {
                   <Music size={18} className="text-accent" />
                   Generi dominanti nel tuo ecosistema
                 </h3>
-                <div className="flex flex-wrap gap-2">
+                <StaggerContainer className="flex flex-wrap gap-2">
                   {topGenres.map((g, i) => {
                     const size = i < 3 ? 'text-sm px-3 py-1.5' : 'text-xs px-2 py-1'
                     const opacity = Math.max(0.4, 1 - (i * 0.08))
                     return (
-                      <span
-                        key={g.genre}
-                        className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20`}
-                        style={{ opacity }}
-                      >
-                        {g.genre}
-                        <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
-                      </span>
+                      <StaggerItem key={g.genre}>
+                        <span
+                          className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20 inline-block`}
+                          style={{ opacity }}
+                        >
+                          {g.genre}
+                          <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
+                        </span>
+                      </StaggerItem>
                     )
                   })}
-                </div>
+                </StaggerContainer>
               </div>
             )}
 
@@ -82,29 +99,31 @@ export default function ArtistNetworkPage() {
                 <p className="text-text-secondary text-sm mb-4">
                   Artisti che collegano cluster di gusto diversi nel tuo ecosistema
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                  {bridges.map((bridge, i) => (
-                    <div key={bridge.id} className="flex items-start gap-3 p-3 rounded-lg bg-surface-hover animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
-                      {bridge.image ? (
-                        <img src={bridge.image} alt={bridge.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-background flex items-center justify-center flex-shrink-0">
-                          <Users size={18} className="text-text-muted" />
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {bridges.map((bridge) => (
+                    <StaggerItem key={bridge.id}>
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-surface-hover">
+                        {bridge.image ? (
+                          <img src={bridge.image} alt={bridge.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-background flex items-center justify-center flex-shrink-0">
+                            <Users size={18} className="text-text-muted" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-text-primary text-sm font-medium truncate">{bridge.name}</p>
+                          <p className="text-accent text-xs">{bridge.bridge_score} conn. cross-cluster</p>
+                          {bridge.genres && bridge.genres.length > 0 && (
+                            <p className="text-text-muted text-[10px] truncate mt-0.5">{bridge.genres.join(', ')}</p>
+                          )}
+                          {bridge.popularity > 0 && (
+                            <p className="text-text-muted text-[10px]">Pop. {bridge.popularity}</p>
+                          )}
                         </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-text-primary text-sm font-medium truncate">{bridge.name}</p>
-                        <p className="text-accent text-xs">{bridge.bridge_score} conn. cross-cluster</p>
-                        {bridge.genres && bridge.genres.length > 0 && (
-                          <p className="text-text-muted text-[10px] truncate mt-0.5">{bridge.genres.join(', ')}</p>
-                        )}
-                        {bridge.popularity > 0 && (
-                          <p className="text-text-muted text-[10px]">Pop. {bridge.popularity}</p>
-                        )}
                       </div>
-                    </div>
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
               </div>
             )}
           </>

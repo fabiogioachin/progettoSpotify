@@ -13,6 +13,7 @@ const TasteEvolutionPage = lazy(() => import('./pages/TasteEvolutionPage'))
 const TemporalPage = lazy(() => import('./pages/TemporalPage'))
 const ArtistNetworkPage = lazy(() => import('./pages/ArtistNetworkPage'))
 const PlaylistAnalyticsPage = lazy(() => import('./pages/PlaylistAnalyticsPage'))
+const WrappedPage = lazy(() => import('./pages/WrappedPage'))
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -88,6 +89,10 @@ function AppRoutes() {
               <PlaylistAnalyticsPage />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/wrapped"
+          element={user ? <WrappedPage /> : <Navigate to="/" replace />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

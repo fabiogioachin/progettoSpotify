@@ -7,7 +7,8 @@ import TrendTimeline from '../components/charts/TrendTimeline'
 import GenreTreemap from '../components/charts/GenreTreemap'
 import ClaudeExportPanel from '../components/export/ClaudeExportPanel'
 import PeriodSelector from '../components/ui/PeriodSelector'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 
 export default function DashboardPage() {
@@ -65,7 +66,17 @@ export default function DashboardPage() {
         </div>
 
         {isLoading ? (
-          <LoadingSpinner />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonKPICard key={i} />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <SkeletonCard height="h-72" />
+              <SkeletonCard height="h-72" />
+            </div>
+          </div>
         ) : (
           <>
             {hasError && (
@@ -75,41 +86,49 @@ export default function DashboardPage() {
             )}
 
             {/* KPI Row — dati reali sempre disponibili */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <KPICard
-                title="Brani analizzati"
-                value={trackCount}
-                icon={Music}
-                delay={0}
-                tooltip="Numero di brani nel tuo periodo di ascolto selezionato"
-              />
-              <KPICard
-                title="Streak di ascolto"
-                value={streak}
-                suffix=" giorni"
-                icon={Flame}
-                delay={100}
-                tooltip="Giorni consecutivi in cui hai ascoltato musica. Vai ai Pattern Temporali per i dettagli"
-                link="/temporal#streak"
-              />
-              {topGenre && (
+            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <StaggerItem>
                 <KPICard
-                  title="Genere top"
-                  value={topGenre}
-                  suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
-                  icon={Disc3}
-                  delay={200}
-                  tooltip="Il genere musicale più frequente tra i tuoi artisti"
+                  title="Brani analizzati"
+                  value={trackCount}
+                  icon={Music}
+                  delay={0}
+                  tooltip="Numero di brani nel tuo periodo di ascolto selezionato"
                 />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard
+                  title="Streak di ascolto"
+                  value={streak}
+                  suffix=" giorni"
+                  icon={Flame}
+                  delay={100}
+                  tooltip="Giorni consecutivi in cui hai ascoltato musica. Vai ai Pattern Temporali per i dettagli"
+                  link="/temporal#streak"
+                />
+              </StaggerItem>
+              {topGenre && (
+                <StaggerItem>
+                  <KPICard
+                    title="Genere top"
+                    value={topGenre}
+                    suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
+                    icon={Disc3}
+                    delay={200}
+                    tooltip="Il genere musicale più frequente tra i tuoi artisti"
+                  />
+                </StaggerItem>
               )}
-              <KPICard
-                title="Artisti unici"
-                value={uniqueArtists}
-                icon={Users}
-                delay={300}
-                tooltip="Numero di artisti diversi tra i tuoi brani più ascoltati"
-              />
-            </div>
+              <StaggerItem>
+                <KPICard
+                  title="Artisti unici"
+                  value={uniqueArtists}
+                  icon={Users}
+                  delay={300}
+                  tooltip="Numero di artisti diversi tra i tuoi brani più ascoltati"
+                />
+              </StaggerItem>
+            </StaggerContainer>
 
             {/* Trend Timeline — full width */}
             <TrendTimeline trends={trends} />
@@ -123,10 +142,13 @@ export default function DashboardPage() {
                   Top 50 Brani
                 </h3>
                 <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
-                  {tracks.slice(0, 50).map((track, i) => (
-                    <TrackCard key={track.id} track={track} index={i} />
-                  ))}
-
+                  <StaggerContainer className="space-y-1">
+                    {tracks.slice(0, 50).map((track, i) => (
+                      <StaggerItem key={track.id}>
+                        <TrackCard track={track} index={i} />
+                      </StaggerItem>
+                    ))}
+                  </StaggerContainer>
                 </div>
               </div>
             </div>

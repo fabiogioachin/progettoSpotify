@@ -23,6 +23,7 @@ from app.routers import (
     playlists,
     taste_evolution,
     temporal,
+    wrapped,
 )
 from app.services.background_tasks import sync_recent_plays
 from app.utils.rate_limiter import APIRateLimiter, RateLimitError
@@ -105,6 +106,7 @@ app.include_router(temporal.router)
 app.include_router(artist_network.router)
 app.include_router(playlist_analytics.router)
 app.include_router(historical.router)
+app.include_router(wrapped.router)
 
 
 @app.get("/health")

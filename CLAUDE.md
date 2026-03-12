@@ -62,6 +62,8 @@ Each request: `require_auth` extracts user_id from signed session cookie → rou
 
 Data fetching: `useSpotifyData(endpoint)` hook → Axios client with 429 retry interceptor (Retry-After ≤ 30s, max 2 retries) + 401 → dispatches `auth:expired` event → AuthContext triggers logout.
 
+**Animations** (framer-motion): Page transitions via `AnimatePresence` in AppLayout (fade+slide). KPICards use `whileInView` for scroll-driven fade-in. Lists/grids use `StaggerContainer` + `StaggerItem` (40ms stagger). Mobile sidebar slides in/out via `motion.aside`. Loading states use skeleton loaders (`Skeleton.jsx`) matching component shapes.
+
 ## Critical Invariants
 
 1. **SpotifyAuthError propagation**: every `except Exception` block in router/service code that calls SpotifyClient MUST be preceded by `except SpotifyAuthError: raise`. Swallowed auth errors show stale data instead of redirecting to login.
@@ -103,4 +105,5 @@ Never drop files in root. If a new category emerges, create a subdirectory.
 - Default branch: `master`
 - Task tracking: `tasks/todo.md` + `tasks/lessons.md` (update lessons after every correction)
 - Styling: Tailwind + CSS variables in `frontend/src/styles/globals.css`. Fonts: Space Grotesk (display), Inter (body)
+- Animations: framer-motion for page transitions, stagger, scroll-reveal, sidebar. Skeleton loaders for loading states.
 - Empty sections: hide rather than showing "nessun dato disponibile"

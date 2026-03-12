@@ -51,20 +51,26 @@ async def get_historical_top_songs(client) -> dict:
         async with sem:
             tracks = []
             # Use /items endpoint (Feb 2026: /tracks renamed to /items)
-            data = await retry_with_backoff(
-                client.get, f"/playlists/{pl_info['playlist_id']}/items", limit=100
-            )
-            for item in data.get("items", []):
-                # Feb 2026: field renamed from "track" to "item"
-                t = item.get("item") or item.get("track")
-                if not t or not t.get("id"):
-                    continue
-                tracks.append({
-                    "name": t.get("name", ""),
-                    "artist": t["artists"][0]["name"] if t.get("artists") else "",
-                    "album": t.get("album", {}).get("name", ""),
-                    "album_image": (t.get("album", {}).get("images") or [{}])[0].get("url"),
-                })
+            offset = 0
+            while True:
+                data = await retry_with_backoff(
+                    client.get, f"/playlists/{pl_info['playlist_id']}/items", limit=50, offset=offset
+                )
+                items = data.get("items", [])
+                for item in items:
+                    # Feb 2026: field renamed from "track" to "item"
+                    t = item.get("item") or item.get("track")
+                    if not t or not t.get("id"):
+                        continue
+                    tracks.append({
+                        "name": t.get("name", ""),
+                        "artist": t["artists"][0]["name"] if t.get("artists") else "",
+                        "album": t.get("album", {}).get("name", ""),
+                        "album_image": (t.get("album", {}).get("images") or [{}])[0].get("url"),
+                    })
+                if not data.get("next") or len(items) < 50:
+                    break
+                offset += 50
             return {
                 "year": pl_info["year"],
                 "playlist_name": pl_info["playlist_name"],

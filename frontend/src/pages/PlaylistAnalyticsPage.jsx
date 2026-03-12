@@ -2,7 +2,8 @@ import { useSpotifyData } from '../hooks/useSpotifyData'
 import KPICard from '../components/cards/KPICard'
 import PlaylistStatCard from '../components/cards/PlaylistStatCard'
 import OverlapHeatmap from '../components/charts/OverlapHeatmap'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TOOLTIP_STYLE } from '../lib/chartTheme'
 import { ListMusic, Globe, Lock, Users, RefreshCw } from 'lucide-react'
@@ -32,16 +33,31 @@ export default function PlaylistAnalyticsPage() {
         )}
 
         {loading ? (
-          <LoadingSpinner />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonKPICard key={i} />
+              ))}
+            </div>
+            <SkeletonCard height="h-72" />
+          </div>
         ) : (
           <>
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <KPICard title="Totale Playlist" value={summary.total_playlists || 0} icon={ListMusic} delay={0} />
-              <KPICard title="Pubbliche" value={summary.public_count || 0} icon={Globe} delay={100} />
-              <KPICard title="Private" value={summary.private_count || 0} icon={Lock} delay={200} />
-              <KPICard title="Collaborative" value={summary.collaborative_count || 0} icon={Users} delay={300} />
-            </div>
+            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <StaggerItem>
+                <KPICard title="Totale Playlist" value={summary.total_playlists || 0} icon={ListMusic} delay={0} tooltip="Numero totale di playlist nel tuo account Spotify" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Pubbliche" value={summary.public_count || 0} icon={Globe} delay={100} tooltip="Playlist visibili a tutti gli utenti Spotify" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Private" value={summary.private_count || 0} icon={Lock} delay={200} tooltip="Playlist visibili solo a te" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Collaborative" value={summary.collaborative_count || 0} icon={Users} delay={300} tooltip="Playlist a cui altri utenti possono aggiungere brani" />
+              </StaggerItem>
+            </StaggerContainer>
 
             {/* Size Distribution */}
             <div className="glow-card bg-surface rounded-xl p-5">
@@ -64,11 +80,13 @@ export default function PlaylistAnalyticsPage() {
             {playlists.length > 0 && (
               <div>
                 <h3 className="text-text-primary font-display font-semibold mb-4">Dettaglio Playlist</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {playlists.map((playlist, i) => (
-                    <PlaylistStatCard key={playlist.id} playlist={playlist} index={i} />
+                    <StaggerItem key={playlist.id}>
+                      <PlaylistStatCard playlist={playlist} index={i} />
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
               </div>
             )}
 

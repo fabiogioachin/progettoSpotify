@@ -3,7 +3,8 @@ import KPICard from '../components/cards/KPICard'
 import ListeningHeatmap from '../components/charts/ListeningHeatmap'
 import StreakDisplay from '../components/charts/StreakDisplay'
 import SessionStats from '../components/charts/SessionStats'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { Headphones, Calendar, RefreshCw, TrendingUp } from 'lucide-react'
 
 export default function TemporalPage() {
@@ -60,14 +61,24 @@ export default function TemporalPage() {
         )}
 
         {loading ? (
-          <LoadingSpinner />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SkeletonKPICard />
+              <SkeletonKPICard />
+            </div>
+            <SkeletonCard height="h-64" />
+          </div>
         ) : (
           <>
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <KPICard title="Ascolti Totali" value={totalPlays} icon={Headphones} delay={0} />
-              <KPICard title="Ora di Punta" value={peakHourLabel} icon={Calendar} delay={100} />
-            </div>
+            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <StaggerItem>
+                <KPICard title="Ascolti Totali" value={totalPlays} icon={Headphones} delay={0} tooltip="Numero totale di ascolti registrati nel database. Cresce ad ogni visita della pagina" />
+              </StaggerItem>
+              <StaggerItem>
+                <KPICard title="Ora di Punta" value={peakHourLabel} icon={Calendar} delay={100} tooltip="L'ora del giorno in cui ascolti più musica, basata sullo storico accumulato" />
+              </StaggerItem>
+            </StaggerContainer>
 
             {/* Heatmap */}
             <ListeningHeatmap
@@ -93,17 +104,19 @@ export default function TemporalPage() {
             {topTracks.length > 0 && (
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4">Brani Più Ascoltati</h3>
-                <div className="space-y-2">
+                <StaggerContainer className="space-y-2">
                   {topTracks.map((t, i) => (
-                    <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
-                      <span className="w-6 text-center text-text-muted text-sm font-mono">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-text-primary text-sm truncate">{t.name}</p>
+                    <StaggerItem key={i}>
+                      <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
+                        <span className="w-6 text-center text-text-muted text-sm font-mono">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-text-primary text-sm truncate">{t.name}</p>
+                        </div>
+                        <span className="text-accent text-sm font-medium">{t.count}×</span>
                       </div>
-                      <span className="text-accent text-sm font-medium">{t.count}×</span>
-                    </div>
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
               </div>
             )}
 
@@ -111,14 +124,16 @@ export default function TemporalPage() {
             {peakHours.length > 0 && (
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4">Ore di Punta</h3>
-                <div className="flex gap-4 flex-wrap">
+                <StaggerContainer className="flex gap-4 flex-wrap">
                   {peakHours.map((ph, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-surface-hover rounded-lg px-4 py-3">
-                      <span className="text-2xl font-display font-bold text-accent">{String(ph.hour).padStart(2, '0')}:00</span>
-                      <span className="text-text-secondary text-sm">{ph.count} ascolti</span>
-                    </div>
+                    <StaggerItem key={i}>
+                      <div className="flex items-center gap-3 bg-surface-hover rounded-lg px-4 py-3">
+                        <span className="text-2xl font-display font-bold text-accent">{String(ph.hour).padStart(2, '0')}:00</span>
+                        <span className="text-text-secondary text-sm">{ph.count} ascolti</span>
+                      </div>
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
               </div>
             )}
           </>

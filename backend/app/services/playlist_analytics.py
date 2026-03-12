@@ -55,25 +55,31 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
             added_dates = []
             try:
                 # Use /items endpoint (Feb 2026: /tracks renamed to /items)
-                data = await retry_with_backoff(
-                    client.get, f"/playlists/{pid}/items", limit=100
-                )
-                for item in data.get("items", []):
-                    # Feb 2026: field renamed from "track" to "item"
-                    track = item.get("item") or item.get("track")
-                    if not track or not track.get("id"):
-                        continue
-                    track_ids.append(track["id"])
-                    for a in track.get("artists", []):
-                        if a.get("id"):
-                            artists.add(a["id"])
-                    album = track.get("album", {})
-                    rd = album.get("release_date")
-                    if rd:
-                        release_dates.append(rd)
-                    added_at = item.get("added_at")
-                    if added_at:
-                        added_dates.append(added_at)
+                offset = 0
+                while True:
+                    data = await retry_with_backoff(
+                        client.get, f"/playlists/{pid}/items", limit=50, offset=offset
+                    )
+                    items = data.get("items", [])
+                    for item in items:
+                        # Feb 2026: field renamed from "track" to "item"
+                        track = item.get("item") or item.get("track")
+                        if not track or not track.get("id"):
+                            continue
+                        track_ids.append(track["id"])
+                        for a in track.get("artists", []):
+                            if a.get("id"):
+                                artists.add(a["id"])
+                        album = track.get("album", {})
+                        rd = album.get("release_date")
+                        if rd:
+                            release_dates.append(rd)
+                        added_at = item.get("added_at")
+                        if added_at:
+                            added_dates.append(added_at)
+                    if not data.get("next") or len(items) < 50:
+                        break
+                    offset += 50
             except SpotifyAuthError:
                 raise
             except Exception as exc:

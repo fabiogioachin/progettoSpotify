@@ -133,7 +133,8 @@
 - **Root cause**: Spotify Feb 2026 migration renamed `/playlists/{id}/tracks` → `/playlists/{id}/items`. The full playlist endpoint (`GET /playlists/{id}`) no longer includes tracks in dev mode.
 - **Fix**: use `GET /playlists/{pid}/items` (new endpoint) for playlist tracks. Within each item object, the track data field is renamed from `"track"` to `"item"` — use `item.get("item") or item.get("track")` for backwards compat.
 - **Batch endpoints removed**: `GET /artists?ids=...`, `GET /tracks?ids=...`, `GET /albums?ids=...` are all removed in dev mode. Use individual endpoints (`GET /artists/{id}`) with semaphore + asyncio.gather.
-- **Limitation**: only first 100 items per playlist request. Cap individual artist fetches to ~15 per playlist (reduced from 30 due to dev mode rate limits).
+- **Pagination**: `/playlists/{id}/items` has `limit` max 50 (not 100). Always paginate with `offset` loop + `next` check. All 3 consumers (`playlists.py`, `playlist_analytics.py`, `historical_tops.py`) now paginate.
+- **Cap**: individual artist fetches capped to ~20 globally per endpoint (reduced from 30 due to dev mode rate limits).
 - **Affected files**: `playlists.py`, `playlist_analytics.py`, `historical_tops.py`, `audio_analyzer.py`
 - **Rule**: always check Spotify migration guide before assuming endpoint availability. Use `/items` not `/tracks`.
 - **Reference**: https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
@@ -167,6 +168,26 @@
 - **Fix**: wrappato tutte le chiamate in `retry_with_backoff`.
 - **Rule**: ogni chiamata a SpotifyClient deve passare per `retry_with_backoff` — il 429 handling di `SpotifyClient._request` alza `RateLimitError`, che `retry_with_backoff` gestisce con backoff.
 
+## UX/UI Polish — Framer Motion Integration (March 2026)
+
+### What Worked
+- `StaggerContainer` + `StaggerItem` as reusable wrapper pair kept page modifications minimal — just wrap existing elements
+- framer-motion `whileInView` with `viewport={{ once: true }}` is cleaner than IntersectionObserver for scroll-driven animations
+- Extracting `sidebarContent` as shared JSX between mobile (animated) and desktop (static) `<aside>` avoided code duplication
+- Skeleton loaders matching real component shapes (accent bar + title + value for KPICard) feel much more polished than generic spinners
+
+### Gotchas
+- When applying `AnimatePresence` to `AppLayout`, `mode="wait"` is required — otherwise exit and enter animations overlap causing layout shift
+- The `StaggerItem` component relies on parent `StaggerContainer` variants — it won't animate standalone (by design, but could confuse)
+- KPICard had both CSS `animate-slide-up` and now framer-motion `whileInView` — the CSS animation must be removed when adding motion, or they compete
+- ESLint config issue pre-existing: project uses ESLint 9 but has old `.eslintrc` format — `npm run lint` fails. Unrelated to motion changes.
+
+### Architecture Decisions
+- Kept `LoadingSpinner` with `fullScreen` for App.jsx auth/Suspense fallback — skeleton loaders only replace in-page loading states
+- Page transitions are subtle (8px slide + fade) rather than dramatic — analytics app should feel snappy, not theatrical
+- Sidebar desktop stays static (CSS `hidden lg:flex`) — only mobile gets AnimatePresence. No performance cost on desktop.
+- `StaggerContainer` stagger interval set to 40ms — fast enough to feel fluid, slow enough to see the cascade
+
 ### Data Integrity Checklist
 - [ ] All displayed data comes from real API calls (no mocks, no hardcoded values)
 - [ ] Missing data defaults to 0/null/empty, never to a plausible fake value
@@ -180,3 +201,25 @@
 - [ ] Every SpotifyClient call wrapped in `retry_with_backoff` (no direct `client.get_*` without retry)
 - [ ] Compare/analytics endpoints dedup shared data (artist IDs) across iterations before fetching
 - [ ] Global artist fetch cap ≤ 20 per endpoint invocation
+
+## Wrapped Export — Stories Feature (March 2026)
+
+### What Worked
+- Aggregated backend endpoint (`GET /api/wrapped`) calling 5 services in parallel via `_safe_fetch` — single request, clean loading state
+- `available_slides` computed server-side avoids per-field null checking on frontend
+- Full-screen overlay with `fixed inset-0 z-[100]` cleanly bypasses AppLayout without needing a separate layout component
+- Route outside `ProtectedRoute` but inside `AppRoutes` (which has `useAuth()`) — no need for `ProtectedRouteNoLayout`
+- Stories engine separated from slide content — adding/removing slides only requires editing the registry array
+- `onPointerDown` instead of `onClick` for mobile responsiveness (no 300ms tap delay)
+
+### Architecture Decisions
+- Backend does NOT create new services — only aggregates existing ones. Zero duplication.
+- html2canvas captures only the summary card ref, not the full screen — keeps export clean and fast
+- Web Share API with `canShare` check before attempting — graceful fallback to download
+- `min-h-[100dvh]` for mobile viewport (accounts for browser chrome)
+- Sidebar entry uses `special: true` flag for accent styling — doesn't interfere with existing nav logic
+
+### Gotchas
+- `html2canvas` needs explicit `backgroundColor: '#121212'` because CSS variables aren't resolved by the library
+- Slide z-index must be higher than click zone z-index, otherwise slide content (buttons, links) is unclickable
+- framer-motion `AnimatePresence mode="wait"` with `custom` prop requires both `variants` AND `custom` on the child `motion.div`

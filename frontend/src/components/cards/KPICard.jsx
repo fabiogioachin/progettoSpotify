@@ -1,9 +1,29 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useAnimatedValue } from '../../hooks/useAnimatedValue'
 
 export default function KPICard({ title, value, suffix = '', trend, icon: Icon, delay = 0, tooltip, link }) {
   const [showTooltip, setShowTooltip] = useState(false)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const hoverTimer = useRef(null)
+
+  const handleMouseEnter = useCallback(() => {
+    if (!tooltip) return
+    hoverTimer.current = setTimeout(() => setShowTooltip(true), 1000)
+  }, [tooltip])
+
+  const handleMouseLeave = useCallback(() => {
+    clearTimeout(hoverTimer.current)
+    setShowTooltip(false)
+  }, [])
+
+  const handleMouseMove = useCallback((e) => {
+    if (!tooltip) return
+    setMousePos({ x: e.clientX, y: e.clientY })
+  }, [tooltip])
+
   const animatedValue = useAnimatedValue(
     typeof value === 'number' ? value : null,
     1200,
@@ -13,11 +33,15 @@ export default function KPICard({ title, value, suffix = '', trend, icon: Icon, 
   const displayValue = typeof value === 'number' ? animatedValue : value
 
   const cardContent = (
-    <div
-      className={`glow-card bg-surface rounded-xl p-5 animate-slide-up relative overflow-hidden${link ? ' cursor-pointer hover:ring-1 hover:ring-accent/30 transition-all duration-300' : ''}`}
-      style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
-      onMouseEnter={() => tooltip && setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ duration: 0.4, delay: delay / 1000 }}
+      className={`glow-card bg-surface rounded-xl p-5 relative overflow-hidden${link ? ' cursor-pointer hover:ring-1 hover:ring-accent/30 transition-all duration-300' : ''}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onMouseMove={handleMouseMove}
     >
       {/* Accent bar */}
       <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent rounded-r-full" />
@@ -43,13 +67,32 @@ export default function KPICard({ title, value, suffix = '', trend, icon: Icon, 
           </span>
         )}
       </div>
-      {/* Tooltip on hover */}
-      {showTooltip && tooltip && (
-        <div className="absolute inset-x-0 bottom-0 bg-surface-hover/95 backdrop-blur-sm border-t border-border px-4 py-2 text-xs text-text-secondary z-10 animate-fade-in">
+      {/* Cursor-following tooltip via portal */}
+      {showTooltip && tooltip && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            zIndex: 99999,
+            left: mousePos.x + 14,
+            top: mousePos.y + 14,
+            maxWidth: '280px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(40, 40, 40, 0.95)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            color: '#b3b3b3',
+            fontSize: '12px',
+            lineHeight: '1.4',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+            pointerEvents: 'none',
+          }}
+        >
           {tooltip}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </motion.div>
   )
 
   if (link) {

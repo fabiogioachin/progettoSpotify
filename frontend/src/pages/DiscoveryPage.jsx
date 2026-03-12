@@ -2,7 +2,8 @@ import { Compass, Sparkles, Star, BarChart3, Music } from 'lucide-react'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
 import GenreTreemap from '../components/charts/GenreTreemap'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { SkeletonCard } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TOOLTIP_STYLE } from '../lib/chartTheme'
@@ -40,7 +41,13 @@ export default function DiscoveryPage() {
         </div>
 
         {isLoading ? (
-          <LoadingSpinner />
+          <div className="space-y-6">
+            <SkeletonCard height="h-72" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <SkeletonCard height="h-64" />
+              <SkeletonCard height="h-64" />
+            </div>
+          </div>
         ) : (
           <>
             {hasError && (
@@ -75,30 +82,28 @@ export default function DiscoveryPage() {
                     ? 'Brani che si discostano dal tuo profilo medio'
                     : 'Brani meno conosciuti tra i tuoi preferiti'}
                 </p>
-                <div className="space-y-2">
+                <StaggerContainer className="space-y-2">
                   {outliers.slice(0, 8).map((track) => (
-                    <div
-                      key={track.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300"
-                    >
-                      {track.album_image ? (
-                        <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
-                          <Music size={16} className="text-text-muted" />
+                    <StaggerItem key={track.id}>
+                      <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
+                        {track.album_image ? (
+                          <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
+                            <Music size={16} className="text-text-muted" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-text-primary text-sm truncate">{track.name}</p>
+                          <p className="text-text-muted text-xs truncate">{track.artist}</p>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-text-primary text-sm truncate">{track.name}</p>
-                        <p className="text-text-muted text-xs truncate">{track.artist}</p>
+                        <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
+                          {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
+                        </span>
                       </div>
-                      <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
-                        {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
-                      </span>
-                    </div>
+                    </StaggerItem>
                   ))}
-
-                </div>
+                </StaggerContainer>
               </div>
             </div>
 
@@ -113,45 +118,43 @@ export default function DiscoveryPage() {
                   ? 'Basati sul tuo profilo d\'ascolto — priorità ad artisti che non conosci ancora'
                   : 'Brani apparsi di recente nelle tue classifiche — non ancora nel tuo medio termine'}
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {recommendations.map((rec) => (
-                  <div
-                    key={rec.id}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-background hover:bg-surface-hover transition-all duration-300 group"
-                  >
-                    {rec.album_image ? (
-                      <img
-                        src={rec.album_image}
-                        alt={rec.album}
-                        className="w-12 h-12 rounded-md object-cover group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-md bg-surface-hover flex items-center justify-center">
-                        <Music size={18} className="text-text-muted" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-text-primary text-sm font-medium truncate">
-                        {rec.name}
-                      </p>
-                      <p className="text-text-muted text-xs truncate">{rec.artist}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {rec.is_new_artist && (
-                          <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                            Nuovo artista
-                          </span>
-                        )}
-                        {rec.popularity != null && (
-                          <span className="text-[10px] text-text-muted">
-                            Pop. {rec.popularity}
-                          </span>
-                        )}
+                  <StaggerItem key={rec.id}>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-background hover:bg-surface-hover transition-all duration-300 group">
+                      {rec.album_image ? (
+                        <img
+                          src={rec.album_image}
+                          alt={rec.album}
+                          className="w-12 h-12 rounded-md object-cover group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-md bg-surface-hover flex items-center justify-center">
+                          <Music size={18} className="text-text-muted" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-text-primary text-sm font-medium truncate">
+                          {rec.name}
+                        </p>
+                        <p className="text-text-muted text-xs truncate">{rec.artist}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {rec.is_new_artist && (
+                            <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                              Nuovo artista
+                            </span>
+                          )}
+                          {rec.popularity != null && (
+                            <span className="text-[10px] text-text-muted">
+                              Pop. {rec.popularity}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </StaggerItem>
                 ))}
-
-              </div>
+              </StaggerContainer>
             </div>
           </>
         )}

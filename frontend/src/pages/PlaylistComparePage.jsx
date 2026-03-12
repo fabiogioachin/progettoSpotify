@@ -13,6 +13,8 @@ import {
 import PlaylistComparison from '../components/charts/PlaylistComparison'
 import AudioRadar from '../components/charts/AudioRadar'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { SkeletonGrid } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { usePlaylistCompare } from '../hooks/usePlaylistCompare'
 import { PLAYLIST_COLORS, TOOLTIP_STYLE } from '../lib/chartTheme'
@@ -57,45 +59,46 @@ export default function PlaylistComparePage() {
         </div>
 
         {playlistsLoading ? (
-          <LoadingSpinner />
+          <SkeletonGrid count={8} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" cardHeight="h-20" />
         ) : (
           <>
             {/* Playlist selector */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {playlists.map((p) => {
                 const isSelected = selectedIds.includes(p.id)
                 return (
-                  <button
-                    key={p.id}
-                    onClick={() => togglePlaylist(p.id)}
-                    className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-300
-                      ${isSelected
-                        ? 'bg-accent/10 border-2 border-accent shadow-lg shadow-accent/10'
-                        : 'glow-card bg-surface hover:bg-surface-hover'
-                      }`}
-                  >
-                    {p.image ? (
-                      <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-surface-hover flex items-center justify-center">
-                        <ListMusic size={20} className="text-text-muted" />
+                  <StaggerItem key={p.id}>
+                    <button
+                      onClick={() => togglePlaylist(p.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-300
+                        ${isSelected
+                          ? 'bg-accent/10 border-2 border-accent shadow-lg shadow-accent/10'
+                          : 'glow-card bg-surface hover:bg-surface-hover'
+                        }`}
+                    >
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-surface-hover flex items-center justify-center">
+                          <ListMusic size={20} className="text-text-muted" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-text-primary text-sm font-medium truncate">{p.name}</p>
+                        <p className="text-text-muted text-xs">{p.track_count} brani</p>
                       </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-text-primary text-sm font-medium truncate">{p.name}</p>
-                      <p className="text-text-muted text-xs">{p.track_count} brani</p>
-                    </div>
-                    {isSelected && (
-                      <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">
-                          {selectedIds.indexOf(p.id) + 1}
-                        </span>
-                      </div>
-                    )}
-                  </button>
+                      {isSelected && (
+                        <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
+                          <span className="text-white text-xs font-bold">
+                            {selectedIds.indexOf(p.id) + 1}
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  </StaggerItem>
                 )
               })}
-            </div>
+            </StaggerContainer>
 
             {/* Compare button */}
             <div className="flex justify-center">
