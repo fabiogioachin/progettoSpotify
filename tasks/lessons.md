@@ -223,3 +223,24 @@
 - `html2canvas` needs explicit `backgroundColor: '#121212'` because CSS variables aren't resolved by the library
 - Slide z-index must be higher than click zone z-index, otherwise slide content (buttons, links) is unclickable
 - framer-motion `AnimatePresence mode="wait"` with `custom` prop requires both `variants` AND `custom` on the child `motion.div`
+
+## Health Report Fix — March 2026
+
+### Pattern: _safe_fetch must re-raise SpotifyAuthError
+- 5 locations had `except Exception` in inner helpers catching SpotifyAuthError
+- The correct `_safe_fetch` pattern is in `wrapped.py:22-30` — always copy from there
+- Rule: any new `_safe_fetch` or gather-wrapper function MUST include `except SpotifyAuthError: raise` before `except Exception`
+
+### Pattern: ProtectedRoute `withLayout` prop
+- `/wrapped` route needed auth protection but no AppLayout (full-screen stories)
+- Added `withLayout` prop to `ProtectedRoute` instead of duplicating auth logic inline
+- Rule: never use inline `user ? <Page /> : <Navigate />` — always use ProtectedRoute for consistent auth expiry handling
+
+### Pattern: usePlaylistCompare needs AbortController
+- Custom hooks that make API calls should always support cancellation via AbortController
+- Without it, unmounting during a request causes stale state updates
+- Reference: `useSpotifyData.js` already had this pattern — `usePlaylistCompare` was missing it
+
+### Pattern: Stale closure in useCallback with JSON.stringify
+- When `params` is a new object each render but `stableParams = JSON.stringify(params)` is the dep, parse stableParams inside the callback instead of closing over `params`
+- This avoids the latent risk of the closure holding a stale `params` ref

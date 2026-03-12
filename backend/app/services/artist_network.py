@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import retry_with_backoff
+from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 
 async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15) -> dict:
@@ -43,6 +43,8 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
             try:
                 data = await retry_with_backoff(client.get_related_artists, artist_id)
                 return artist_id, data.get("artists", [])
+            except SpotifyAuthError:
+                raise
             except Exception:
                 return artist_id, []
 
@@ -105,7 +107,7 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
             top_genre = max(genres, key=genres.get)
             cluster_names[cid] = top_genre.replace("-", " ").title()
         else:
-            cluster_names[cid] = f"Cluster {cid + 1}"
+            cluster_names[cid] = f"Cerchia {cid + 1}"
 
     # Genre summary for the network
     genre_counter = defaultdict(int)

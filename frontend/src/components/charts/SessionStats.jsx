@@ -130,7 +130,7 @@ export default function SessionStats({
             <Music size={18} className="text-accent" />
           </div>
           <div className="min-w-0">
-            <p className="text-text-muted text-[10px] uppercase tracking-wide mb-0.5">Brano piu ascoltato</p>
+            <p className="text-text-muted text-[10px] uppercase tracking-wide mb-0.5">Brano più ascoltato</p>
             <p className="text-text-primary text-sm font-semibold truncate">{mostPlayed.track_name}</p>
           </div>
           <span className="ml-auto text-accent font-display font-bold text-lg flex-shrink-0">

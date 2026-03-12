@@ -81,6 +81,9 @@ async def get_recent_tracks(
         data = await retry_with_backoff(client.get_recently_played, limit=limit)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore nel caricamento brani recenti: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nel caricamento dei brani recenti")
     finally:
         await client.close()
 
@@ -114,6 +117,9 @@ async def get_saved_tracks(
         data = await retry_with_backoff(client.get_saved_tracks, limit=limit, offset=offset)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore nel caricamento brani salvati: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nel caricamento dei brani salvati")
     finally:
         await client.close()
 

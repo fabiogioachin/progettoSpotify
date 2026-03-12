@@ -183,9 +183,6 @@ class SpotifyClient:
     async def get_playlists(self, limit: int = 50, offset: int = 0) -> dict:
         return await self.get("/me/playlists", limit=limit, offset=offset)
 
-    async def get_playlist_tracks(self, playlist_id: str, limit: int = 100, offset: int = 0) -> dict:
-        return await self.get(f"/playlists/{playlist_id}/tracks", limit=limit, offset=offset)
-
     async def get_recommendations(self, seed_tracks: list[str], limit: int = 20, **kwargs) -> dict:
         return await self.get(
             "/recommendations",
@@ -196,10 +193,6 @@ class SpotifyClient:
 
     async def get_artist(self, artist_id: str) -> dict:
         return await self.get(f"/artists/{artist_id}")
-
-    async def get_artists(self, artist_ids: list[str]) -> dict:
-        ids = ",".join(artist_ids[:50])
-        return await self.get("/artists", ids=ids)
 
     async def get_related_artists(self, artist_id: str) -> dict:
         return await self.get(f"/artists/{artist_id}/related-artists")

@@ -40,6 +40,9 @@ async def get_playlists(
         data = await retry_with_backoff(client.get_playlists, limit=limit, offset=offset)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore nel caricamento playlist: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nel caricamento delle playlist")
     finally:
         await client.close()
 

@@ -25,13 +25,13 @@ async def retry_with_backoff(coro_func, *args, max_retries: int = 3, base_delay:
                     retry_after, max_retry_after,
                 )
                 raise
-            logger.warning(f"Rate limited, retry in {retry_after}s (attempt {attempt + 1})")
+            logger.warning("Rate limited, retry in %ss (attempt %d)", retry_after, attempt + 1)
             await asyncio.sleep(retry_after)
         except SpotifyServerError:
             if attempt == max_retries:
                 raise
             delay = base_delay * (2 ** attempt)
-            logger.warning(f"Server error, retry in {delay}s (attempt {attempt + 1})")
+            logger.warning("Server error, retry in %ss (attempt %d)", delay, attempt + 1)
             await asyncio.sleep(delay)
 
 

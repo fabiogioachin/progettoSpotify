@@ -73,9 +73,7 @@ export default function SlidePeakHours({ data }) {
             </motion.div>
           )}
         </>
-      ) : (
-        <p className="text-text-secondary">Dati non disponibili</p>
-      )}
+      ) : null}
     </div>
   )
 }

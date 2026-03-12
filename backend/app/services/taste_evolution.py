@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import retry_with_backoff
+from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,8 @@ async def _safe_fetch(coro):
     """Wrapper che restituisce un dict vuoto se la chiamata fallisce."""
     try:
         return await coro
+    except SpotifyAuthError:
+        raise
     except Exception as exc:
         logger.warning("Taste evolution: chiamata API fallita: %s", exc)
         return {"items": []}

@@ -15,11 +15,12 @@ const ArtistNetworkPage = lazy(() => import('./pages/ArtistNetworkPage'))
 const PlaylistAnalyticsPage = lazy(() => import('./pages/PlaylistAnalyticsPage'))
 const WrappedPage = lazy(() => import('./pages/WrappedPage'))
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, withLayout = true }) {
   const { user, loading } = useAuth()
   if (loading) return <LoadingSpinner fullScreen />
   if (!user) return <Navigate to="/" replace />
-  return <AppLayout>{children}</AppLayout>
+  if (withLayout) return <AppLayout>{children}</AppLayout>
+  return children
 }
 
 function AppRoutes() {
@@ -92,7 +93,11 @@ function AppRoutes() {
         />
         <Route
           path="/wrapped"
-          element={user ? <WrappedPage /> : <Navigate to="/" replace />}
+          element={
+            <ProtectedRoute withLayout={false}>
+              <WrappedPage />
+            </ProtectedRoute>
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

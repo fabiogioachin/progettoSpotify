@@ -143,7 +143,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
 
   const handleMouseEnter = useCallback((node, pos) => {
     const clusterId = nodeClusterMap[node.id]
-    const clusterLabel = clusterId != null ? (clusterNames[clusterId] || `Cluster ${clusterId + 1}`) : null
+    const clusterLabel = clusterId != null ? (clusterNames[clusterId] || `Cerchia ${clusterId + 1}`) : null
     setTooltip({ ...node, x: pos.x, y: pos.y, clusterLabel })
   }, [nodeClusterMap, clusterNames])
 
@@ -259,7 +259,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
               <span>Pop. {tooltip.popularity}</span>
             )}
             {tooltip.followers > 0 && (
-              <span>{formatFollowers(tooltip.followers)} followers</span>
+              <span>{formatFollowers(tooltip.followers)} follower</span>
             )}
             {tooltip.connections > 0 && (
               <span>{tooltip.connections} conn.</span>
@@ -272,7 +272,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
         {[...new Set(clusters.map(c => c.cluster))].slice(0, 8).map(clusterId => (
           <div key={clusterId} className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
-            <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cluster ${clusterId + 1}`}</span>
+            <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cerchia ${clusterId + 1}`}</span>
           </div>
         ))}
       </div>

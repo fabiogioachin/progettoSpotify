@@ -9,7 +9,7 @@ export const FEATURE_LABELS = {
 }
 
 export const TIME_PERIODS = [
-  { value: 'short_term', label: 'Ultimo mese' },
-  { value: 'medium_term', label: '6 mesi' },
-  { value: 'long_term', label: 'Sempre' },
+  { value: 'short_term', label: '1M' },
+  { value: 'medium_term', label: '6M' },
+  { value: 'long_term', label: 'All' },
 ]

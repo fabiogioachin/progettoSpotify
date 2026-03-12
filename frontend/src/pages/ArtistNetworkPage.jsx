@@ -97,7 +97,7 @@ export default function ArtistNetworkPage() {
                   Artisti Ponte
                 </h3>
                 <p className="text-text-secondary text-sm mb-4">
-                  Artisti che collegano cluster di gusto diversi nel tuo ecosistema
+                  Artisti che collegano cerchie di gusto diverse nel tuo ecosistema
                 </p>
                 <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {bridges.map((bridge) => (
@@ -112,7 +112,7 @@ export default function ArtistNetworkPage() {
                         )}
                         <div className="min-w-0">
                           <p className="text-text-primary text-sm font-medium truncate">{bridge.name}</p>
-                          <p className="text-accent text-xs">{bridge.bridge_score} conn. cross-cluster</p>
+                          <p className="text-accent text-xs">{bridge.bridge_score} conn. tra cerchie</p>
                           {bridge.genres && bridge.genres.length > 0 && (
                             <p className="text-text-muted text-[10px] truncate mt-0.5">{bridge.genres.join(', ')}</p>
                           )}

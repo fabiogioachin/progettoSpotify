@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Copy, Check, ExternalLink, FileText, Download } from 'lucide-react'
 import { useSpotifyData } from '../../hooks/useSpotifyData'
-import LoadingSpinner from '../ui/LoadingSpinner'
+import { SkeletonCard } from '../ui/Skeleton'
 
 const DATA_BADGES = [
   { label: 'Brani', color: 'bg-accent/10 text-accent' },
@@ -82,7 +82,7 @@ export default function ClaudeExportPanel() {
         </button>
       )}
 
-      {loading && <LoadingSpinner size="sm" />}
+      {loading && <SkeletonCard height="h-32" />}
 
       {error && (
         <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">

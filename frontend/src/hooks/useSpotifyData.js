@@ -18,8 +18,9 @@ export function useSpotifyData(endpoint, params = {}, immediate = true) {
     setLoading(true)
     setError(null)
     try {
+      const parsedParams = JSON.parse(stableParams)
       const { data: result } = await api.get(endpoint, {
-        params: { ...params, ...overrideParams },
+        params: { ...parsedParams, ...overrideParams },
         signal,
       })
       setData(result)

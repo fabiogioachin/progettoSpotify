@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ListMusic, TrendingUp, Music, Tag } from 'lucide-react'
 import {
   Bar,
@@ -12,8 +12,7 @@ import {
 } from 'recharts'
 import PlaylistComparison from '../components/charts/PlaylistComparison'
 import AudioRadar from '../components/charts/AudioRadar'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
-import { SkeletonGrid } from '../components/ui/Skeleton'
+import { SkeletonGrid, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { usePlaylistCompare } from '../hooks/usePlaylistCompare'
@@ -26,9 +25,10 @@ export default function PlaylistComparePage() {
   const { data: comparison, loading: comparing, error: compareError, compare, reset } = usePlaylistCompare()
 
   // Reset stale comparison when selection changes
+  const selectionKey = useMemo(() => JSON.stringify(selectedIds), [selectedIds])
   useEffect(() => {
     if (comparison) reset()
-  }, [selectedIds.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectionKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const playlists = playlistsData?.playlists || []
 
@@ -117,7 +117,12 @@ export default function PlaylistComparePage() {
                 {compareError}
               </div>
             )}
-            {comparing && <LoadingSpinner />}
+            {comparing && (
+              <div className="space-y-4">
+                <SkeletonCard height="h-48" />
+                <SkeletonCard height="h-72" />
+              </div>
+            )}
 
             {comparison && (() => {
               const comps = comparison.comparisons

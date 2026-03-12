@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import FEATURE_KEYS
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import retry_with_backoff
+from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,19 @@ async def discover(
     )
 
     top_data, artists_data, short_data = await asyncio.gather(
-        top_tracks_task, top_artists_task, short_tracks_task
+        top_tracks_task, top_artists_task, short_tracks_task,
+        return_exceptions=True,
     )
+    # Re-raise auth errors; gracefully degrade on other failures
+    for result in (top_data, artists_data, short_data):
+        if isinstance(result, SpotifyAuthError):
+            raise result
+    if isinstance(top_data, BaseException):
+        top_data = {"items": []}
+    if isinstance(artists_data, BaseException):
+        artists_data = {"items": []}
+    if isinstance(short_data, BaseException):
+        short_data = {"items": []}
 
     top_items = top_data.get("items", [])
     top_artists = artists_data.get("items", [])

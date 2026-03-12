@@ -223,7 +223,7 @@ export default function TasteEvolutionPage() {
                   {/* Summary when no year expanded */}
                   {!expandedYear && (
                     <p className="text-text-muted text-xs">
-                      Clicca su un anno per vedere i brani piu ascoltati
+                      Clicca su un anno per vedere i brani più ascoltati
                     </p>
                   )}
                 </div>
@@ -276,9 +276,7 @@ function ArtistColumn({ title, icon: Icon, iconColor, artists, emptyText, toolti
         </div>,
         document.body
       )}
-      {artists.length === 0 ? (
-        <p className="text-text-muted text-sm text-center py-4">{emptyText}</p>
-      ) : (
+      {artists.length === 0 ? null : (
         <StaggerContainer className="space-y-2 max-h-80 overflow-y-auto">
           {artists.map((artist) => (
             <StaggerItem key={artist.id}>

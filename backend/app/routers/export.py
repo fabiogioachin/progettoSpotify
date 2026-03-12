@@ -1,6 +1,7 @@
 """Router per export dati ottimizzato per Claude AI."""
 
 import asyncio
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -15,6 +16,8 @@ from app.services.spotify_client import SpotifyClient
 from app.services.taste_evolution import compute_taste_evolution
 from app.services.temporal_patterns import compute_temporal_patterns
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -61,18 +64,24 @@ async def generate_claude_prompt(
         async def safe_taste():
             try:
                 return await compute_taste_evolution(client)
+            except SpotifyAuthError:
+                raise
             except Exception:
                 return None
 
         async def safe_network():
             try:
                 return await build_artist_network(client)
+            except SpotifyAuthError:
+                raise
             except Exception:
                 return None
 
         async def safe_temporal():
             try:
                 return await compute_temporal_patterns(client)
+            except SpotifyAuthError:
+                raise
             except Exception:
                 return None
 
@@ -93,6 +102,9 @@ async def generate_claude_prompt(
 
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except Exception as exc:
+        logger.error("Errore nella generazione dell'export: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore nella generazione dell'export")
     finally:
         await client.close()
 

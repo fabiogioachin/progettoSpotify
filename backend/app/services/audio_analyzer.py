@@ -12,7 +12,7 @@ from app.constants import FEATURE_KEYS
 from app.models.listening_history import ListeningSnapshot
 from app.models.track import AudioFeatures
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import retry_with_backoff
+from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +192,8 @@ async def _extract_genres(client: SpotifyClient, tracks: list[dict]) -> dict[str
             try:
                 artist = await retry_with_backoff(client.get_artist, aid)
                 return artist.get("genres", [])
+            except SpotifyAuthError:
+                raise
             except Exception:
                 return []
 
