@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Compass, Sparkles, Star, BarChart3, Music } from 'lucide-react'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
@@ -5,6 +6,7 @@ import GenreTreemap from '../components/charts/GenreTreemap'
 import { SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
+import { useAudioAnalysis } from '../hooks/useAudioAnalysis'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TOOLTIP_STYLE } from '../lib/chartTheme'
 
@@ -21,9 +23,39 @@ export default function DiscoveryPage() {
   const hasAudioFeatures = discoveryData?.has_audio_features ?? false
   const recommendationsSource = discoveryData?.recommendations_source || 'spotify'
 
+  // Audio analysis: trigger when no audio features available
+  const trackIds = useMemo(() => tracks.map(t => t.id), [tracks])
+  const {
+    features: analysisFeatures,
+    progress: analysisProgress,
+    isAnalyzing,
+  } = useAudioAnalysis(trackIds, !hasAudioFeatures && tracks.length > 0 && !topLoading && !discoveryLoading)
+
+  // Enrich tracks with analysis features for MoodScatter
+  const enrichedTracks = tracks.map(t => {
+    const feat = analysisFeatures[t.id]
+    if (feat && Object.keys(feat).length > 0) {
+      return { ...t, features: feat }
+    }
+    return t
+  })
+
   // Controlla se i tracks hanno features per il MoodScatter
-  const tracksWithFeatures = tracks.filter(t => t.features && Object.values(t.features).some(v => v > 0))
+  const tracksWithFeatures = enrichedTracks.filter(t => t.features && Object.values(t.features).some(v => v > 0))
   const hasMoodData = tracksWithFeatures.length > 0
+
+  // Recompute centroid from analysis features if no backend centroid
+  const displayCentroid = (() => {
+    if (Object.keys(centroid).length > 0) return centroid
+    if (Object.keys(analysisFeatures).length === 0) return centroid
+    const featureKeys = ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'liveness']
+    const avgs = {}
+    featureKeys.forEach(key => {
+      const vals = Object.values(analysisFeatures).map(f => f[key]).filter(v => v != null && v > 0)
+      avgs[key] = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 1000) / 1000 : 0
+    })
+    return avgs
+  })()
 
   const isLoading = topLoading || discoveryLoading
   const hasError = topError || discoveryError
@@ -57,8 +89,21 @@ export default function DiscoveryPage() {
             )}
 
             {/* Mood Scatter OPPURE Distribuzione Popolarita' */}
-            {hasMoodData ? (
-              <MoodScatter tracks={tracks} />
+            {isAnalyzing ? (
+              <div className="glow-card bg-surface rounded-xl p-5 flex flex-col items-center justify-center h-72">
+                <div className="text-text-primary font-display font-semibold mb-2">Analisi audio in corso...</div>
+                <div className="w-48 h-2 bg-surface-hover rounded-full overflow-hidden mb-2">
+                  <div
+                    className="h-full bg-accent rounded-full transition-all duration-500"
+                    style={{ width: `${analysisProgress.percent}%` }}
+                  />
+                </div>
+                <p className="text-text-muted text-xs">
+                  {analysisProgress.completed}/{analysisProgress.total} brani
+                </p>
+              </div>
+            ) : hasMoodData ? (
+              <MoodScatter tracks={enrichedTracks} />
             ) : (
               <PopularityDistribution data={popularityDistribution} />
             )}
@@ -69,7 +114,7 @@ export default function DiscoveryPage() {
               {Object.keys(genreDistribution).length > 0 ? (
                 <GenreTreemap genres={genreDistribution} title="Il tuo DNA musicale" />
               ) : (
-                <AudioRadar features={centroid} title="Il tuo centro musicale" />
+                <AudioRadar features={displayCentroid} title="Il tuo centro musicale" />
               )}
 
               <div className="glow-card bg-surface rounded-xl p-5">
@@ -111,12 +156,16 @@ export default function DiscoveryPage() {
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Sparkles size={18} className="text-accent" />
-                {recommendationsSource === 'spotify' ? 'Brani Suggeriti' : 'Scoperte Recenti'}
+                {recommendationsSource === 'related_artists' ? 'Artisti Correlati'
+                  : recommendationsSource === 'spotify' ? 'Brani Suggeriti'
+                  : 'Scoperte Recenti'}
               </h3>
               <p className="text-text-muted text-xs mb-4">
-                {recommendationsSource === 'spotify'
-                  ? 'Basati sul tuo profilo d\'ascolto — priorità ad artisti che non conosci ancora'
-                  : 'Brani apparsi di recente nelle tue classifiche — non ancora nel tuo medio termine'}
+                {recommendationsSource === 'related_artists'
+                  ? 'Artisti simili ai tuoi preferiti — esplora nuova musica'
+                  : recommendationsSource === 'spotify'
+                    ? 'Basati sul tuo profilo d\'ascolto — priorità ad artisti che non conosci ancora'
+                    : 'Brani apparsi di recente nelle tue classifiche — non ancora nel tuo medio termine'}
               </p>
               <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {recommendations.map((rec) => (

@@ -6,8 +6,6 @@ aiosqlite==0.20.0
 httpx==0.28.1
 itsdangerous==2.2.0
 cryptography==44.0.0
-python-multipart==0.0.20
 apscheduler==3.10.4
-ruff==0.9.3
-pytest==8.3.4
-pytest-asyncio==0.25.0
+librosa==0.10.2
+numpy<2.0

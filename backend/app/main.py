@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 from app.config import settings
 from app.database import async_session, init_db
 from app.routers import (
+    analysis,
     analytics,
     artist_network,
     auth,
@@ -112,6 +113,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(auth.router)
+app.include_router(analysis.router)
 app.include_router(library.router)
 app.include_router(playlists.router)
 app.include_router(analytics.router)

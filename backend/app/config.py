@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # Generate a unique value per deployment for extra security
     encryption_salt: str = "spotify-intelligence-salt"
 
+    # Optional: RapidAPI key for audio features fallback (tracks without preview_url)
+    rapidapi_key: str = ""
+
     # Token encryption key (derived from session_secret + encryption_salt)
     @property
     def encryption_key(self) -> bytes:
@@ -38,6 +41,7 @@ class Settings(BaseSettings):
     def validate_secrets(self):
         """Avvisa se i segreti di default sono in uso."""
         import logging
+
         log = logging.getLogger(__name__)
         if self.session_secret == "cambiami-genera-con-openssl-rand-hex-32":
             log.warning(

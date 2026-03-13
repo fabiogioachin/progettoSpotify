@@ -44,7 +44,7 @@ Monorepo: `backend/` (FastAPI async) + `frontend/` (React/Vite). SQLite database
 
 ### Backend request flow
 
-`main.py` registers 10 routers (all behind `require_auth` dependency) + APScheduler lifespan + middleware stack (rate limiter → CORS).
+`main.py` registers 11 routers (all behind `require_auth` dependency, except analysis polling endpoint) + APScheduler lifespan + middleware stack (rate limiter → CORS).
 
 Each request: `require_auth` extracts user_id from signed session cookie → router creates `SpotifyClient(db, user_id)` → calls service methods → closes client in `finally` block.
 
@@ -55,6 +55,8 @@ Each request: `require_auth` extracts user_id from signed session cookie → rou
 **Rate limiting**: Two layers — API middleware (120 req/min per IP) + Spotify 429 propagation with Retry-After header to frontend.
 
 **Background jobs** (APScheduler): `sync_recent_plays` hourly (accumulates beyond Spotify's 50-item hard limit), `save_daily_snapshot` on first daily login via `UserSnapshot` model.
+
+**Audio analysis** (on-demand): `POST /api/analyze-tracks` launches async librosa extraction from preview MP3s. Frontend polls `GET /api/analyze-tracks/{task_id}` for progressive results. Background task uses dedicated DB session (not request-scoped). Results cached in `AudioFeatures` table.
 
 ### Frontend flow
 
@@ -71,6 +73,8 @@ Data fetching: `useSpotifyData(endpoint)` hook → Axios client with 429 retry i
 2. **asyncio.gather with 3+ calls**: always wrap each coroutine in `_safe_fetch()` or use `return_exceptions=True`. One Spotify API failure must not crash the entire page.
 
 3. **Non-critical DB writes never block responses**: wrap snapshot saves and similar writes in inner `try/except` with `logger.warning`. Analytics endpoints must never 500 because a logging write failed.
+
+4. **Background tasks need dedicated DB sessions**: `asyncio.create_task()` outlives the request handler — the `get_db()` session is closed when the handler returns. Background tasks must create their own session via `async_session()`.
 
 4. **No plausible fake defaults**: missing data defaults to `None`/`0`/`[]`, never magic numbers like `default=180000` that look like real measurements. Backend returns `has_*` / `*_source` flags; frontend uses them for conditional rendering instead of showing silent empty cards.
 

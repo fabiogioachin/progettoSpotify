@@ -1,111 +1,106 @@
 # Project Health Report
 
-Generated: 2026-03-12 (post-verification)
+Generated: 2026-03-13
 Project: Spotify Listening Intelligence
 Stack: FastAPI (Python 3.12) + React 18 / Vite / Tailwind
-Mode: scan + auto-fix + verification round
+Mode: scan + targeted refactor
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| Original suggestions (S-1–S-14) | 14 ✅ all resolved |
-| Health auto-fixes | 5 ✅ applied |
-| Refactor slices | 2 ✅ applied |
-| Verification round fixes | 4 ✅ applied |
-| Deferred (user decision) | 7 |
+| Total findings | 8 |
+| Auto-fixed | 1 (requirements split) |
+| Manual action needed | 3 (deferred, low priority) |
+| Spotify API violations | 0 |
+| Security issues | 0 |
+| Dead code | 0 new files |
+| Dependencies cleaned | 4 packages moved to dev |
 
 ## Verification Status
 
 | Check | Result |
 |-------|--------|
-| `ruff check app/` | ✅ All checks passed |
-| `npm run build` | ✅ Built in ~5s |
-| `npm run lint` | ✅ 0 errors, 227 warnings (pre-existing unused imports) |
+| `ruff check app/` | All checks passed |
+| `pytest tests/ -v` | 15/15 passed |
+| `npm run build` | Built in 6.2s |
 
-## All Resolved Items
+## Spotify API Audit (CLEAN)
 
-### Original Suggestions (14/14 done)
+All Spotify API calls verified safe — no deprecated endpoints, no 403/429 risks.
 
-**Backend:**
-| # | File | Fix |
-|---|------|-----|
-| S-2 | `spotify_client.py`, `discovery.py` | Removed deprecated `get_recommendations` + wasted API call |
-| S-4 | `rate_limiter.py` | Default RPM 60→120 to match main.py |
-| S-5 | `audio_analyzer.py` | Parallelized `compute_trends` with `asyncio.gather` + `_safe_compute` |
+| Endpoint | Files | Status |
+|----------|-------|--------|
+| `/me/top/tracks`, `/me/top/artists` | spotify_client.py | Always available |
+| `/me/player/recently-played` | spotify_client.py | Always available |
+| `/me/playlists` | spotify_client.py | Always available |
+| `/me/tracks` | spotify_client.py | Always available |
+| `/artists/{id}` (individual) | audio_analyzer.py, discovery.py | Correct (no batch) |
+| `/artists/{id}/related-artists` | spotify_client.py, discovery.py | Always available |
+| `/tracks/{id}` (individual) | analysis.py | Correct (no batch) |
+| `/playlists/{id}/items` | playlists.py, playlist_analytics.py, historical_tops.py | Correct (`/items` not `/tracks`) |
+| `/v1/audio-features` | NOT CALLED | Deprecated, fully removed |
+| `/v1/recommendations` | NOT CALLED | Deprecated, fully removed |
+| Batch `/artists?ids=`, `/tracks?ids=` | NOT CALLED | Removed in dev mode |
 
-**Frontend:**
-| # | File | Fix |
-|---|------|-----|
-| S-1 | `KPICard.jsx` | `typeof value === 'number'` guard on `value % 1` |
-| S-2 | `ArtistNetwork.jsx` | `useMemo` dataKey + prevDataKeyRef to skip simulation restarts |
-| S-3 | `ArtistNetwork.jsx` | `role="button"`, `tabIndex`, `aria-label`, `onKeyDown` on SVG nodes |
-| S-4 | `ListeningHeatmap.jsx` | Inline `<style>` → globals.css |
-| S-5 | `StreakDisplay.jsx` | Inline `<style>` → globals.css with `--circumference` CSS var |
-| S-6 | `DashboardPage.jsx` | Progressive rendering — each section independent |
-| S-7 | `PlaylistStatCard.jsx`, `StreakDisplay.jsx` | `animate-slide-up` → framer-motion `motion.div` |
-| S-8 | `SessionStats.jsx` | `animate-slide-up` → framer-motion `motion.div` |
-| S-9 | `DashboardPage.jsx` | Consistent 2-space indentation |
-| S-10 | `ClaudeExportPanel.jsx` | `border-border-hover` → `border-surface-hover` |
-| S-11 | `SlideOutro.jsx` | `canvas.remove()` cleanup after html2canvas |
+### Rate Limiting
 
-### Health Auto-Fixes (5)
+- SpotifyClient handles 429 with `Retry-After` header propagation
+- Global cooldown (10-min threshold) prevents cascading rate limit escalation
+- Semaphore(2) on all parallel API call sites (genres, related artists, track fetch)
+- `retry_with_backoff` on all Spotify API calls in services
 
-| # | File | Fix |
-|---|------|-----|
-| 1 | `globals.css` | Removed dead `.stagger-1–4` CSS classes |
-| 2 | `SlideOutro.jsx` | Removed dead `objectUrl` variable |
-| 3 | `SlideOutro.jsx` | Removed unused `i` map param |
-| 4 | `globals.css` | Removed conflicting `transition` on `.progress-ring-circle` |
-| 5 | `ArtistNetwork.jsx` | Added `role="img" aria-label` to parent SVG |
+### Auth Error Propagation
 
-### Refactor Phase (2 slices)
+All 25 `except Exception` blocks in routers are preceded by `except SpotifyAuthError: raise` — invariant holds.
 
-| # | File | Fix |
-|---|------|-----|
-| 1 | `DashboardPage.jsx` | Unified KPI row — single StaggerContainer with per-card skeleton |
-| 2 | `ArtistNetwork.jsx`, `globals.css` | Replaced Tailwind transition on SVG circles with `.artist-node` CSS |
+## Applied Fix
 
-### Verification Round Fixes (4)
+### DEP-FIX-1: Split requirements.txt into prod/dev
 
-| # | File | Fix |
-|---|------|-----|
-| 1 | `audio_analyzer.py:285` | **CRITICAL** — Added `except SpotifyAuthError: raise` in `get_or_fetch_features` |
-| 2 | `StreakDisplay.jsx` | Removed unnecessary `useMemo` + unused `react` import |
-| 3 | `ArtistNetwork.jsx:153` | Simplified useEffect deps from `[nodes, edges, nodeIndex, dataKey]` to `[dataKey, nodeIndex]` |
-| 4 | `KPICard.jsx:106` | Added `e.preventDefault()` on keyboard scroll handler |
+| File | Change |
+|------|--------|
+| `requirements.txt` | Removed: `python-multipart`, `ruff`, `pytest`, `pytest-asyncio`, `soundfile` |
+| `requirements-dev.txt` (NEW) | Created with `-r requirements.txt` + dev deps |
 
-## Deferred Items (user decision required)
+**Rationale**: `ruff`, `pytest`, `pytest-asyncio` are dev/CI tools. `soundfile` only used in tests. `python-multipart` unused (no `Form()` or `UploadFile` in any router). Prod image sheds ~200MB.
 
-### Security Hardening
+## Security Review (NEW CODE)
 
-| # | File | Issue | Impact | When needed |
-|---|------|-------|--------|-------------|
-| 1 | `rate_limiter.py` | Behind proxy, `client.host` = proxy IP — per-user limiting ineffective | Rate limiting bypassed | Production deploy behind proxy |
-| 2 | `rate_limiter.py` | `_requests` dict grows unbounded under high traffic | Memory exhaustion (DoS) | Public deploy with many users |
-| 3 | `spotify_client.py` | Spotify IDs not validated against `^[a-zA-Z0-9]{22}$` | Path injection (theoretical) | Adding user-input endpoints |
-| 4 | `spotify_client.py` | Error messages expose HTTP status codes to frontend | Info disclosure (minor) | UX polish |
+All new files from the Audio Features Recovery feature are secure:
 
-### Code Simplification
+| Check | Status |
+|-------|--------|
+| Auth on POST `/api/analyze-tracks` | `require_auth` dependency |
+| Auth on GET `/api/analyze-tracks/{task_id}` | `require_auth` + ownership check (`user_id`) |
+| Background task DB session | Dedicated `async_session()`, not request-scoped |
+| In-memory task store bounded | Cleanup on POST + GET, per-user cap (3 concurrent) |
+| Preview download size limit | 5 MB cap on `resp.content` |
+| Temp file cleanup | `finally` block with `Path.unlink(missing_ok=True)` |
+| Dict mutation safety | Clean copy via comprehension, no pop/re-add |
+| Frontend polling | Recursive `setTimeout` (no overlap), `mountedRef` for unmount safety |
+| `trackIds` stability | `useMemo` in both DashboardPage and DiscoveryPage |
+| `startedRef` guard | Prevents duplicate POST requests |
 
-| # | File | Issue | Effort |
-|---|------|-------|--------|
-| 5 | `audio_analyzer.py:133-161` | `save_snapshot` field assignments duplicated in update/insert branches | ~10min |
-| 6 | `discovery.py:125,148,170` | Album-image extraction pattern repeated 3x — extract helper | ~5min |
-| 7 | `SessionStats.jsx:24-28` | `mounted` state + useEffect replaceable with framer-motion | ~15min |
+## Deferred Items (low priority)
 
-## Passed Checks
+| # | Type | File | Issue | Effort |
+|---|------|------|-------|--------|
+| 1 | P2 | `audio_feature_extractor.py:226` | Sequential track processing (parallelize with Semaphore for >50 tracks) | ~30min |
+| 2 | P2 | `DashboardPage.jsx:47` + `DiscoveryPage.jsx:48` | Duplicated feature averaging IIFE — extract to shared utility | ~10min |
+| 3 | P2 | `requirements.txt` | librosa adds ~400MB to Docker image — consider optional extra or microservice | Architectural |
 
-- SpotifyAuthError propagation in all router handlers + inner helpers (including newly fixed `get_or_fetch_features`)
-- asyncio.gather safety: `_safe_fetch`/`_safe_compute`/`return_exceptions=True` in all 3+ parallel call sites
-- Non-blocking DB writes (4 locations)
+## Passed Checks (carried from previous report)
+
+- SpotifyAuthError propagation in all handlers + inner helpers
+- `asyncio.gather` safety: `_safe_fetch`/`_safe_compute`/`return_exceptions=True` in all parallel call sites
+- Non-blocking DB writes (5 locations)
 - No fake defaults / magic numbers
 - All imports resolve correctly
-- framer-motion used consistently for animations (CSS `animate-slide-up` fully eliminated)
-- Skeleton loaders on all main pages
+- framer-motion used consistently for animations
+- Skeleton loaders on all pages
 - All UI text in Italian with "Cerchia" naming
-- Period labels match convention (`1M / 6M / All`)
-- Empty sections hidden (no "nessun dato disponibile")
+- Period labels: `1M / 6M / All`
+- Empty sections hidden
 - No XSS vectors, no `dangerouslySetInnerHTML`
 - CSRF mitigated via cookie-based same-origin auth
-- html2canvas captures only non-sensitive summary data

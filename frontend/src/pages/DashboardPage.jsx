@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Disc3, Flame, Music, Users } from 'lucide-react'
 import KPICard from '../components/cards/KPICard'
 import TrackCard from '../components/cards/TrackCard'
@@ -10,6 +10,7 @@ import PeriodSelector from '../components/ui/PeriodSelector'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
+import { useAudioAnalysis } from '../hooks/useAudioAnalysis'
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState('medium_term')
@@ -30,6 +31,30 @@ export default function DashboardPage() {
   const features = featuresData?.features || {}
   const genres = featuresData?.genres || {}
   const trends = trendsData?.current || []
+
+  // Audio analysis: trigger when no cached features but tracks exist
+  const trackIds = useMemo(() => tracks.map(t => t.id), [tracks])
+  const hasFeatures = Object.keys(features).length > 0
+    && Object.entries(features).some(([k, v]) => k !== 'tempo' && v && v > 0)
+
+  const {
+    features: analysisFeatures,
+    progress: analysisProgress,
+    isAnalyzing,
+  } = useAudioAnalysis(trackIds, !hasFeatures && tracks.length > 0 && !featuresLoading)
+
+  // Compute features to display: cached features OR computed from analysis results
+  const displayFeatures = (() => {
+    if (hasFeatures) return features
+    if (Object.keys(analysisFeatures).length === 0) return features
+    const featureKeys = ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'liveness']
+    const avgs = {}
+    featureKeys.forEach(key => {
+      const vals = Object.values(analysisFeatures).map(f => f[key]).filter(v => v != null && v > 0)
+      avgs[key] = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 1000) / 1000 : 0
+    })
+    return avgs
+  })()
 
   // KPI calculations — solo dati reali sempre disponibili
   const trackCount = topData?.total || tracks.length || 0
@@ -136,8 +161,21 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {featuresLoading ? (
           <SkeletonCard height="h-72" />
+        ) : isAnalyzing ? (
+          <div className="glow-card bg-surface rounded-xl p-5 flex flex-col items-center justify-center h-72">
+            <div className="text-text-primary font-display font-semibold mb-2">Analisi audio in corso...</div>
+            <div className="w-48 h-2 bg-surface-hover rounded-full overflow-hidden mb-2">
+              <div
+                className="h-full bg-accent rounded-full transition-all duration-500"
+                style={{ width: `${analysisProgress.percent}%` }}
+              />
+            </div>
+            <p className="text-text-muted text-xs">
+              {analysisProgress.completed}/{analysisProgress.total} brani
+            </p>
+          </div>
         ) : (
-          <AudioRadar features={features} />
+          <AudioRadar features={displayFeatures} />
         )}
 
         {topLoading ? (

@@ -313,3 +313,11 @@
 - **Rule**: when a Spotify API is deprecated (returns 403 permanently), remove the API call entirely — do NOT leave it behind a try/except. A "handled" 403 still counts against rate limits and causes cascading failures.
 - **Rule**: cache-then-fetch patterns for deprecated APIs must be converted to cache-only. The fetch path is dead code that burns rate limit budget.
 - **Rule**: after every code change that adds new Spotify API calls, audit the full request budget per page load. If total calls > 30, restructure.
+
+## Audio Features Recovery via librosa — March 2026
+
+### Failure Mode: FastAPI get_db() session closed before background task completes
+- **Signal**: `asyncio.create_task(analyze_tracks_batch(db, ...))` in a router — the `db` session from `get_db()` dependency is closed when the request handler returns, but the background task is still running.
+- **Root cause**: `get_db()` uses `async with async_session() as session: yield session` — the context manager closes the session after the route handler finishes. The background task holds a reference to the now-closed session.
+- **Fix**: create a dedicated `async with async_session() as bg_db` inside the background task wrapper function, not reuse the request-scoped session.
+- **Rule**: any `asyncio.create_task()` that uses a DB session must create its own session via `async_session()`, never reuse the request-scoped one from `get_db()`.
