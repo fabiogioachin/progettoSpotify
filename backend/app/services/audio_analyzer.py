@@ -199,7 +199,7 @@ async def _extract_genres(
     # Fetch artists individually (batch GET /artists removed in dev mode Feb 2026)
     all_genres: list[str] = []
     artist_list = list(artist_ids)[
-        :15
+        :20
     ]  # cap to limit API calls (reduced for dev mode rate limits)
     sem = asyncio.Semaphore(2)
 

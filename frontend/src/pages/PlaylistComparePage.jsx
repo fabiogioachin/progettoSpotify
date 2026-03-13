@@ -31,6 +31,8 @@ export default function PlaylistComparePage() {
   }, [selectionKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const playlists = playlistsData?.playlists || []
+  const ownedPlaylists = playlists.filter(p => p.is_owner !== false)
+  const followedPlaylists = playlists.filter(p => p.is_owner === false)
 
   function togglePlaylist(id) {
     setSelectedIds((prev) => {
@@ -62,22 +64,62 @@ export default function PlaylistComparePage() {
           <SkeletonGrid count={8} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" cardHeight="h-20" />
         ) : (
           <>
-            {/* Playlist selector */}
-            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {playlists.map((p) => {
-                const isSelected = selectedIds.includes(p.id)
-                return (
-                  <StaggerItem key={p.id}>
-                    <button
-                      onClick={() => togglePlaylist(p.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-300
-                        ${isSelected
-                          ? 'bg-accent/10 border-2 border-accent shadow-lg shadow-accent/10'
-                          : 'glow-card bg-surface hover:bg-surface-hover'
-                        }`}
+            {/* Owned playlists — selectable */}
+            {ownedPlaylists.length > 0 && (
+              <>
+                <h2 className="text-sm font-medium text-text-secondary">Le tue playlist</h2>
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {ownedPlaylists.map((p) => {
+                    const isSelected = selectedIds.includes(p.id)
+                    return (
+                      <StaggerItem key={p.id}>
+                        <button
+                          onClick={() => togglePlaylist(p.id)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-300
+                            ${isSelected
+                              ? 'bg-accent/10 border-2 border-accent shadow-lg shadow-accent/10'
+                              : 'glow-card bg-surface hover:bg-surface-hover'
+                            }`}
+                        >
+                          {p.image ? (
+                            <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-surface-hover flex items-center justify-center">
+                              <ListMusic size={20} className="text-text-muted" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-text-primary text-sm font-medium truncate">{p.name}</p>
+                            <p className="text-text-muted text-xs">{p.track_count > 0 ? `${p.track_count} brani` : '? brani'}</p>
+                          </div>
+                          {isSelected && (
+                            <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">
+                                {selectedIds.indexOf(p.id) + 1}
+                              </span>
+                            </div>
+                          )}
+                        </button>
+                      </StaggerItem>
+                    )
+                  })}
+                </StaggerContainer>
+              </>
+            )}
+
+            {/* Followed playlists — visible but not selectable */}
+            {followedPlaylists.length > 0 && (
+              <>
+                <h2 className="text-sm font-medium text-text-secondary">Playlist seguite</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {followedPlaylists.map((p) => (
+                    <div
+                      key={p.id}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl text-left opacity-50 cursor-not-allowed glow-card bg-surface"
+                      title="Non disponibile per il confronto in modalità sviluppo"
                     >
                       {p.image ? (
-                        <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+                        <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover grayscale" />
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-surface-hover flex items-center justify-center">
                           <ListMusic size={20} className="text-text-muted" />
@@ -85,20 +127,13 @@ export default function PlaylistComparePage() {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-text-primary text-sm font-medium truncate">{p.name}</p>
-                        <p className="text-text-muted text-xs">{p.track_count} brani</p>
+                        <p className="text-text-muted text-xs">{p.track_count > 0 ? `${p.track_count} brani` : '? brani'}</p>
                       </div>
-                      {isSelected && (
-                        <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">
-                            {selectedIds.indexOf(p.id) + 1}
-                          </span>
-                        </div>
-                      )}
-                    </button>
-                  </StaggerItem>
-                )
-              })}
-            </StaggerContainer>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Compare button */}
             <div className="flex justify-center">

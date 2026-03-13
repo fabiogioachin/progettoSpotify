@@ -135,23 +135,23 @@ async def discover(
                 )
         outliers.sort(key=lambda x: x["distance"], reverse=True)
     else:
-        # Fallback: trova hidden gems (brani meno popolari nella tua top)
+        # Fallback: hidden gems — brani sotto la media di popolarità
         avg_pop = sum(t.get("popularity", 0) for t in top_items) / len(top_items)
         for t in top_items:
             pop = t.get("popularity", 0)
-            diff = abs(pop - avg_pop)
-            outliers.append(
-                {
-                    "id": t["id"],
-                    "name": t["name"],
-                    "artist": t["artists"][0]["name"] if t.get("artists") else "",
-                    "album_image": _album_image(t),
-                    "distance": round(diff / 100, 3),
-                    "metric_label": "hidden gem" if pop < avg_pop else "mainstream",
-                }
-            )
-        # Ordina: meno popolari prima (hidden gems)
-        outliers.sort(key=lambda x: x.get("distance", 0), reverse=True)
+            if pop < avg_pop:
+                outliers.append(
+                    {
+                        "id": t["id"],
+                        "name": t["name"],
+                        "artist": t["artists"][0]["name"] if t.get("artists") else "",
+                        "album_image": _album_image(t),
+                        "distance": round(pop / 100, 3),
+                        "metric_label": f"Pop. {pop}",
+                    }
+                )
+        # Ordina per popolarità crescente (veri hidden gems prima)
+        outliers.sort(key=lambda x: x["distance"])
 
     # 5. Scoperte recenti: brani in short_term non presenti in medium_term
     medium_ids = set(top_ids)

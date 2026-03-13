@@ -72,6 +72,7 @@ class PlaylistResponse(BaseModel):
     image: str | None = None
     track_count: int = 0
     owner: str = ""
+    is_owner: bool = True
 
 
 class PlaylistListResponse(BaseModel):

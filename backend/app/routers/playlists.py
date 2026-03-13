@@ -6,10 +6,12 @@ import re
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_auth
+from app.models.user import User
 from app.services.audio_analyzer import get_or_fetch_features
 from app.schemas import PlaylistListResponse, PlaylistComparisonResponse
 from app.services.spotify_client import SpotifyClient
@@ -37,6 +39,13 @@ async def get_playlists(
     client = SpotifyClient(db, user_id)
 
     try:
+        # Get user's Spotify ID to determine playlist ownership
+        user_result = await db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        user_spotify_id = user.spotify_id if user else ""
+
         data = await retry_with_backoff(client.get_playlists, limit=limit, offset=offset)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
@@ -57,6 +66,7 @@ async def get_playlists(
             "image": (item.get("images", [{}])[0].get("url") if item.get("images") else None),
             "track_count": item.get("tracks", {}).get("total", 0),
             "owner": item.get("owner", {}).get("display_name", ""),
+            "is_owner": item.get("owner", {}).get("id") == user_spotify_id,
         })
 
     return {"playlists": playlists, "total": data.get("total", 0)}
@@ -133,7 +143,7 @@ async def compare_playlists(
 
         # Fetch genres for unique artists (deduplicated, single pass)
         artist_genres_cache: dict[str, list[str]] = {}
-        artist_list = list(global_artist_ids)[:20]  # global cap across all playlists
+        artist_list = list(global_artist_ids)[:25]  # global cap across all playlists
         sem_artists = asyncio.Semaphore(2)
 
         async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:

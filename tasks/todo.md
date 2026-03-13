@@ -7,13 +7,14 @@
   - [x] Rate limit fix: cap `max_retry_after=30s`, dedup artisti cross-playlist (da ~70 a ~30 API calls), Semaphore(2), cap 20 artisti globale
   - [x] Aggiunto `retry_with_backoff` a `historical_tops.py` e `background_tasks.py`
   - [x] Rimossa chiamata deprecata `get_audio_features()` — `get_or_fetch_features()` ora pure cache lookup (piano: `cheerful-fluttering-lecun.md`)
-  - [ ] Grid pre-confronto: tutte le playlist mostrano "0 brani" (`tracks.total` non restituito da `/me/playlists` in dev mode)
-  - [ ] Compare 403: playlist non di proprietà inaccessibili in dev mode → flag `accessible` + mostrare "N/D"
+  - [x] Grid pre-confronto: "? brani" quando `tracks.total` non disponibile (fix interim, piano: `jolly-toasting-adleman.md`)
+  - [x] Compare 403: playlist non di proprietà escluse dalla selezione con `is_owner` flag + grid split "Le tue playlist" / "Playlist seguite"
   - [ ] Popularity media = 0: track objects da `/items` senza campo `popularity` → enrichment individuale con `GET /tracks/{id}`
   - [ ] Genere = "—": conseguenza del fix popularity + verifica artist genre cap
-  - [ ] Frontend: dividere grid in "Le tue playlist" / "Playlist seguite", tooltip per playlist inaccessibili
-- [ ] Dashboard: popolarità media 0/100 non coerente, genere top nullo
-- [ ] Discovery: distribuzione popolarità e hidden gems da rivedere
+  - [x] Frontend: griglia divisa in "Le tue playlist" / "Playlist seguite", tooltip per playlist inaccessibili
+  - [x] Genre cap alzato da 20 a 25 artisti globali nel compare
+- [ ] Dashboard: popolarità media 0/100 non coerente, genere top nullo (genre cap alzato da 15 a 20)
+- [x] Discovery: hidden gems sorting corretto (filtro pop < avg, ordine crescente, label "Pop. X")
 - [ ] Evoluzione del Gusto: controllare verità dati del labels Fedeltà, Turnover, Artisti Fedeli, Tracce Persistenti, Distribuzione Artisti per Periodo
 - [ ] Ecosistema Artisti: Controllare Verità dati del labels Artisti nel Grafo, Connessioni, Cerchie, Artisti Top
 
