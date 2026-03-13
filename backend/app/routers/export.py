@@ -41,7 +41,7 @@ async def generate_claude_prompt(
 
         # Costruisci lista compatta
         track_ids = [t["id"] for t in top_items]
-        features_map = await get_or_fetch_features(db, client, track_ids)
+        features_map = await get_or_fetch_features(db, track_ids)
 
         top_tracks = []
         for item in top_items:

@@ -218,6 +218,8 @@
 - [ ] Every SpotifyClient call wrapped in `retry_with_backoff` (no direct `client.get_*` without retry)
 - [ ] Compare/analytics endpoints dedup shared data (artist IDs) across iterations before fetching
 - [ ] Global artist fetch cap ≤ 20 per endpoint invocation
+- [ ] No API calls to deprecated endpoints (audio-features, recommendations) — use DB cache only
+- [ ] cache-then-fetch patterns for deprecated APIs removed (not just wrapped in try/except)
 
 ## Wrapped Export — Stories Feature (March 2026)
 
@@ -301,3 +303,13 @@
 - Refactored to `asyncio.gather` with `_safe_compute` wrapper (re-raises SpotifyAuthError, returns None on other failures)
 - Profiles that fail are excluded from results (graceful degradation)
 - Rule: when calling the same async function N times with different params and no data dependency, always parallelize
+
+## Deprecated API Cleanup — March 2026
+
+### get_or_fetch_features converted to pure cache lookup
+- **Root cause**: `get_or_fetch_features` had a cache-then-fetch pattern. Cache miss → `client.get_audio_features(batch)` → `/v1/audio-features` → 403 (deprecated since Feb 2026). Every miss wasted a call against the rate limit budget.
+- **Impact**: 6+ wasted 403 calls per page load, cascading into 429 Too Many Requests on legitimate endpoints (`/v1/artists/{id}`).
+- **Fix**: removed the `if missing:` fetch block entirely, removed `client: SpotifyClient` parameter. Function now does pure DB lookup + logs cache misses at DEBUG level. Removed dead `SpotifyClient.get_audio_features()` method. Updated 5 call sites.
+- **Rule**: when a Spotify API is deprecated (returns 403 permanently), remove the API call entirely — do NOT leave it behind a try/except. A "handled" 403 still counts against rate limits and causes cascading failures.
+- **Rule**: cache-then-fetch patterns for deprecated APIs must be converted to cache-only. The fetch path is dead code that burns rate limit budget.
+- **Rule**: after every code change that adds new Spotify API calls, audit the full request budget per page load. If total calls > 30, restructure.

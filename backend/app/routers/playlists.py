@@ -203,7 +203,7 @@ async def compare_playlists(
             averages: dict[str, float] = {}
             analyzed_count = 0
             try:
-                features = await get_or_fetch_features(db, client, track_ids[:200])
+                features = await get_or_fetch_features(db, track_ids[:200])
                 if features:
                     keys = ["danceability", "energy", "valence", "acousticness",
                             "instrumentalness", "liveness", "speechiness", "tempo"]

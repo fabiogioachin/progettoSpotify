@@ -1,49 +1,34 @@
 # Spotify Listening Intelligence — Task List
 
 ## Bug Aperti
-- [ ] Confronto playlist: endpoint migrato (`/items`, field `"item"`). Rate limit fix: cap `max_retry_after=30s`, global cooldown in SpotifyClient, dedup artisti cross-playlist (da ~70 a ~30 API calls per 4 playlist), Semaphore(2), cap 20 artisti globale. Aggiunto `retry_with_backoff` a `historical_tops.py` e `background_tasks.py`. **Da verificare live.**
+
+- [ ] Confronto playlist (piano: `lively-spinning-giraffe.md`):
+  - [x] Endpoint migrato (`/items`, field `"item"`)
+  - [x] Rate limit fix: cap `max_retry_after=30s`, dedup artisti cross-playlist (da ~70 a ~30 API calls), Semaphore(2), cap 20 artisti globale
+  - [x] Aggiunto `retry_with_backoff` a `historical_tops.py` e `background_tasks.py`
+  - [x] Rimossa chiamata deprecata `get_audio_features()` — `get_or_fetch_features()` ora pure cache lookup (piano: `cheerful-fluttering-lecun.md`)
+  - [ ] Grid pre-confronto: tutte le playlist mostrano "0 brani" (`tracks.total` non restituito da `/me/playlists` in dev mode)
+  - [ ] Compare 403: playlist non di proprietà inaccessibili in dev mode → flag `accessible` + mostrare "N/D"
+  - [ ] Popularity media = 0: track objects da `/items` senza campo `popularity` → enrichment individuale con `GET /tracks/{id}`
+  - [ ] Genere = "—": conseguenza del fix popularity + verifica artist genre cap
+  - [ ] Frontend: dividere grid in "Le tue playlist" / "Playlist seguite", tooltip per playlist inaccessibili
 - [ ] Dashboard: popolarità media 0/100 non coerente, genere top nullo
 - [ ] Discovery: distribuzione popolarità e hidden gems da rivedere
 - [ ] Evoluzione del Gusto: controllare verità dati del labels Fedeltà, Turnover, Artisti Fedeli, Tracce Persistenti, Distribuzione Artisti per Periodo
 - [ ] Ecosistema Artisti: Controllare Verità dati del labels Artisti nel Grafo, Connessioni, Cerchie, Artisti Top
 
-## CI/CD
-- [x] GitHub Actions workflow: lint (eslint + ruff) + build check su ogni PR
-- [x] Docker build test in CI
+## Prossima Feature — Audio Features Recovery via librosa (piano: `indexed-foraging-fog.md`)
 
-## Suggestion (Health Report) — ✅ Tutte risolte
+Recupero audio features da preview MP3 (librosa) + recommendations migliorate. Sblocca: AudioRadar, MoodScatter, TrendTimeline, TrackCard E/V bars.
 
-### Backend — ✅
-- [x] `get_recommendations` chiama endpoint deprecato, spreca una API call (S-2)
-- [x] Default RPM=60 in `rate_limiter.py` ma app configura 120 — default fuorviante (S-4)
-- [x] `compute_trends` esegue 3 profili sequenzialmente — parallelizzabile con `asyncio.gather` (S-5)
-- [x] `get_or_fetch_features:285` — `SpotifyAuthError` inghiottito da `except Exception` (trovato in verifica)
-
-### Frontend — ✅
-- [x] `KPICard.jsx`: `value % 1` applicato a stringhe — innocuo ma poco chiaro (S-1)
-- [x] `ArtistNetwork.jsx`: simulazione si riavvia su nuovi ref array anche se dati invariati (S-2)
-- [x] `ArtistNetwork.jsx`: niente keyboard focus/aria-label su nodi SVG interattivi (S-3)
-- [x] `ListeningHeatmap.jsx` + `StreakDisplay.jsx`: inline `<style>` — spostare in globals.css (S-4/S-5)
-- [x] `DashboardPage.jsx`: loading combinato blocca sulla richiesta più lenta — progressive rendering possibile (S-6)
-- [x] `PlaylistStatCard.jsx` + `SessionStats.jsx` + `StreakDisplay.jsx`: CSS `animate-slide-up` invece di framer-motion (S-7/S-8)
-- [x] `DashboardPage.jsx`: indentazione inconsistente (S-9)
-- [x] `ClaudeExportPanel.jsx`: naming `border-border-hover` confuso (S-10)
-- [x] `SlideOutro.jsx`: html2canvas canvas si accumulano su click ripetuti (S-11)
-
-## Deferred — ✅ Tutte risolte
-
-### Securi limiter: `X-Forwarded-For` + `ProxyHeadersMiddleware` (attivo conty Hardening — ✅
-- [x] Rate `BEHIND_PROXY=true`)
-- [x] Rate limiter: cap `MAX_TRACKED_IPS=10_000` con eviction oldest entries
-- [x] Spotify ID validation: regex `^[a-zA-Z0-9]{22}$` su `get_artist`/`get_related_artists`
-- [x] Error messages: già gestiti — tutti i router usano messaggi italiani user-friendly
-
-### Code Simplification — ✅
-- [x] `audio_analyzer.py`: dedup campi `save_snapshot` in dizionario condiviso `fields`
-- [x] `discovery.py`: estratto helper `_album_image(track)`
-- [x] `SessionStats.jsx`: sostituito `mounted` state + useEffect con framer-motion `initial`/`animate`
-
----
+- [ ] `audio_feature_extractor.py` — estrazione features da `preview_url` con librosa (energy, danceability, valence, ecc.)
+- [ ] `routers/analysis.py` — POST/GET polling endpoints per analisi asincrona progressiva
+- [ ] `rapidapi_bridge.py` — fallback opzionale per brani senza preview (solo se `RAPIDAPI_KEY` configurato)
+- [ ] `discovery.py` — recommendations migliorate con related artists + genre search
+- [ ] `useAudioAnalysis.js` — hook polling frontend (POST → task_id → GET ogni 2s → partial results)
+- [ ] DashboardPage + DiscoveryPage — integrazione hook, skeleton/progress durante analisi
+- [ ] `requirements.txt` — aggiungere librosa, soundfile
+- [ ] `main.py` — registrare analysis router
 
 ## Feature Roadmap
 

@@ -96,7 +96,7 @@ async def discover(
         }
 
     top_ids = [t["id"] for t in top_items]
-    top_features = await get_or_fetch_features(db, client, top_ids)
+    top_features = await get_or_fetch_features(db, top_ids)
     has_features = bool(top_features)
 
     # 2. Centroide audio (puo' essere vuoto se API deprecata)

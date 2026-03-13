@@ -195,10 +195,6 @@ class SpotifyClient:
     async def get_saved_tracks(self, limit: int = 50, offset: int = 0) -> dict:
         return await self.get("/me/tracks", limit=limit, offset=offset)
 
-    async def get_audio_features(self, track_ids: list[str]) -> dict:
-        ids = ",".join(track_ids)
-        return await self.get("/audio-features", ids=ids)
-
     async def get_playlists(self, limit: int = 50, offset: int = 0) -> dict:
         return await self.get("/me/playlists", limit=limit, offset=offset)
 

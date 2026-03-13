@@ -48,8 +48,8 @@ async def get_top_tracks(
                 "preview_url": item.get("preview_url"),
             })
 
-        # Recupera audio features (con cache) — client ancora aperto
-        features_map = await get_or_fetch_features(db, client, track_ids)
+        # Recupera audio features (solo cache DB — API deprecata)
+        features_map = await get_or_fetch_features(db, track_ids)
 
         for track in tracks:
             feat = features_map.get(track["id"])

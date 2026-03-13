@@ -14,6 +14,9 @@ from app.models.track import AudioFeatures
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
+# NOTE: Spotify Audio Features API è deprecata (403 permanente da Feb 2026).
+# get_or_fetch_features() fa solo cache lookup — non chiama mai l'API.
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,8 +55,8 @@ async def compute_profile(
     unique_artists = len(artist_counter)
     top_artist = artist_counter.most_common(1)[0][0] if artist_counter else "—"
 
-    # Audio features (possono essere vuote se API deprecata)
-    features = await get_or_fetch_features(db, client, track_ids)
+    # Audio features (solo cache — API deprecata)
+    features = await get_or_fetch_features(db, track_ids)
 
     averages = {}
     for key in FEATURE_KEYS:
@@ -229,59 +232,29 @@ async def _extract_genres(
 
 
 async def get_or_fetch_features(
-    db: AsyncSession, client: SpotifyClient, track_ids: list[str]
+    db: AsyncSession, track_ids: list[str]
 ) -> dict[str, dict]:
-    """Recupera audio features dalla cache o da Spotify API."""
+    """Recupera audio features dalla cache DB (pure lookup, no API call).
+
+    L'endpoint Spotify /v1/audio-features è deprecato (403 permanente da Feb 2026).
+    Restituisce solo i dati storici già presenti nel DB.
+    """
     if not track_ids:
         return {}
 
-    # Cerca nella cache
     result = await db.execute(
         select(AudioFeatures).where(AudioFeatures.track_spotify_id.in_(track_ids))
     )
     cached = {f.track_spotify_id: f for f in result.scalars().all()}
 
-    # Identifica ID mancanti
-    missing = [tid for tid in track_ids if tid not in cached]
+    missing_count = sum(1 for tid in track_ids if tid not in cached)
+    if missing_count:
+        logger.debug(
+            "Audio features cache miss: %d/%d track IDs not in DB (API deprecated, skipping fetch)",
+            missing_count,
+            len(track_ids),
+        )
 
-    # Fetch da Spotify in batch da 100
-    if missing:
-        for i in range(0, len(missing), 100):
-            batch = missing[i : i + 100]
-            try:
-                resp = await retry_with_backoff(client.get_audio_features, batch)
-                for feat in resp.get("audio_features", []):
-                    if not feat:
-                        continue
-                    af = AudioFeatures(
-                        track_spotify_id=feat["id"],
-                        danceability=feat.get("danceability"),
-                        energy=feat.get("energy"),
-                        valence=feat.get("valence"),
-                        acousticness=feat.get("acousticness"),
-                        instrumentalness=feat.get("instrumentalness"),
-                        liveness=feat.get("liveness"),
-                        speechiness=feat.get("speechiness"),
-                        tempo=feat.get("tempo"),
-                        loudness=feat.get("loudness"),
-                        key=feat.get("key"),
-                        mode=feat.get("mode"),
-                        time_signature=feat.get("time_signature"),
-                    )
-                    db.add(af)
-                    cached[feat["id"]] = af
-                await db.commit()
-            except SpotifyAuthError:
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "Failed to fetch audio features batch %d-%d: %s",
-                    i,
-                    i + len(batch),
-                    exc,
-                )
-
-    # Converti in dizionari
     features_map = {}
     for tid in track_ids:
         af = cached.get(tid)
