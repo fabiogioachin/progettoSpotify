@@ -80,12 +80,12 @@ Data fetching: `useSpotifyData(endpoint)` hook → Axios client with 429 retry i
 
 ## Spotify API Constraints
 
-- **Audio Features** and **Recommendations** endpoints are **DEPRECATED** — do not use for new features
+- **Audio Features**, **Recommendations**, **Related Artists** (`/artists/{id}/related-artists`), and **Artist Top Tracks** (`/artists/{id}/top-tracks`) endpoints are **DEPRECATED/REMOVED in dev mode** — do not use
 - **Feb 2026 dev mode migration**: `/playlists/{id}/tracks` renamed to **`/playlists/{id}/items`** — old endpoint returns 403. Full playlist endpoint (`GET /playlists/{id}`) no longer includes tracks in dev mode.
 - **Batch endpoints removed in dev mode**: `GET /artists?ids=`, `GET /tracks?ids=`, `GET /albums?ids=` — use individual endpoints with semaphore + asyncio.gather
 - Time ranges: only `short_term` (~4w), `medium_term` (~6m), `long_term` (all) — no custom ranges
 - Recently played: max 50 items — workaround is DB accumulation via `RecentPlay` model
-- Always available: popularity, genres, track/artist metadata, related artists
+- Always available: popularity, genres, track/artist metadata
 
 ## File Organization
 

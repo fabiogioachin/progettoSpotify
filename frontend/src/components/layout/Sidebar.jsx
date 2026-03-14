@@ -8,6 +8,7 @@ import {
   ListMusic,
   BarChart3,
   Sparkles,
+  UserCircle,
   Menu,
   X,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ const NAV_SECTIONS = [
     title: 'Principale',
     items: [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { href: '/profile', icon: UserCircle, label: 'Profilo' },
       { href: '/discovery', icon: Compass, label: 'Scopri' },
       { href: '/wrapped', icon: Sparkles, label: 'Il Tuo Wrapped', special: true },
     ],

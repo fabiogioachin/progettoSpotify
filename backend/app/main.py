@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,11 +23,12 @@ from app.routers import (
     library,
     playlist_analytics,
     playlists,
+    profile,
     taste_evolution,
     temporal,
     wrapped,
 )
-from app.services.background_tasks import sync_recent_plays
+from app.services.background_tasks import compute_daily_aggregates, sync_recent_plays
 from app.utils.rate_limiter import APIRateLimiter, RateLimitError
 
 logging.basicConfig(
@@ -60,8 +62,17 @@ async def lifespan(app: FastAPI):
         name="Sync ascolti recenti ogni 60 minuti",
         replace_existing=True,
     )
+    scheduler.add_job(
+        compute_daily_aggregates,
+        trigger=CronTrigger(hour=2, minute=0),
+        id="compute_daily_aggregates",
+        name="Calcolo aggregati giornalieri alle 02:00",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler avviato — sync_recent_plays ogni 60 minuti")
+    logger.info(
+        "APScheduler avviato — sync_recent_plays ogni 60 minuti, compute_daily_aggregates alle 02:00"
+    )
 
     yield
 
@@ -124,6 +135,7 @@ app.include_router(artist_network.router)
 app.include_router(playlist_analytics.router)
 app.include_router(historical.router)
 app.include_router(wrapped.router)
+app.include_router(profile.router)
 
 
 @app.get("/health")

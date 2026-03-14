@@ -7,15 +7,17 @@ Targeted audit of Spotify Web API usage. Checks for deprecated endpoints, proper
 ## Agents
 | Agent | Focus |
 |-------|-------|
-| **API Surface** | Deprecated endpoints (Audio Features, Recommendations), dev mode migration (Feb 2026), proper use of always-available data (popularity, genres, track names) |
+| **API Surface** | Deprecated endpoints (Audio Features, Recommendations, Related Artists, Artist Top Tracks), dev mode migration (Feb 2026), proper use of always-available data (popularity, genres, track names) |
 | **Resilience** | SpotifyAuthError propagation, _safe_fetch patterns, asyncio.gather per-call error handling, retry_with_backoff coverage, API call budget, InvalidToken → 401 |
 ## Checklist
 ### Deprecated API Detection
 - [ ] No calls to `/audio-features` — not even behind try/except (403 "gestiti" consumano rate limit budget)
 - [ ] No calls to `/recommendations` — removed entirely, not wrapped in fallback
+- [ ] No calls to `/artists/{id}/related-artists` — removed in dev mode Feb 2026, returns 403
+- [ ] No calls to `/artists/{id}/top-tracks` — removed in dev mode Feb 2026, returns 403
 - [ ] No cache-then-fetch patterns for deprecated APIs — cache-only (DB lookup), no API call on cache miss
 - [ ] Existing deprecated data shown only from DB cache with `has_*` flags for frontend conditional rendering
-- [ ] No dead code: deprecated methods (e.g. `get_audio_features`, `get_recommendations`) removed from SpotifyClient
+- [ ] No dead code: deprecated methods (e.g. `get_audio_features`, `get_recommendations`, `get_related_artists`) removed from SpotifyClient
 ### Dev Mode Migration (Feb 2026)
 - [ ] Playlist tracks fetched via `/playlists/{id}/items` (NOT `/playlists/{id}/tracks` — returns 403)
 - [ ] Track data extracted with `item.get("item") or item.get("track")` for backwards compat

@@ -14,6 +14,7 @@ const TemporalPage = lazy(() => import('./pages/TemporalPage'))
 const ArtistNetworkPage = lazy(() => import('./pages/ArtistNetworkPage'))
 const PlaylistAnalyticsPage = lazy(() => import('./pages/PlaylistAnalyticsPage'))
 const WrappedPage = lazy(() => import('./pages/WrappedPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 
 function ProtectedRoute({ children, withLayout = true }) {
   const { user, loading } = useAuth()
@@ -40,6 +41,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />

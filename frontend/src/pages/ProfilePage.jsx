@@ -1,0 +1,148 @@
+import { useState } from 'react'
+import { Share2, Clock } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
+import { useSpotifyData } from '../hooks/useSpotifyData'
+import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
+import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
+import ObscurityGauge from '../components/profile/ObscurityGauge'
+import GenreDNA from '../components/profile/GenreDNA'
+import DecadeChart from '../components/profile/DecadeChart'
+import PersonalityBadge from '../components/profile/PersonalityBadge'
+import LifetimeStats from '../components/profile/LifetimeStats'
+import ShareCardRenderer from '../components/share/ShareCardRenderer'
+import ProfileShareCard from '../components/share/ProfileShareCard'
+
+export default function ProfilePage() {
+  const { data, loading, error } = useSpotifyData('/api/profile')
+  const [showShare, setShowShare] = useState(false)
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonKPICard key={i} />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-surface rounded-xl p-8 text-center">
+          <p className="text-red-400 text-sm">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) return null
+
+  const { user, metrics, personality } = data
+
+  // Metrics not yet calculated
+  if (!data.has_metrics) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <ProfileHeader user={user} personality={null} onShare={null} />
+        <div className="bg-surface rounded-xl p-8 flex flex-col items-center gap-3 mt-6">
+          <Clock size={32} className="text-text-muted" />
+          <p className="text-text-secondary text-sm text-center">
+            Le tue metriche sono in fase di calcolo. Torna pi&ugrave; tardi!
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Header */}
+      <ProfileHeader user={user} personality={personality} onShare={() => setShowShare(true)} />
+
+      {/* Lifetime KPIs */}
+      <LifetimeStats metrics={metrics} />
+
+      {/* Charts grid */}
+      <StaggerContainer className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <StaggerItem>
+          <PersonalityBadge personality={personality} />
+        </StaggerItem>
+        <StaggerItem>
+          <ObscurityGauge score={metrics?.obscurity_score} />
+        </StaggerItem>
+        {metrics?.top_genres?.length > 0 && (
+          <StaggerItem>
+            <GenreDNA topGenres={metrics.top_genres} />
+          </StaggerItem>
+        )}
+        {metrics?.decade_distribution && Object.keys(metrics.decade_distribution).length > 0 && (
+          <StaggerItem>
+            <DecadeChart decadeDistribution={metrics.decade_distribution} />
+          </StaggerItem>
+        )}
+      </StaggerContainer>
+
+      {/* Share modal */}
+      <AnimatePresence>
+        {showShare && (
+          <ShareCardRenderer
+            filename="spotify-intelligence-profilo"
+            onClose={() => setShowShare(false)}
+          >
+            <ProfileShareCard
+              personality={personality}
+              metrics={metrics}
+              userName={user?.display_name}
+            />
+          </ShareCardRenderer>
+        )}
+      </AnimatePresence>
+    </main>
+  )
+}
+
+function ProfileHeader({ user, personality, onShare }) {
+  return (
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        {user?.avatar_url && (
+          <img
+            src={user.avatar_url}
+            alt={user.display_name}
+            className="w-14 h-14 rounded-full object-cover ring-2 ring-accent/30"
+          />
+        )}
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-display font-bold text-text-primary">
+              {user?.display_name || 'Profilo'}
+            </h1>
+            {personality && (
+              <span className="text-sm bg-accent/10 text-accent px-2.5 py-0.5 rounded-full font-medium">
+                {personality.emoji} {personality.archetype}
+              </span>
+            )}
+          </div>
+          <p className="text-text-secondary text-sm">Il tuo profilo musicale</p>
+        </div>
+      </div>
+      {onShare && (
+        <button
+          onClick={onShare}
+          className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          <Share2 size={16} />
+          Condividi Profilo
+        </button>
+      )}
+    </div>
+  )
+}

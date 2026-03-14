@@ -5,7 +5,7 @@ Eseguiti da APScheduler nel lifespan di FastAPI.
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import async_session
 from app.models.listening_history import RecentPlay, UserSnapshot
 from app.models.user import SpotifyToken, User
+from app.services.profile_metrics import compute_daily_stats
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,21 @@ async def sync_recent_plays():
                 await _sync_user_recent_plays(db, user_id)
                 synced_count += 1
         except SpotifyAuthError:
-            logger.warning("Background sync: token scaduto/invalido per user_id=%d, skip", user_id)
+            logger.warning(
+                "Background sync: token scaduto/invalido per user_id=%d, skip", user_id
+            )
+        except RateLimitError as e:
+            logger.warning(
+                "Background sync: rate limited (retry_after=%s) — interrompo sync per tutti gli utenti rimanenti",
+                e.retry_after,
+            )
+            break
         except Exception as exc:
             logger.error("Background sync: errore per user_id=%d: %s", user_id, exc)
 
-    logger.info("Background sync: completato per %d/%d utenti", synced_count, len(user_ids))
+    logger.info(
+        "Background sync: completato per %d/%d utenti", synced_count, len(user_ids)
+    )
 
 
 async def _sync_user_recent_plays(db: AsyncSession, user_id: int):
@@ -77,20 +88,34 @@ async def _sync_user_recent_plays(db: AsyncSession, user_id: int):
             if exists.scalar() > 0:
                 continue
 
-            db.add(RecentPlay(
-                user_id=user_id,
-                track_spotify_id=track_id,
-                track_name=track.get("name", ""),
-                artist_name=(track.get("artists", [{}])[0].get("name", "")
-                             if track.get("artists") else ""),
-                duration_ms=track.get("duration_ms", 0),
-                played_at=dt_naive,
-            ))
+            db.add(
+                RecentPlay(
+                    user_id=user_id,
+                    track_spotify_id=track_id,
+                    track_name=track.get("name", ""),
+                    artist_name=(
+                        track.get("artists", [{}])[0].get("name", "")
+                        if track.get("artists")
+                        else ""
+                    ),
+                    artist_spotify_id=(
+                        track.get("artists", [{}])[0].get("id", "")
+                        if track.get("artists")
+                        else ""
+                    ),
+                    duration_ms=track.get("duration_ms", 0),
+                    played_at=dt_naive,
+                )
+            )
             stored += 1
 
         if stored > 0:
             await db.commit()
-            logger.info("Background sync: user_id=%d — %d nuovi ascolti salvati", user_id, stored)
+            logger.info(
+                "Background sync: user_id=%d — %d nuovi ascolti salvati",
+                user_id,
+                stored,
+            )
     finally:
         await client.close()
 
@@ -116,19 +141,32 @@ async def save_daily_snapshot(user_id: int):
         # Fetch top artists e top tracks da Spotify
         client = SpotifyClient(db, user_id)
         try:
-            top_artists_data = await retry_with_backoff(client.get_top_artists, time_range="short_term", limit=50)
-            top_tracks_data = await retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50)
+            top_artists_data = await retry_with_backoff(
+                client.get_top_artists, time_range="short_term", limit=50
+            )
+            top_tracks_data = await retry_with_backoff(
+                client.get_top_tracks, time_range="short_term", limit=50
+            )
 
             # Serializza solo i campi essenziali
             artists_summary = [
-                {"id": a.get("id"), "name": a.get("name"), "genres": a.get("genres", []),
-                 "popularity": a.get("popularity", 0)}
+                {
+                    "id": a.get("id"),
+                    "name": a.get("name"),
+                    "genres": a.get("genres", []),
+                    "popularity": a.get("popularity", 0),
+                }
                 for a in top_artists_data.get("items", [])
             ]
             tracks_summary = [
-                {"id": t.get("id"), "name": t.get("name"),
-                 "artist": t.get("artists", [{}])[0].get("name", "") if t.get("artists") else "",
-                 "popularity": t.get("popularity", 0)}
+                {
+                    "id": t.get("id"),
+                    "name": t.get("name"),
+                    "artist": t.get("artists", [{}])[0].get("name", "")
+                    if t.get("artists")
+                    else "",
+                    "popularity": t.get("popularity", 0),
+                }
                 for t in top_tracks_data.get("items", [])
             ]
 
@@ -149,9 +187,36 @@ async def save_daily_snapshot(user_id: int):
             await db.commit()
             logger.info("Daily snapshot salvato per user_id=%d", user_id)
         except SpotifyAuthError:
-            logger.warning("Daily snapshot: token invalido per user_id=%d, skip", user_id)
+            logger.warning(
+                "Daily snapshot: token invalido per user_id=%d, skip", user_id
+            )
         except Exception as exc:
             logger.warning("Daily snapshot: errore per user_id=%d: %s", user_id, exc)
             await db.rollback()
         finally:
             await client.close()
+
+
+async def compute_daily_aggregates():
+    """Computa statistiche giornaliere per tutti gli utenti. Eseguito alle 02:00."""
+    yesterday = date.today() - timedelta(days=1)
+    logger.info("Daily aggregates: calcolo per %s", yesterday)
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(User.id).join(SpotifyToken, SpotifyToken.user_id == User.id)
+        )
+        user_ids = [row[0] for row in result.all()]
+
+    computed = 0
+    for user_id in user_ids:
+        try:
+            async with async_session() as db:
+                await compute_daily_stats(db, user_id, yesterday)
+                computed += 1
+        except Exception as exc:
+            logger.error("Daily aggregates: errore per user_id=%d: %s", user_id, exc)
+
+    logger.info(
+        "Daily aggregates: completato per %d/%d utenti", computed, len(user_ids)
+    )

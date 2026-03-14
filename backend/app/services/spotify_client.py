@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from cachetools import TTLCache
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,16 @@ from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServ
 from app.utils.token_manager import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
+
+# Module-level TTL caches for read-only Spotify API responses
+_cache_5m = TTLCache(maxsize=256, ttl=300)  # 5 min for most methods
+_cache_2m = TTLCache(maxsize=64, ttl=120)  # 2 min for recently played
+
+
+def _cache_key(user_id, method_name, *args, **kwargs):
+    """Create a hashable cache key from user_id, method name, and arguments."""
+    return (user_id, method_name, args, tuple(sorted(kwargs.items())))
+
 
 SPOTIFY_ID_RE = re.compile(r"^[a-zA-Z0-9]{15,25}$")
 
@@ -177,31 +188,58 @@ class SpotifyClient:
     # ---- Endpoints specifici ----
 
     async def get_me(self) -> dict:
-        return await self.get("/me")
+        key = _cache_key(self.user_id, "me")
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get("/me")
+        _cache_5m[key] = result
+        return result
 
     async def get_top_tracks(
         self, time_range: str = "medium_term", limit: int = 50
     ) -> dict:
-        return await self.get("/me/top/tracks", time_range=time_range, limit=limit)
+        key = _cache_key(self.user_id, "top_tracks", time_range, limit)
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get("/me/top/tracks", time_range=time_range, limit=limit)
+        _cache_5m[key] = result
+        return result
 
     async def get_top_artists(
         self, time_range: str = "medium_term", limit: int = 50
     ) -> dict:
-        return await self.get("/me/top/artists", time_range=time_range, limit=limit)
+        key = _cache_key(self.user_id, "top_artists", time_range, limit)
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get("/me/top/artists", time_range=time_range, limit=limit)
+        _cache_5m[key] = result
+        return result
 
     async def get_recently_played(self, limit: int = 50) -> dict:
-        return await self.get("/me/player/recently-played", limit=limit)
+        key = _cache_key(self.user_id, "recently_played", limit)
+        cached = _cache_2m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get("/me/player/recently-played", limit=limit)
+        _cache_2m[key] = result
+        return result
 
     async def get_saved_tracks(self, limit: int = 50, offset: int = 0) -> dict:
         return await self.get("/me/tracks", limit=limit, offset=offset)
 
     async def get_playlists(self, limit: int = 50, offset: int = 0) -> dict:
-        return await self.get("/me/playlists", limit=limit, offset=offset)
+        key = _cache_key(self.user_id, "playlists", limit, offset)
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get("/me/playlists", limit=limit, offset=offset)
+        _cache_5m[key] = result
+        return result
 
     async def get_artist(self, artist_id: str) -> dict:
         _validate_spotify_id(artist_id)
         return await self.get(f"/artists/{artist_id}")
 
-    async def get_related_artists(self, artist_id: str) -> dict:
-        _validate_spotify_id(artist_id)
-        return await self.get(f"/artists/{artist_id}/related-artists")

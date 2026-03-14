@@ -156,14 +156,11 @@ export default function DiscoveryPage() {
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Sparkles size={18} className="text-accent" />
-                {recommendationsSource === 'related_artists' ? 'Artisti Correlati'
-                  : recommendationsSource === 'spotify' ? 'Brani Suggeriti'
+                {recommendationsSource === 'spotify' ? 'Brani Suggeriti'
                   : 'Scoperte Recenti'}
               </h3>
               <p className="text-text-muted text-xs mb-4">
-                {recommendationsSource === 'related_artists'
-                  ? 'Artisti simili ai tuoi preferiti — esplora nuova musica'
-                  : recommendationsSource === 'spotify'
+                {recommendationsSource === 'spotify'
                     ? 'Basati sul tuo profilo d\'ascolto — priorità ad artisti che non conosci ancora'
                     : 'Brani apparsi di recente nelle tue classifiche — non ancora nel tuo medio termine'}
               </p>

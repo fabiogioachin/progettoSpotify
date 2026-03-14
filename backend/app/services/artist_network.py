@@ -1,4 +1,9 @@
-"""Costruzione del grafo di artisti correlati e rilevamento cluster."""
+"""Costruzione del grafo di artisti basato su generi condivisi e rilevamento cluster.
+
+Non usa l'endpoint /related-artists (rimosso in dev mode Feb 2026).
+Costruisce edges tra artisti che condividono generi — piu' generi in comune,
+connessione piu' forte.
+"""
 
 import asyncio
 from collections import defaultdict
@@ -8,73 +13,78 @@ from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 
 async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15) -> dict:
-    """Costruisce il grafo di artisti correlati partendo dai top artists."""
+    """Costruisce il grafo di artisti basato su generi condivisi."""
 
-    top_data = await retry_with_backoff(
+    # Fetch top artists from multiple time ranges for richer data
+    medium_task = retry_with_backoff(
         client.get_top_artists, time_range="medium_term", limit=max_seed_artists
     )
-    top_items = top_data.get("items", [])
+    long_task = retry_with_backoff(
+        client.get_top_artists, time_range="long_term", limit=max_seed_artists
+    )
 
-    if not top_items:
+    medium_data, long_data = await asyncio.gather(
+        medium_task, long_task, return_exceptions=True
+    )
+
+    for result in (medium_data, long_data):
+        if isinstance(result, SpotifyAuthError):
+            raise result
+
+    if isinstance(medium_data, BaseException):
+        medium_data = {"items": []}
+    if isinstance(long_data, BaseException):
+        long_data = {"items": []}
+
+    # Merge artists from both ranges, dedup by ID
+    seen_ids = set()
+    all_artists = []
+    for artist in medium_data.get("items", []) + long_data.get("items", []):
+        if artist["id"] not in seen_ids:
+            seen_ids.add(artist["id"])
+            all_artists.append(artist)
+
+    if not all_artists:
         return _empty_result()
 
-    # Build nodes dict from top artists
+    # Build nodes
     nodes = {}
-    for artist in top_items:
+    for artist in all_artists:
         images = artist.get("images", [])
         nodes[artist["id"]] = {
             "id": artist["id"],
             "name": artist.get("name", ""),
             "image": images[0]["url"] if images else None,
             "is_top": True,
-            "genres": artist.get("genres", [])[:3],
+            "genres": artist.get("genres", [])[:5],
             "popularity": artist.get("popularity", 0),
             "followers": artist.get("followers", {}).get("total", 0),
         }
 
-    # Fetch related artists with concurrency control
+    # Build genre-based edges: connect artists sharing >= 1 genre
     edges = []
     seen_edges = set()
+    artist_ids = list(nodes.keys())
 
-    sem = asyncio.Semaphore(2)
+    for i, aid_a in enumerate(artist_ids):
+        genres_a = set(nodes[aid_a]["genres"])
+        if not genres_a:
+            continue
+        for aid_b in artist_ids[i + 1:]:
+            genres_b = set(nodes[aid_b]["genres"])
+            shared = genres_a & genres_b
+            if shared:
+                edge_key = tuple(sorted([aid_a, aid_b]))
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges.append({
+                        "source": aid_a,
+                        "target": aid_b,
+                        "weight": len(shared),
+                        "shared_genres": list(shared)[:3],
+                    })
 
-    async def fetch_related(artist_id):
-        async with sem:
-            try:
-                data = await retry_with_backoff(client.get_related_artists, artist_id)
-                return artist_id, data.get("artists", [])
-            except SpotifyAuthError:
-                raise
-            except Exception:
-                return artist_id, []
-
-    tasks = [fetch_related(a["id"]) for a in top_items]
-    results = await asyncio.gather(*tasks)
-
-    for source_id, related_artists in results:
-        for rel in related_artists[:10]:  # Limit to 10 related per artist
-            rel_id = rel["id"]
-
-            # Add node if new
-            if rel_id not in nodes:
-                images = rel.get("images", [])
-                nodes[rel_id] = {
-                    "id": rel_id,
-                    "name": rel.get("name", ""),
-                    "image": images[0]["url"] if images else None,
-                    "is_top": False,
-                    "genres": rel.get("genres", [])[:3],
-                    "popularity": rel.get("popularity", 0),
-                    "followers": rel.get("followers", {}).get("total", 0),
-                }
-
-            # Add edge (deduplicated)
-            edge_key = tuple(sorted([source_id, rel_id]))
-            if edge_key not in seen_edges:
-                seen_edges.add(edge_key)
-                edges.append({"source": source_id, "target": rel_id})
-
-    # Add connection count per node
+    # Connection count per node
     conn_count = defaultdict(int)
     for edge in edges:
         conn_count[edge["source"]] += 1
@@ -88,10 +98,8 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
     # Bridge artists: nodes connecting different clusters
     bridges = _find_bridges(nodes, edges, clusters)
 
-    # Count clusters
+    # Cluster names from dominant genres
     cluster_ids = set(c["cluster"] for c in clusters)
-
-    # Compute dominant genre per cluster for meaningful names
     cluster_genres = defaultdict(lambda: defaultdict(int))
     cluster_map = {c["id"]: c["cluster"] for c in clusters}
     for nid, node in nodes.items():
@@ -109,7 +117,7 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
         else:
             cluster_names[cid] = f"Cerchia {cid + 1}"
 
-    # Genre summary for the network
+    # Genre summary
     genre_counter = defaultdict(int)
     for n in nodes.values():
         for g in n.get("genres", []):
@@ -127,7 +135,7 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
             "total_nodes": len(nodes),
             "total_edges": len(edges),
             "cluster_count": len(cluster_ids),
-            "top_artists_count": sum(1 for n in nodes.values() if n["is_top"]),
+            "top_artists_count": len(nodes),
         },
     }
 

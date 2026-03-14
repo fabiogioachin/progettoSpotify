@@ -170,67 +170,9 @@ async def discover(
                 }
             )
 
-    # 5b. Artisti correlati come raccomandazioni
-    related_recs = []
-    if top_artists:
-        sem_related = asyncio.Semaphore(2)
-        top_artist_ids = set(a["id"] for a in top_artists)
-
-        async def _fetch_related(artist_id: str) -> list[dict]:
-            async with sem_related:
-                try:
-                    data = await retry_with_backoff(
-                        client.get_related_artists, artist_id
-                    )
-                    return data.get("artists", [])
-                except SpotifyAuthError:
-                    raise
-                except Exception as exc:
-                    logger.warning(
-                        "get_related_artists fallito per %s: %s", artist_id, exc
-                    )
-                    return []
-
-        # Top 5 artisti → recupera correlati per ciascuno
-        related_results = await asyncio.gather(
-            *[_fetch_related(a["id"]) for a in top_artists[:5]],
-            return_exceptions=True,
-        )
-
-        # Re-raise auth errors
-        for r in related_results:
-            if isinstance(r, SpotifyAuthError):
-                raise r
-
-        # Colleziona artisti unici non gia' nei top
-        seen_artist_ids: set[str] = set()
-        for result in related_results:
-            if isinstance(result, list):
-                for artist in result:
-                    aid = artist.get("id")
-                    if aid and aid not in top_artist_ids and aid not in seen_artist_ids:
-                        seen_artist_ids.add(aid)
-                        images = artist.get("images", [])
-                        related_recs.append(
-                            {
-                                "id": f"related_{aid}",
-                                "name": artist.get("name", ""),
-                                "artist": artist.get("name", ""),
-                                "album": "",
-                                "album_image": images[0]["url"] if images else None,
-                                "popularity": artist.get("popularity", 0),
-                                "is_new_artist": True,
-                                "source": "related_artists",
-                            }
-                        )
-
-    # 6. Raccomandazioni: artisti correlati + scoperte recenti
-    if related_recs:
-        recommendations = (related_recs[:12] + new_discoveries[:8])[:20]
-        recommendations_source = "related_artists"
-    else:
-        recommendations = new_discoveries[:20]
-        recommendations_source = "recent_discoveries"
+    # 5b. Raccomandazioni: scoperte recenti (related_artists API rimossa in dev mode)
+    recommendations = new_discoveries[:20]
+    recommendations_source = "recent_discoveries"
 
     # Ordinamento: nuovi artisti prima, poi per popolarita' decrescente
     recommendations.sort(
