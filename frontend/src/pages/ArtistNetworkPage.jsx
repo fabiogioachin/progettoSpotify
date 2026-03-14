@@ -3,7 +3,7 @@ import KPICard from '../components/cards/KPICard'
 import ArtistNetwork from '../components/charts/ArtistNetwork'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
-import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music } from 'lucide-react'
+import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music, AlertTriangle } from 'lucide-react'
 
 export default function ArtistNetworkPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/artist-network')
@@ -15,6 +15,8 @@ export default function ArtistNetworkPage() {
   const clusterNames = data?.cluster_names || {}
   const bridges = data?.bridges || []
   const topGenres = data?.top_genres || []
+  const clusterRankings = data?.cluster_rankings || {}
+  const dataQuality = data?.data_quality || {}
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -46,18 +48,25 @@ export default function ArtistNetworkPage() {
             {/* KPI Cards */}
             <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StaggerItem>
-                <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="I tuoi top 15 artisti (periodo 6M) più fino a 10 artisti correlati per ciascuno, secondo l'API Related Artists di Spotify" />
+                <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="I tuoi artisti più ascoltati da 3 periodi, collegati per generi musicali condivisi" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Ogni connessione indica che Spotify considera i due artisti correlati (Related Artists API). Non basato su generi condivisi" />
+                <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Ogni connessione indica generi musicali condivisi. Più generi in comune, connessione più forte" />
               </StaggerItem>
               <StaggerItem>
                 <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti che formano una rete connessa. Il nome della cerchia è il genere dominante tra gli artisti del gruppo" />
               </StaggerItem>
               <StaggerItem>
-                <KPICard title="Artisti Top" value={metrics.top_artists_count || 0} icon={BarChart3} delay={300} tooltip="I tuoi artisti più ascoltati (top 15 dal periodo 6M) usati come punto di partenza per costruire la rete" />
+                <KPICard title="Densità Rete" value={Math.round((metrics.density || 0) * 100)} suffix="%" icon={BarChart3} delay={300} tooltip="Quanto è interconnesso il tuo ecosistema musicale. 100% = tutti gli artisti condividono generi" />
               </StaggerItem>
             </StaggerContainer>
+
+            {data?.data_quality?.warning && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
+                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
+                <p className="text-amber-400 text-sm">{data.data_quality.warning}</p>
+              </div>
+            )}
 
             {/* Network Graph */}
             <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} clusterNames={clusterNames} loading={loading} />
@@ -123,6 +132,44 @@ export default function ArtistNetworkPage() {
                       </div>
                     </StaggerItem>
                   ))}
+                </StaggerContainer>
+              </div>
+            )}
+
+            {/* Top per Cerchia */}
+            {Object.keys(clusterRankings).length > 0 && (
+              <div className="glow-card bg-surface rounded-xl p-5">
+                <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                  <Users size={18} className="text-accent" />
+                  Top per Cerchia
+                </h3>
+                <p className="text-text-secondary text-sm mb-4">
+                  L'artista più influente in ciascuna cerchia del tuo ecosistema
+                </p>
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {Object.entries(clusterRankings).map(([clusterId, artists]) => {
+                    const topArtist = artists[0]
+                    if (!topArtist) return null
+                    const cName = clusterNames[clusterId] || `Cerchia ${Number(clusterId) + 1}`
+                    return (
+                      <StaggerItem key={clusterId}>
+                        <div className="flex items-start gap-3 p-3 rounded-lg bg-surface-hover">
+                          {topArtist.image ? (
+                            <img src={topArtist.image} alt={topArtist.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-background flex items-center justify-center flex-shrink-0">
+                              <Users size={18} className="text-text-muted" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-text-primary text-sm font-medium truncate">{topArtist.name}</p>
+                            <p className="text-accent text-xs">{cName}</p>
+                            <p className="text-text-muted text-[10px]">Score: {Math.round(topArtist.score * 100)}%</p>
+                          </div>
+                        </div>
+                      </StaggerItem>
+                    )
+                  })}
                 </StaggerContainer>
               </div>
             )}

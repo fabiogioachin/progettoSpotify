@@ -14,6 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import FEATURE_KEYS
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.spotify_client import SpotifyClient
+from app.services.taste_clustering import (
+    build_feature_matrix,
+    compute_cosine_similarities,
+    detect_outliers_isolation_forest,
+)
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
@@ -114,9 +119,57 @@ async def discover(
         else {}
     )
 
-    # 4. Outlier — usa features se disponibili, altrimenti popolarita'
+    # 4. Outlier — tre livelli: Isolation Forest → distanza euclidea → popolarita'
     outliers = []
-    if has_features and centroid:
+
+    # 4a. Isolation Forest (sklearn) — se abbiamo features e abbastanza tracce
+    if has_features and len(top_features) >= 5:
+        try:
+            track_dicts = []
+            for t in top_items:
+                tid = t["id"]
+                if tid in top_features:
+                    track_dicts.append(
+                        {
+                            "id": tid,
+                            "genres": [],  # tracce non hanno generi direttamente
+                            "popularity": t.get("popularity", 0),
+                            "followers": 0,
+                        }
+                    )
+
+            track_matrix, track_ids, _ = build_feature_matrix(
+                track_dicts,
+                audio_features={
+                    t["id"]: top_features[t["id"]]
+                    for t in top_items
+                    if t["id"] in top_features
+                },
+            )
+
+            outlier_ids = detect_outliers_isolation_forest(track_matrix, track_ids)
+
+            for tid in outlier_ids:
+                track_info = next((t for t in top_items if t["id"] == tid), None)
+                if track_info:
+                    outliers.append(
+                        {
+                            "id": tid,
+                            "name": track_info["name"],
+                            "artist": track_info["artists"][0]["name"]
+                            if track_info.get("artists")
+                            else "",
+                            "album_image": _album_image(track_info),
+                            "distance": 0,  # Non applicabile per Isolation Forest
+                            "metric_label": "outlier",
+                        }
+                    )
+        except Exception as exc:
+            logger.warning("Isolation Forest fallito, fallback euclidea: %s", exc)
+            outliers = []
+
+    # 4b. Fallback distanza euclidea — se sklearn non ha prodotto risultati
+    if not outliers and has_features and centroid:
         for tid, feat in top_features.items():
             dist = _euclidean_distance(centroid, feat)
             track_info = next((t for t in top_items if t["id"] == tid), None)
@@ -134,8 +187,9 @@ async def discover(
                     }
                 )
         outliers.sort(key=lambda x: x["distance"], reverse=True)
-    else:
-        # Fallback: hidden gems — brani sotto la media di popolarità
+
+    # 4c. Fallback popolarita' — hidden gems sotto la media
+    if not outliers:
         avg_pop = sum(t.get("popularity", 0) for t in top_items) / len(top_items)
         for t in top_items:
             pop = t.get("popularity", 0)
@@ -178,6 +232,32 @@ async def discover(
     recommendations.sort(
         key=lambda x: (not x.get("is_new_artist", False), -(x.get("popularity", 0)))
     )
+
+    # 6. Similarity scoring con coseno (additive, non-blocking)
+    try:
+        if len(top_artists) >= 5:
+            artist_dicts = [
+                {
+                    "id": a["id"],
+                    "genres": a.get("genres", [])[:5],
+                    "popularity": a.get("popularity", 0),
+                    "followers": a.get("followers", {}).get("total", 0),
+                }
+                for a in top_artists
+            ]
+            artist_matrix, artist_ids_list, _ = build_feature_matrix(artist_dicts)
+            similarity_scores = compute_cosine_similarities(
+                artist_matrix, artist_ids_list
+            )
+
+            # Build id->similarity map for fast lookup
+            artist_name_to_id = {a.get("name", ""): a["id"] for a in top_artists}
+            for rec in recommendations:
+                artist_id = artist_name_to_id.get(rec.get("artist", ""))
+                if artist_id:
+                    rec["similarity_score"] = similarity_scores.get(artist_id)
+    except Exception as exc:
+        logger.warning("Similarity scoring fallito: %s", exc)
 
     # 7. Distribuzione popolarita'
     popularity_buckets = {"0-20": 0, "21-40": 0, "41-60": 0, "61-80": 0, "81-100": 0}

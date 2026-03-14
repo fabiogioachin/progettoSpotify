@@ -32,12 +32,14 @@ Count every Spotify API call. Each endpoint must stay under budget.
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
 | `get_top_artists(short_term)` | 1 | 5 min | 0-1 |
+| `get_top_artists(medium_term)` | 1 | 5 min | 0-1 |
 | `get_top_artists(long_term)` | 1 | 5 min | 0-1 |
 | `get_top_tracks(long_term)` | 1 | 5 min | 0-1 |
-| `get_me()` | 1 | uncached* | 1 |
-| **Total worst-case** | **4** | | **1-4** |
+| `get_me()` | 1 | 5 min | 0-1 |
+| TasteMap computation | 0 | N/A | 0 |
+| **Total worst-case** | **5** | | **0-5** |
 
-*`get_me()` should be cached (API-1 finding — add to `_cache_5m`).
+Note: TasteMap (PCA, clustering) is pure-compute on local data — zero API calls. `get_me()` now cached in `_cache_5m`.
 
 ### Dashboard (`GET /api/dashboard`)
 
@@ -69,15 +71,16 @@ Count every Spotify API call. Each endpoint must stay under budget.
 
 Note: `get_related_artists` removed (403 in dev mode). No API calls for recommendations — uses `new_discoveries` from short vs medium comparison.
 
-### Artist Network (`GET /api/analytics/artist-network`)
+### Artist Network (`GET /api/artist-network`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
+| `get_top_artists(short_term)` | 1 | 5 min | 0-1 |
 | `get_top_artists(medium_term)` | 1 | 5 min | 0-1 |
 | `get_top_artists(long_term)` | 1 | 5 min | 0-1 |
-| **Total worst-case** | **2** | | **0-2** |
+| **Total worst-case** | **3** | | **0-3** |
 
-Note: No `get_related_artists` calls (403 in dev mode). Graph edges built from shared genres between top artists — zero additional API calls.
+Note: Expanded to 3 time ranges (was 2). No `get_related_artists` (403 in dev mode). Graph edges from fuzzy genre similarity. NetworkX metrics (PageRank, Louvain, betweenness) computed locally — zero additional API calls.
 
 ### Audio Analysis (`POST /api/analyze-tracks`)
 

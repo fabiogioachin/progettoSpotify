@@ -7,7 +7,7 @@ Targeted audit of Spotify Web API usage. Checks for deprecated endpoints, proper
 ## Agents
 | Agent | Focus |
 |-------|-------|
-| **API Surface** | Deprecated endpoints (Audio Features, Recommendations, Related Artists, Artist Top Tracks), dev mode migration (Feb 2026), proper use of always-available data (popularity, genres, track names) |
+| **API Surface** | Deprecated endpoints (Audio Features, Recommendations, Related Artists, Artist Top Tracks, batch endpoints), dev mode migration (Feb 2026), proper use of always-available data (popularity, genres, track/artist metadata) |
 | **Resilience** | SpotifyAuthError propagation, _safe_fetch patterns, asyncio.gather per-call error handling, retry_with_backoff coverage, API call budget, InvalidToken → 401 |
 ## Checklist
 ### Deprecated API Detection
@@ -51,12 +51,19 @@ Targeted audit of Spotify Web API usage. Checks for deprecated endpoints, proper
 - [ ] Missing data defaults to `0`, `None`, or empty — never a plausible fake value
 - [ ] Time ranges: only `short_term`, `medium_term`, `long_term` (no custom ranges)
 - [ ] Recently played: max 50 items communicated in UI
+### Pure-Compute Services (no API calls)
+- [ ] `taste_clustering.py`, `taste_map.py`, `genre_utils.py` do NOT import SpotifyClient or make HTTP calls
+- [ ] These services work exclusively on local data (DB cache, in-memory structures)
+- [ ] NetworkX and scikit-learn computations are CPU-only, no network I/O
+
 ## Key Files
-- `backend/app/services/spotify_client.py` — API wrapper, Fernet encryption
-- `backend/app/services/discovery.py` — genre/popularity analysis (no deprecated APIs)
+- `backend/app/services/spotify_client.py` — API wrapper, Fernet encryption, cachetools TTL
+- `backend/app/services/discovery.py` — genre/popularity analysis, cosine similarity scoring
+- `backend/app/services/artist_network.py` — NetworkX graph (Louvain, PageRank, betweenness), fuzzy genre matching
+- `backend/app/services/taste_clustering.py` — scikit-learn clustering, PCA, similarity (pure-compute)
+- `backend/app/services/genre_utils.py` — fuzzy genre matching utilities (pure-compute)
 - `backend/app/services/taste_evolution.py` — 3-period comparison, `_safe_fetch`
-- `backend/app/services/temporal_patterns.py` — DB-accumulated history
-- `backend/app/services/audio_feature_extractor.py` — librosa-based extraction (recovery path for deprecated audio features)
+- `backend/app/services/audio_feature_extractor.py` — librosa-based extraction (recovery path)
 - `backend/app/routers/*.py` — all routers
 - `backend/app/utils/rate_limiter.py` — rate limiting, retry_with_backoff, error classes
 - `backend/app/services/background_tasks.py` — APScheduler tasks (must use dedicated DB sessions)

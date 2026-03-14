@@ -220,10 +220,11 @@ app.utils.rate_limiter
 
 ## Spotify API Constraints
 
-- **Audio Features** e **Recommendations**: DEPRECATED. Non usare per nuove feature. Non lasciare chiamate dietro try/except — un 403 "gestito" consuma rate limit budget. Rimuovere interamente, usare solo DB cache.
+- **Deprecated/rimossi in dev mode**: Audio Features, Recommendations, Related Artists, Artist Top Tracks, batch endpoints (`/artists?ids=`, `/tracks?ids=`, `/albums?ids=`). Non usare. Non lasciare dietro try/except — un 403 "gestito" consuma rate limit budget. Rimuovere interamente.
 - Time ranges: solo `short_term` (~4w), `medium_term` (~6m), `long_term` (all). Nessun range custom.
 - Recently played: max 50 item (hard limit API). Workaround: `RecentPlay` model + sync orario APScheduler.
-- Endpoints sempre disponibili: popularity, genres, track/artist metadata, related artists, artist top tracks.
+- **Sempre disponibili**: popularity, genres, track/artist metadata, user profile.
+- **Pure-compute services** (`taste_clustering.py`, `taste_map.py`, `genre_utils.py`): lavorano su dati locali. Non devono MAI importare SpotifyClient o fare chiamate HTTP.
 
 ## Convenzioni
 

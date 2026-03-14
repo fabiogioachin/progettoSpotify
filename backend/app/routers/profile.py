@@ -13,6 +13,7 @@ from app.models.listening_history import UserProfileMetrics
 from app.services.personality import compute_archetype
 from app.services.profile_metrics import compute_profile_metrics, get_recent_daily_stats
 from app.services.spotify_client import SpotifyClient
+from app.services.taste_map import compute_taste_map
 from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
@@ -48,6 +49,7 @@ async def get_profile(
                 _safe_fetch("metrics", compute_profile_metrics(db, client, user_id)),
                 _safe_fetch("user", retry_with_backoff(client.get_me)),
                 _safe_fetch("daily", get_recent_daily_stats(db, user_id, days=30)),
+                _safe_fetch("taste_map", compute_taste_map(db, client, user_id)),
             )
         )
     except SpotifyAuthError:
@@ -101,10 +103,13 @@ async def get_profile(
             "country": user_data.get("country", ""),
         }
 
+    taste_map = results.get("taste_map")
+
     return {
         "user": user_info,
         "metrics": metrics,
         "personality": personality,
         "daily_stats": daily_stats,
         "has_metrics": existing_metrics is not None or metrics is not None,
+        "taste_map": taste_map,
     }

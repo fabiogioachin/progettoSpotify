@@ -9,6 +9,7 @@ import GenreDNA from '../components/profile/GenreDNA'
 import DecadeChart from '../components/profile/DecadeChart'
 import PersonalityBadge from '../components/profile/PersonalityBadge'
 import LifetimeStats from '../components/profile/LifetimeStats'
+import TasteMap from '../components/profile/TasteMap'
 import ShareCardRenderer from '../components/share/ShareCardRenderer'
 import ProfileShareCard from '../components/share/ProfileShareCard'
 
@@ -86,6 +87,16 @@ export default function ProfilePage() {
         {metrics?.decade_distribution && Object.keys(metrics.decade_distribution).length > 0 && (
           <StaggerItem>
             <DecadeChart decadeDistribution={metrics.decade_distribution} />
+          </StaggerItem>
+        )}
+        {data.taste_map && data.taste_map.feature_mode !== 'insufficient' && data.taste_map.points?.length >= 3 && (
+          <StaggerItem className="lg:col-span-2">
+            <TasteMap
+              points={data.taste_map.points}
+              varianceExplained={data.taste_map.variance_explained}
+              featureMode={data.taste_map.feature_mode}
+              genreGroups={data.taste_map.genre_groups}
+            />
           </StaggerItem>
         )}
       </StaggerContainer>

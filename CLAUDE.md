@@ -54,7 +54,7 @@ Each request: `require_auth` extracts user_id from signed session cookie → rou
 
 **Rate limiting**: Two layers — API middleware (120 req/min per IP) + Spotify 429 propagation with Retry-After header to frontend.
 
-**Background jobs** (APScheduler): `sync_recent_plays` hourly (accumulates beyond Spotify's 50-item hard limit), `save_daily_snapshot` on first daily login via `UserSnapshot` model.
+**Background jobs** (APScheduler): `sync_recent_plays` hourly (accumulates beyond Spotify's 50-item hard limit), `save_daily_snapshot` on first daily login via `UserSnapshot` model, `compute_daily_aggregates` at 02:00 daily.
 
 **Audio analysis** (on-demand): `POST /api/analyze-tracks` launches async librosa extraction from preview MP3s. Frontend polls `GET /api/analyze-tracks/{task_id}` for progressive results. Background task uses dedicated DB session (not request-scoped). Results cached in `AudioFeatures` table.
 
@@ -76,16 +76,18 @@ Data fetching: `useSpotifyData(endpoint)` hook → Axios client with 429 retry i
 
 4. **Background tasks need dedicated DB sessions**: `asyncio.create_task()` outlives the request handler — the `get_db()` session is closed when the handler returns. Background tasks must create their own session via `async_session()`.
 
-4. **No plausible fake defaults**: missing data defaults to `None`/`0`/`[]`, never magic numbers like `default=180000` that look like real measurements. Backend returns `has_*` / `*_source` flags; frontend uses them for conditional rendering instead of showing silent empty cards.
+5. **No plausible fake defaults**: missing data defaults to `None`/`0`/`[]`, never magic numbers like `default=180000` that look like real measurements. Backend returns `has_*` / `*_source` flags; frontend uses them for conditional rendering instead of showing silent empty cards.
+
+6. **Pure-compute services never call Spotify API**: Services like `taste_clustering.py` and `genre_utils.py` work exclusively on local data (DB cache, in-memory structures). They must never import `SpotifyClient` or make HTTP calls. Note: `taste_map.py` is an orchestrator that fetches data via SpotifyClient then delegates to pure-compute modules.
 
 ## Spotify API Constraints
 
-- **Audio Features**, **Recommendations**, **Related Artists** (`/artists/{id}/related-artists`), and **Artist Top Tracks** (`/artists/{id}/top-tracks`) endpoints are **DEPRECATED/REMOVED in dev mode** — do not use
-- **Feb 2026 dev mode migration**: `/playlists/{id}/tracks` renamed to **`/playlists/{id}/items`** — old endpoint returns 403. Full playlist endpoint (`GET /playlists/{id}`) no longer includes tracks in dev mode.
-- **Batch endpoints removed in dev mode**: `GET /artists?ids=`, `GET /tracks?ids=`, `GET /albums?ids=` — use individual endpoints with semaphore + asyncio.gather
+- **Deprecated/removed in dev mode** (do not use): Audio Features, Recommendations, Related Artists (`/artists/{id}/related-artists`), Artist Top Tracks (`/artists/{id}/top-tracks`), batch endpoints (`/artists?ids=`, `/tracks?ids=`, `/albums?ids=`)
+- **Feb 2026 dev mode migration**: `/playlists/{id}/tracks` → **`/playlists/{id}/items`** (old returns 403). `GET /playlists/{id}` no longer includes tracks.
+- Individual endpoints with semaphore + asyncio.gather replace all batch endpoints
 - Time ranges: only `short_term` (~4w), `medium_term` (~6m), `long_term` (all) — no custom ranges
 - Recently played: max 50 items — workaround is DB accumulation via `RecentPlay` model
-- Always available: popularity, genres, track/artist metadata
+- **Always available**: popularity, genres, track/artist metadata, user profile
 
 ## File Organization
 

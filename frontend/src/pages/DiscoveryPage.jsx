@@ -188,7 +188,11 @@ export default function DiscoveryPage() {
                               Nuovo artista
                             </span>
                           )}
-                          {rec.popularity != null && (
+                          {rec.similarity_score != null ? (
+                            <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                              {rec.similarity_score}% affine
+                            </span>
+                          ) : rec.popularity != null && (
                             <span className="text-[10px] text-text-muted">
                               Pop. {rec.popularity}
                             </span>

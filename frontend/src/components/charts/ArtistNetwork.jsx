@@ -194,8 +194,8 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
               x2={positions[ti].x}
               y2={positions[ti].y}
               stroke="#ffffff"
-              strokeOpacity={0.06}
-              strokeWidth={1}
+              strokeOpacity={0.04 + (edge.weight || 0) * 0.12}
+              strokeWidth={0.5 + (edge.weight || 0) * 1.5}
             />
           )
         })}
@@ -203,14 +203,15 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
         {nodes.map((node, i) => {
           if (!positions[i]) return null
           const color = clusterColorMap[node.id] || '#6366f1'
-          const r = node.is_top ? 10 : 5
+          const pr = node.pagerank || 0
+          const r = Math.max(4, Math.min(18, 5 + pr * 200))
           return (
             <g key={node.id}>
-              {node.is_top && (
+              {pr > 0.02 && (
                 <circle
                   cx={positions[i].x}
                   cy={positions[i].y}
-                  r={r + 4}
+                  r={r + 3}
                   fill={color}
                   fillOpacity={0.15}
                 />
@@ -220,9 +221,9 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                 cy={positions[i].y}
                 r={r}
                 fill={color}
-                fillOpacity={node.is_top ? 0.9 : 0.5}
-                stroke={node.is_top ? '#ffffff' : 'none'}
-                strokeWidth={node.is_top ? 1.5 : 0}
+                fillOpacity={Math.max(0.4, Math.min(0.95, 0.3 + pr * 10))}
+                stroke={pr > 0.02 ? '#ffffff' : 'none'}
+                strokeWidth={pr > 0.02 ? 1.5 : 0}
                 className="artist-node cursor-pointer"
                 role="button"
                 tabIndex={0}
@@ -242,7 +243,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
         })}
         {/* Node labels for top artists */}
         {nodes.map((node, i) => {
-          if (!node.is_top || !positions[i]) return null
+          if (!((node.pagerank || 0) > 0.02) || !positions[i]) return null
           return (
             <text
               key={`label-${node.id}`}
@@ -267,6 +268,11 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
         >
           <p className="text-text-primary text-sm font-semibold">{tooltip.name}</p>
           {tooltip.is_top && <p className="text-accent text-xs font-medium">⭐ Top Artist</p>}
+          {tooltip.pagerank > 0 && (
+            <p className="text-accent text-xs font-medium">
+              Influenza: {Math.round(tooltip.pagerank * 100)}%
+            </p>
+          )}
           {tooltip.clusterLabel && (
             <p className="text-text-secondary text-xs mt-0.5">🎵 {tooltip.clusterLabel}</p>
           )}
@@ -284,6 +290,9 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
             )}
             {tooltip.connections > 0 && (
               <span>{tooltip.connections} conn.</span>
+            )}
+            {tooltip.betweenness > 0.01 && (
+              <span>Ponte: {Math.round(tooltip.betweenness * 100)}%</span>
             )}
           </div>
         </div>

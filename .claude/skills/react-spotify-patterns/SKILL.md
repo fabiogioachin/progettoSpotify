@@ -66,12 +66,14 @@ Non modificare questo interceptor senza capire l'interazione con `SpotifyAuthErr
 src/
 ├── components/
 │   ├── cards/       → KPICard, PlaylistStatCard, TrackCard
-│   ├── charts/      → componenti Recharts
-│   ├── layout/      → AppLayout, Sidebar, Header, DashboardGrid
-│   ├── ui/          → LoadingSpinner, PeriodSelector
-│   └── export/      → export utilities
+│   ├── charts/      → componenti Recharts + ArtistNetwork (SVG) + TasteMap (scatter PCA)
+│   ├── layout/      → AppLayout, Sidebar, Header
+│   ├── profile/     → ObscurityGauge, GenreDNA, DecadeChart, PersonalityBadge, LifetimeStats, TasteMap
+│   ├── share/       → ShareCardRenderer, ProfileShareCard
+│   ├── ui/          → PeriodSelector, Skeleton, StaggerContainer
+│   └── cards/       → KPICard, PlaylistStatCard, TrackCard
 ├── contexts/        → AuthContext
-├── hooks/           → useSpotifyData, useAnimatedValue, usePlaylistCompare
+├── hooks/           → useSpotifyData, useAudioAnalysis, usePlaylistCompare
 ├── lib/             → api.js, constants.js, chartTheme.js
 ├── pages/           → lazy-loaded pages
 └── styles/          → globals.css
@@ -104,7 +106,7 @@ const [timeRange, setTimeRange] = useState('medium_term')
 <PeriodSelector value={timeRange} onChange={setTimeRange} />
 ```
 
-Usa `TIME_PERIODS` da `lib/constants.js`. Labels: `Ultimo mese / 6 mesi / Sempre`.
+Usa `TIME_PERIODS` da `lib/constants.js`. Labels visibili nella UI: `1M / 6M / All`.
 
 ### Sezioni vuote
 
@@ -180,7 +182,7 @@ Palette Spotify-dark con accent indigo:
 ## Testo e Localizzazione
 
 - Tutto il testo UI in **italiano**
-- Period labels: `Ultimo mese / 6 mesi / Sempre` (non "1M / 6M / All" nel UI visibile)
+- Period labels: `1M / 6M / All` nei bottoni UI
 - "Cluster" → **"Cerchia"** ovunque
 - Messaggi di errore in italiano
 - Non usare il verde Spotify (#1DB954) come accent — quello è solo per il logo/branding
