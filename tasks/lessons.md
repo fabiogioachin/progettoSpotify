@@ -3,6 +3,12 @@
 ## Active
 Lessons that affect future tasks. Target: under 15 entries.
 
+### 2026-03-14 — [codebase] analyze-tracks re-fetched 50 tracks from Spotify API
+**Context**: `POST /api/analyze-tracks` received only track_ids, then fetched each track individually via `/tracks/{id}`
+**What happened**: 50 individual Spotify API calls in a 30-second rolling window → instant 429 with retry_after=82881s (23 hours)
+**Root cause**: Frontend already had full track objects (with preview_url) from `/api/library/top` but only sent IDs. Backend re-fetched redundantly.
+**Action**: When the frontend already has data, pass it in the request body — never re-fetch from Spotify what's already available client-side. Updated spotify-api-budget skill.
+
 ### 2026-03-14 — [codebase] Spotify dev mode keeps removing endpoints
 **Context**: `/artists/{id}/related-artists` started returning 403
 **What happened**: Third deprecated endpoint (after audio-features and recommendations). artist_network.py and discovery.py were wasting API calls on always-failing requests.

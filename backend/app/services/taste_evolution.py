@@ -25,16 +25,42 @@ async def compute_taste_evolution(client: SpotifyClient) -> dict:
 
     # Fetch top artists + tracks for all 3 time ranges in parallel
     results = await asyncio.gather(
-        _safe_fetch(retry_with_backoff(client.get_top_artists, time_range="short_term", limit=50)),
-        _safe_fetch(retry_with_backoff(client.get_top_artists, time_range="medium_term", limit=50)),
-        _safe_fetch(retry_with_backoff(client.get_top_artists, time_range="long_term", limit=50)),
-        _safe_fetch(retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50)),
-        _safe_fetch(retry_with_backoff(client.get_top_tracks, time_range="medium_term", limit=50)),
-        _safe_fetch(retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50)),
+        _safe_fetch(
+            retry_with_backoff(
+                client.get_top_artists, time_range="short_term", limit=50
+            )
+        ),
+        _safe_fetch(
+            retry_with_backoff(
+                client.get_top_artists, time_range="medium_term", limit=50
+            )
+        ),
+        _safe_fetch(
+            retry_with_backoff(client.get_top_artists, time_range="long_term", limit=50)
+        ),
+        _safe_fetch(
+            retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50)
+        ),
+        _safe_fetch(
+            retry_with_backoff(
+                client.get_top_tracks, time_range="medium_term", limit=50
+            )
+        ),
+        _safe_fetch(
+            retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50)
+        ),
     )
 
-    short_artists_raw, medium_artists_raw, long_artists_raw = results[0], results[1], results[2]
-    short_tracks_raw, medium_tracks_raw, long_tracks_raw = results[3], results[4], results[5]
+    short_artists_raw, medium_artists_raw, long_artists_raw = (
+        results[0],
+        results[1],
+        results[2],
+    )
+    short_tracks_raw, medium_tracks_raw, long_tracks_raw = (
+        results[3],
+        results[4],
+        results[5],
+    )
 
     # Build artist dicts {id: artist_data}
     def build_artist_map(data):
@@ -68,7 +94,9 @@ async def compute_taste_evolution(client: SpotifyClient) -> dict:
 
     # Metrics
     loyalty_score = round(len(loyal_ids) / len(short_ids) * 100, 1) if short_ids else 0
-    turnover_rate = round(len(short_ids - medium_ids) / len(short_ids) * 100, 1) if short_ids else 0
+    turnover_rate = (
+        round(len(short_ids - medium_ids) / len(short_ids) * 100, 1) if short_ids else 0
+    )
 
     # Track analysis
     def build_track_map(data):
@@ -102,9 +130,21 @@ async def compute_taste_evolution(client: SpotifyClient) -> dict:
 
     # Overlap distribution: how many artists appear in 1, 2, or all 3 periods
     all_artist_ids = short_ids | medium_ids | long_ids
-    in_one = sum(1 for a in all_artist_ids if sum([a in short_ids, a in medium_ids, a in long_ids]) == 1)
-    in_two = sum(1 for a in all_artist_ids if sum([a in short_ids, a in medium_ids, a in long_ids]) == 2)
-    in_three = sum(1 for a in all_artist_ids if sum([a in short_ids, a in medium_ids, a in long_ids]) == 3)
+    in_one = sum(
+        1
+        for a in all_artist_ids
+        if sum([a in short_ids, a in medium_ids, a in long_ids]) == 1
+    )
+    in_two = sum(
+        1
+        for a in all_artist_ids
+        if sum([a in short_ids, a in medium_ids, a in long_ids]) == 2
+    )
+    in_three = sum(
+        1
+        for a in all_artist_ids
+        if sum([a in short_ids, a in medium_ids, a in long_ids]) == 3
+    )
 
     return {
         "artists": {

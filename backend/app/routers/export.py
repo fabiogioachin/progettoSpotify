@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_auth
 from app.services.artist_network import build_artist_network
-from app.services.audio_analyzer import compute_profile, compute_trends, get_or_fetch_features
+from app.services.audio_analyzer import (
+    compute_profile,
+    compute_trends,
+    get_or_fetch_features,
+)
 from app.services.prompt_builder import build_claude_prompt
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_evolution import compute_taste_evolution
@@ -25,7 +29,9 @@ router = APIRouter(prefix="/api/export", tags=["export"])
 @router.get("/claude-prompt")
 async def generate_claude_prompt(
     request: Request,
-    time_range: Literal["short_term", "medium_term", "long_term"] = Query(default="medium_term"),
+    time_range: Literal["short_term", "medium_term", "long_term"] = Query(
+        default="medium_term"
+    ),
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -104,7 +110,9 @@ async def generate_claude_prompt(
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except Exception as exc:
         logger.error("Errore nella generazione dell'export: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore nella generazione dell'export")
+        raise HTTPException(
+            status_code=500, detail="Errore nella generazione dell'export"
+        )
     finally:
         await client.close()
 

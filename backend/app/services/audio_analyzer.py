@@ -94,7 +94,13 @@ async def _safe_compute(coro, time_range: str):
 async def compute_trends(
     db: AsyncSession, client: SpotifyClient, user_id: int
 ) -> list[dict]:
-    """Calcola i trend confrontando short, medium e long term."""
+    """Calcola i trend confrontando short, medium e long term.
+
+    Esegue sequenzialmente perché tutti condividono la stessa AsyncSession
+    (SQLAlchemy non permette operazioni concorrenti su una sessione).
+    Le chiamate Spotify sottostanti sono cachate con TTL 5min, quindi la
+    penalità è trascurabile.
+    """
     labels = {
         "short_term": "Ultimo mese",
         "medium_term": "Ultimi 6 mesi",
@@ -102,12 +108,9 @@ async def compute_trends(
     }
     time_ranges = ["short_term", "medium_term", "long_term"]
 
-    profiles = await asyncio.gather(
-        *[_safe_compute(compute_profile(db, client, tr), tr) for tr in time_ranges]
-    )
-
     trends = []
-    for tr, profile in zip(time_ranges, profiles):
+    for tr in time_ranges:
+        profile = await _safe_compute(compute_profile(db, client, tr), tr)
         if profile is not None:
             trends.append({"period": tr, "label": labels[tr], **profile})
     return trends
@@ -201,17 +204,15 @@ async def _extract_genres(
     artist_list = list(artist_ids)[
         :20
     ]  # cap to limit API calls (reduced for dev mode rate limits)
-    sem = asyncio.Semaphore(2)
 
     async def _fetch_genres(aid: str) -> list[str]:
-        async with sem:
-            try:
-                artist = await retry_with_backoff(client.get_artist, aid)
-                return artist.get("genres", [])
-            except SpotifyAuthError:
-                raise
-            except Exception:
-                return []
+        try:
+            artist = await retry_with_backoff(client.get_artist, aid)
+            return artist.get("genres", [])
+        except SpotifyAuthError:
+            raise
+        except Exception:
+            return []
 
     results = await asyncio.gather(
         *[_fetch_genres(aid) for aid in artist_list],

@@ -16,7 +16,7 @@ from app.services.audio_analyzer import (
 )
 from app.services.discovery import discover
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 @router.get("/features")
 async def get_audio_features_profile(
     request: Request,
-    time_range: Literal["short_term", "medium_term", "long_term"] = Query(default="medium_term"),
+    time_range: Literal["short_term", "medium_term", "long_term"] = Query(
+        default="medium_term"
+    ),
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -42,9 +44,28 @@ async def get_audio_features_profile(
             logger.warning("Snapshot non salvato: %s", snap_exc)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except RateLimitError as e:
+        from app.utils.rate_limiter import ThrottleError
+
+        is_throttle = isinstance(e, ThrottleError)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Carico API elevato — dati in arrivo tra poco"
+                if is_throttle
+                else "Troppe richieste a Spotify, riprova tra poco",
+                "throttled": is_throttle,
+                "retry_after": round(e.retry_after or 5, 1),
+            },
+            headers={"Retry-After": str(int(e.retry_after or 5))},
+        )
+    except SpotifyServerError:
+        raise HTTPException(status_code=502, detail="Spotify non disponibile")
     except Exception as exc:
         logger.error("Errore compute_profile: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore nel calcolo del profilo audio")
+        raise HTTPException(
+            status_code=500, detail="Errore nel calcolo del profilo audio"
+        )
     finally:
         await client.close()
 
@@ -65,6 +86,23 @@ async def get_trends(
         historical = await get_historical_snapshots(db, user_id)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except RateLimitError as e:
+        from app.utils.rate_limiter import ThrottleError
+
+        is_throttle = isinstance(e, ThrottleError)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Carico API elevato — dati in arrivo tra poco"
+                if is_throttle
+                else "Troppe richieste a Spotify, riprova tra poco",
+                "throttled": is_throttle,
+                "retry_after": round(e.retry_after or 5, 1),
+            },
+            headers={"Retry-After": str(int(e.retry_after or 5))},
+        )
+    except SpotifyServerError:
+        raise HTTPException(status_code=502, detail="Spotify non disponibile")
     except Exception as exc:
         logger.error("Errore compute_trends: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nel calcolo dei trend")
@@ -87,6 +125,23 @@ async def get_discovery(
         results = await discover(db, client)
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except RateLimitError as e:
+        from app.utils.rate_limiter import ThrottleError
+
+        is_throttle = isinstance(e, ThrottleError)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Carico API elevato — dati in arrivo tra poco"
+                if is_throttle
+                else "Troppe richieste a Spotify, riprova tra poco",
+                "throttled": is_throttle,
+                "retry_after": round(e.retry_after or 5, 1),
+            },
+            headers={"Retry-After": str(int(e.retry_after or 5))},
+        )
+    except SpotifyServerError:
+        raise HTTPException(status_code=502, detail="Spotify non disponibile")
     except Exception as exc:
         logger.error("Errore discovery: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nelle raccomandazioni")

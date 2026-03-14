@@ -34,8 +34,10 @@ Targeted audit of Spotify Web API usage. Checks for deprecated endpoints, proper
 ### Rate Limiting & Budget
 - [ ] **Every** SpotifyClient call wrapped in `retry_with_backoff` — no direct `client.get_*()` without retry
 - [ ] `retry_with_backoff` has `max_retry_after` cap (≤30s) — dev mode sends `retry_after=75000s+`, must fail immediately
-- [ ] `asyncio.Semaphore(2)` for parallel Spotify API calls (NOT 5 or 10 — dev mode punishes bursts)
+- [ ] Global `_global_sem = asyncio.Semaphore(6)` in `SpotifyClient._request()` — no local semaphores needed in services
 - [ ] API call budget per endpoint ≤ 30 calls worst-case
+- [ ] Gather with 5+ tasks uses `gather_in_chunks(chunk_size=4)` instead of raw `asyncio.gather`
+- [ ] ThrottleError propagated to routers → 429 with `throttled: true` in detail dict
 - [ ] Artist IDs deduped globally before fetching (not per-playlist/per-iteration)
 - [ ] Global artist fetch cap ≤ 20 per endpoint invocation
 - [ ] Rate limiter on auth endpoints uses IP (not full cookie) as key
@@ -43,6 +45,7 @@ Targeted audit of Spotify Web API usage. Checks for deprecated endpoints, proper
 ### Background Tasks
 - [ ] Background tasks (`asyncio.create_task`) use dedicated DB session via `async_session()`, NOT request-scoped `get_db()`
 - [ ] Background task calls wrapped in `retry_with_backoff`
+- [ ] `profile_metrics.py` uses dedicated `async_session()` for DB writes (same pattern as background tasks)
 ### Data Integrity
 - [ ] No hardcoded fallback values that look like real data (e.g., `default=180000`)
 - [ ] Missing data defaults to `0`, `None`, or empty — never a plausible fake value

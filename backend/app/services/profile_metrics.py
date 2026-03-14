@@ -119,27 +119,21 @@ async def compute_profile_metrics(
     db: AsyncSession, client: SpotifyClient, user_id: int
 ) -> dict:
     """Compute all profile metrics. Returns dict with all fields."""
-    # Parallel fetch from Spotify — Semaphore(2) for dev mode burst protection
-    sem = asyncio.Semaphore(2)
-
-    async def _sem_fetch(label, coro):
-        async with sem:
-            return await _safe_fetch(label, coro)
-
+    # Parallel fetch from Spotify (global semaphore in SpotifyClient._request)
     artists_short, artists_long, tracks_long = await asyncio.gather(
-        _sem_fetch(
+        _safe_fetch(
             "artists_short",
             retry_with_backoff(
                 client.get_top_artists, time_range="short_term", limit=50
             ),
         ),
-        _sem_fetch(
+        _safe_fetch(
             "artists_long",
             retry_with_backoff(
                 client.get_top_artists, time_range="long_term", limit=50
             ),
         ),
-        _sem_fetch(
+        _safe_fetch(
             "tracks_long",
             retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50),
         ),

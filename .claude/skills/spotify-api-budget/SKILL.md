@@ -79,6 +79,16 @@ Note: `get_related_artists` removed (403 in dev mode). No API calls for recommen
 
 Note: No `get_related_artists` calls (403 in dev mode). Graph edges built from shared genres between top artists — zero additional API calls.
 
+### Audio Analysis (`POST /api/analyze-tracks`)
+
+| Call | Count | TTL Cache | Effective |
+|------|-------|-----------|-----------|
+| Spotify API calls | **0** | N/A | **0** |
+
+The frontend sends full track objects (id, name, artist, preview_url) in the POST body — these are already available from `/api/library/top`. The backend does NOT re-fetch tracks from Spotify. Analysis uses librosa on preview MP3s (downloaded from CDN, not Spotify API) + optional RapidAPI fallback.
+
+**Critical rule**: never add Spotify API calls to this endpoint. The frontend already has the data.
+
 ### Worst-Case Scenario: User Opens App Fresh
 
 All caches empty, first visit of the day:
@@ -86,7 +96,8 @@ All caches empty, first visit of the day:
 2. Dashboard load: up to 7 calls
 3. Profile navigation: up to 3 more calls (some cached from dashboard)
 4. Background snapshot: 2 calls (but cached from dashboard)
-5. **Total: ~10-13 unique calls** (cachetools deduplicates the rest)
+5. Audio analysis: 0 calls (frontend passes track data)
+6. **Total: ~10-13 unique calls** (cachetools deduplicates the rest)
 
 With cachetools active and normal navigation: **3-5 calls** per page visit.
 
@@ -97,7 +108,7 @@ With cachetools active and normal navigation: **3-5 calls** per page visit.
 ```python
 from cachetools import TTLCache
 
-_cache_5m = TTLCache(maxsize=256, ttl=300)   # top_tracks, top_artists, playlists, get_me
+_cache_5m = TTLCache(maxsize=256, ttl=300)   # top_tracks, top_artists, playlists, get_me, get_artist
 _cache_2m = TTLCache(maxsize=64, ttl=120)    # recently_played
 
 def _cache_key(user_id, method_name, *args, **kwargs):
@@ -106,17 +117,18 @@ def _cache_key(user_id, method_name, *args, **kwargs):
 
 Caches are **module-level** (survive per-request client instances). Per-user isolation via `user_id` in key.
 
-### 2. Semaphore(2) for Parallel Calls
+### 2. Global Semaphore in `SpotifyClient._request()`
 
 ```python
-sem = asyncio.Semaphore(2)
+class SpotifyClient:
+    _global_sem = asyncio.Semaphore(6)
 
-async def fetch_with_sem(coro):
-    async with sem:
-        return await coro
+    async def _request(self, ...):
+        async with SpotifyClient._global_sem:
+            # ... entire request body
 ```
 
-Never fire 3+ Spotify calls simultaneously. Dev mode punishes bursts.
+All Spotify API calls go through `_request()`, so **max 6 concurrent calls globally** regardless of how many services fire `asyncio.gather` in parallel. With ~100-200ms RTT, ~90 calls/30s max — well within budget. Local semaphores in individual services are no longer needed and have been removed.
 
 ### 3. retry_with_backoff with max_retry_after Cap
 
@@ -130,17 +142,46 @@ result = await retry_with_backoff(
 
 If `retry_after > 30s`, fail immediately. Dev mode can send `retry_after=75000s+` — sleeping that long blocks the app.
 
-### 4. Global Cooldown (SpotifyClient)
+### 4. Global Cooldown — Always-On (SpotifyClient)
 
 ```python
-# In SpotifyClient._request:
-if retry_after and retry_after > 600:  # 10 minutes
-    SpotifyClient._cooldown_until = time.time() + retry_after
+# In SpotifyClient._request — EVERY 429 activates cooldown:
+if resp.status_code == 429:
+    retry_after = float(resp.headers.get("Retry-After", "1"))
+    SpotifyClient._cooldown_until = now + retry_after
+    raise RateLimitError(retry_after)
 ```
 
-If retry_after exceeds 10 minutes, block ALL requests (not just the current one). This prevents cascading 429s.
+EVERY 429 activates cooldown (not just > 60s). Requests pending in the semaphore fail immediately. `retry_with_backoff` sleeps and retries — by then cooldown has expired. Log level: `warning` for > 60s, `info` for brief.
 
-### 5. Background Job Early Break
+### 5. Sliding Window Throttle (SpotifyClient)
+
+```python
+class SpotifyClient:
+    _call_timestamps: deque = deque()
+    _WINDOW_SIZE: float = 30.0
+    _MAX_CALLS_PER_WINDOW: int = 25
+    _window_lock = asyncio.Lock()
+```
+
+Preventive throttle: tracks calls in a 30s sliding window. At 25 calls, raises `ThrottleError(wait_time)` instead of hitting Spotify. `ThrottleError` is a subclass of `RateLimitError` — caught by routers → 429 with `throttled: true` → frontend shows countdown banner. `retry_with_backoff` does NOT retry `ThrottleError` (it's our own limit, not Spotify's).
+
+### 6. gather_in_chunks for Burst Control
+
+```python
+from app.utils.rate_limiter import gather_in_chunks
+
+results = await gather_in_chunks(tasks, chunk_size=4)
+# results may contain Exception instances (return_exceptions=True)
+```
+
+Sequential batch execution: runs coroutines in groups of 4 instead of all at once. Used in `playlist_analytics.py` and `historical_tops.py`. Complements the semaphore — reduces burst pressure on the sliding window.
+
+### 7. ThrottleBanner (Frontend)
+
+When the backend returns 429 with `throttled: true`, the axios interceptor emits `api:throttle` event. `ThrottleBanner` (mounted in AppLayout) shows an animated countdown. Auto-retries after the countdown expires.
+
+### 8. Background Job Early Break
 
 ```python
 for user_id in user_ids:
@@ -151,7 +192,7 @@ for user_id in user_ids:
         break  # CRITICAL: stop iterating, rate limit is app-wide
 ```
 
-### 6. Dedup + Cap for Individual Artist Fetches
+### 9. Dedup + Cap for Individual Artist Fetches
 
 ```python
 all_artist_ids = set()
@@ -167,7 +208,7 @@ capped_ids = list(all_artist_ids)[:20]  # hard cap
 1. **Count calls**: before writing code, count total Spotify API calls in the worst case
 2. **Check cache**: is this data already cached by another endpoint? Use the same cache key
 3. **Add to budget table**: update this skill with the new endpoint's call count
-4. **Use Semaphore(2)**: if calling 3+ in parallel
+4. **Global sem handles concurrency**: no local semaphores needed — `_request()` limits to 6 concurrent calls
 5. **Always retry_with_backoff**: never call `client.get_*()` directly
 6. **Test with empty cache**: clear `_cache_*` and verify the endpoint works within budget
 7. **Cap individual fetches**: if fetching per-item (artists, tracks), cap at 20 and dedup globally
@@ -177,7 +218,7 @@ capped_ids = list(all_artist_ids)[:20]  # hard cap
 | Pattern | Why It's Bad | Fix |
 |---------|-------------|-----|
 | `await client.get_artist(id)` without retry | 429 not retried | `retry_with_backoff(client.get_artist, id)` |
-| `asyncio.gather(*[fetch(id) for id in ids])` with 50+ items | Burst of 50 calls | Semaphore(2) + cap 20 |
+| `asyncio.gather(*[fetch(id) for id in ids])` with 5+ items | Burst bypasses sliding window | `gather_in_chunks(tasks, chunk_size=4)` |
 | `except Exception: return default` without `except SpotifyAuthError: raise` | Swallows 401 | Add SpotifyAuthError handler first |
 | `retry_after > 60s` → sleep | Blocks app for minutes | Cap at 30s, fail immediately |
 | Background job continues after 429 | Cascading rate limits | `break` on RateLimitError |

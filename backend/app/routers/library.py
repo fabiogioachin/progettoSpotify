@@ -21,7 +21,9 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 @router.get("/top", response_model=TopTracksResponse)
 async def get_top_tracks(
     request: Request,
-    time_range: Literal["short_term", "medium_term", "long_term"] = Query(default="medium_term"),
+    time_range: Literal["short_term", "medium_term", "long_term"] = Query(
+        default="medium_term"
+    ),
     limit: int = Query(default=50, ge=1, le=50),
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
@@ -30,23 +32,35 @@ async def get_top_tracks(
     client = SpotifyClient(db, user_id)
 
     try:
-        data = await retry_with_backoff(client.get_top_tracks, time_range=time_range, limit=limit)
+        data = await retry_with_backoff(
+            client.get_top_tracks, time_range=time_range, limit=limit
+        )
 
         tracks = []
         track_ids = []
         for item in data.get("items", []):
             track_ids.append(item["id"])
-            tracks.append({
-                "id": item["id"],
-                "name": item["name"],
-                "artist": item["artists"][0]["name"] if item.get("artists") else "Sconosciuto",
-                "artist_id": item["artists"][0]["id"] if item.get("artists") else None,
-                "album": item.get("album", {}).get("name", ""),
-                "album_image": (item.get("album", {}).get("images", [{}])[0].get("url") if item.get("album", {}).get("images") else None),
-                "popularity": item.get("popularity", 0),
-                "duration_ms": item.get("duration_ms", 0),
-                "preview_url": item.get("preview_url"),
-            })
+            tracks.append(
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "artist": item["artists"][0]["name"]
+                    if item.get("artists")
+                    else "Sconosciuto",
+                    "artist_id": item["artists"][0]["id"]
+                    if item.get("artists")
+                    else None,
+                    "album": item.get("album", {}).get("name", ""),
+                    "album_image": (
+                        item.get("album", {}).get("images", [{}])[0].get("url")
+                        if item.get("album", {}).get("images")
+                        else None
+                    ),
+                    "popularity": item.get("popularity", 0),
+                    "duration_ms": item.get("duration_ms", 0),
+                    "preview_url": item.get("preview_url"),
+                }
+            )
 
         # Recupera audio features (solo cache DB — API deprecata)
         features_map = await get_or_fetch_features(db, track_ids)
@@ -64,7 +78,11 @@ async def get_top_tracks(
     finally:
         await client.close()
 
-    return {"tracks": tracks, "total": data.get("total", len(tracks)), "time_range": time_range}
+    return {
+        "tracks": tracks,
+        "total": data.get("total", len(tracks)),
+        "time_range": time_range,
+    }
 
 
 @router.get("/recent", response_model=RecentTracksResponse)
@@ -83,21 +101,31 @@ async def get_recent_tracks(
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except Exception as exc:
         logger.error("Errore nel caricamento brani recenti: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore nel caricamento dei brani recenti")
+        raise HTTPException(
+            status_code=500, detail="Errore nel caricamento dei brani recenti"
+        )
     finally:
         await client.close()
 
     tracks = []
     for item in data.get("items", []):
         t = item.get("track", {})
-        tracks.append({
-            "id": t.get("id"),
-            "name": t.get("name"),
-            "artist": t["artists"][0]["name"] if t.get("artists") else "Sconosciuto",
-            "album": t.get("album", {}).get("name", ""),
-            "album_image": (t.get("album", {}).get("images", [{}])[0].get("url") if t.get("album", {}).get("images") else None),
-            "played_at": item.get("played_at"),
-        })
+        tracks.append(
+            {
+                "id": t.get("id"),
+                "name": t.get("name"),
+                "artist": t["artists"][0]["name"]
+                if t.get("artists")
+                else "Sconosciuto",
+                "album": t.get("album", {}).get("name", ""),
+                "album_image": (
+                    t.get("album", {}).get("images", [{}])[0].get("url")
+                    if t.get("album", {}).get("images")
+                    else None
+                ),
+                "played_at": item.get("played_at"),
+            }
+        )
 
     return {"tracks": tracks}
 
@@ -114,12 +142,16 @@ async def get_saved_tracks(
     client = SpotifyClient(db, user_id)
 
     try:
-        data = await retry_with_backoff(client.get_saved_tracks, limit=limit, offset=offset)
+        data = await retry_with_backoff(
+            client.get_saved_tracks, limit=limit, offset=offset
+        )
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except Exception as exc:
         logger.error("Errore nel caricamento brani salvati: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore nel caricamento dei brani salvati")
+        raise HTTPException(
+            status_code=500, detail="Errore nel caricamento dei brani salvati"
+        )
     finally:
         await client.close()
 
@@ -128,15 +160,23 @@ async def get_saved_tracks(
         t = item.get("track", {})
         if not t or not t.get("id"):
             continue
-        tracks.append({
-            "id": t["id"],
-            "name": t.get("name"),
-            "artist": t["artists"][0]["name"] if t.get("artists") else "Sconosciuto",
-            "artist_id": t["artists"][0]["id"] if t.get("artists") else None,
-            "album": t.get("album", {}).get("name", ""),
-            "album_image": (t.get("album", {}).get("images", [{}])[0].get("url") if t.get("album", {}).get("images") else None),
-            "popularity": t.get("popularity", 0),
-            "added_at": item.get("added_at"),
-        })
+        tracks.append(
+            {
+                "id": t["id"],
+                "name": t.get("name"),
+                "artist": t["artists"][0]["name"]
+                if t.get("artists")
+                else "Sconosciuto",
+                "artist_id": t["artists"][0]["id"] if t.get("artists") else None,
+                "album": t.get("album", {}).get("name", ""),
+                "album_image": (
+                    t.get("album", {}).get("images", [{}])[0].get("url")
+                    if t.get("album", {}).get("images")
+                    else None
+                ),
+                "popularity": t.get("popularity", 0),
+                "added_at": item.get("added_at"),
+            }
+        )
 
     return {"tracks": tracks, "total": data.get("total", 0), "offset": offset}

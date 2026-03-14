@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Disc3, Flame, Music, Users } from 'lucide-react'
 import KPICard from '../components/cards/KPICard'
 import TrackCard from '../components/cards/TrackCard'
@@ -33,7 +33,6 @@ export default function DashboardPage() {
   const trends = trendsData?.current || []
 
   // Audio analysis: trigger when no cached features but tracks exist
-  const trackIds = useMemo(() => tracks.map(t => t.id), [tracks])
   const hasFeatures = Object.keys(features).length > 0
     && Object.entries(features).some(([k, v]) => k !== 'tempo' && v && v > 0)
 
@@ -41,7 +40,7 @@ export default function DashboardPage() {
     features: analysisFeatures,
     progress: analysisProgress,
     isAnalyzing,
-  } = useAudioAnalysis(trackIds, !hasFeatures && tracks.length > 0 && !featuresLoading)
+  } = useAudioAnalysis(tracks, !hasFeatures && tracks.length > 0 && !featuresLoading)
 
   // Compute features to display: cached features OR computed from analysis results
   const displayFeatures = (() => {

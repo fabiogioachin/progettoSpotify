@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Header from './Header'
 import Sidebar from './Sidebar'
+import { ThrottleBanner } from '../ui/ThrottleBanner'
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -14,6 +15,7 @@ export default function AppLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-background">
+      <ThrottleBanner />
       <Header />
       <Sidebar />
       {/* Main content area: offset by sidebar width on desktop */}

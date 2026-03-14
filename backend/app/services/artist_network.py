@@ -12,7 +12,9 @@ from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
 
-async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15) -> dict:
+async def build_artist_network(
+    client: SpotifyClient, max_seed_artists: int = 15
+) -> dict:
     """Costruisce il grafo di artisti basato su generi condivisi."""
 
     # Fetch top artists from multiple time ranges for richer data
@@ -70,19 +72,21 @@ async def build_artist_network(client: SpotifyClient, max_seed_artists: int = 15
         genres_a = set(nodes[aid_a]["genres"])
         if not genres_a:
             continue
-        for aid_b in artist_ids[i + 1:]:
+        for aid_b in artist_ids[i + 1 :]:
             genres_b = set(nodes[aid_b]["genres"])
             shared = genres_a & genres_b
             if shared:
                 edge_key = tuple(sorted([aid_a, aid_b]))
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
-                    edges.append({
-                        "source": aid_a,
-                        "target": aid_b,
-                        "weight": len(shared),
-                        "shared_genres": list(shared)[:3],
-                    })
+                    edges.append(
+                        {
+                            "source": aid_a,
+                            "target": aid_b,
+                            "weight": len(shared),
+                            "shared_genres": list(shared)[:3],
+                        }
+                    )
 
     # Connection count per node
     conn_count = defaultdict(int)

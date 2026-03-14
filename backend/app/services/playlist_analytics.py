@@ -1,11 +1,14 @@
 """Analisi approfondita delle playlist dell'utente."""
 
-import asyncio
 import logging
 from datetime import datetime
 
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import (
+    SpotifyAuthError,
+    gather_in_chunks,
+    retry_with_backoff,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,52 +47,53 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
     playlist_tracks = {}
     playlist_details = []
 
-    sem = asyncio.Semaphore(3)
-
     async def fetch_playlist_data(playlist):
-        async with sem:
-            pid = playlist["id"]
-            track_ids = []
-            artists = set()
-            release_dates = []
-            added_dates = []
-            try:
-                # Use /items endpoint (Feb 2026: /tracks renamed to /items)
-                offset = 0
-                while True:
-                    data = await retry_with_backoff(
-                        client.get, f"/playlists/{pid}/items", limit=50, offset=offset
-                    )
-                    items = data.get("items", [])
-                    for item in items:
-                        # Feb 2026: field renamed from "track" to "item"
-                        track = item.get("item") or item.get("track")
-                        if not track or not track.get("id"):
-                            continue
-                        track_ids.append(track["id"])
-                        for a in track.get("artists", []):
-                            if a.get("id"):
-                                artists.add(a["id"])
-                        album = track.get("album", {})
-                        rd = album.get("release_date")
-                        if rd:
-                            release_dates.append(rd)
-                        added_at = item.get("added_at")
-                        if added_at:
-                            added_dates.append(added_at)
-                    if not data.get("next") or len(items) < 50:
-                        break
-                    offset += 50
-            except SpotifyAuthError:
-                raise
-            except Exception as exc:
-                logger.warning("Errore fetch playlist %s: %s", pid, exc)
-            return pid, track_ids, artists, release_dates, added_dates
+        pid = playlist["id"]
+        track_ids = []
+        artists = set()
+        release_dates = []
+        added_dates = []
+        try:
+            # Use /items endpoint (Feb 2026: /tracks renamed to /items)
+            offset = 0
+            while True:
+                data = await retry_with_backoff(
+                    client.get, f"/playlists/{pid}/items", limit=50, offset=offset
+                )
+                items = data.get("items", [])
+                for item in items:
+                    # Feb 2026: field renamed from "track" to "item"
+                    track = item.get("item") or item.get("track")
+                    if not track or not track.get("id"):
+                        continue
+                    track_ids.append(track["id"])
+                    for a in track.get("artists", []):
+                        if a.get("id"):
+                            artists.add(a["id"])
+                    album = track.get("album", {})
+                    rd = album.get("release_date")
+                    if rd:
+                        release_dates.append(rd)
+                    added_at = item.get("added_at")
+                    if added_at:
+                        added_dates.append(added_at)
+                if not data.get("next") or len(items) < 50:
+                    break
+                offset += 50
+        except SpotifyAuthError:
+            raise
+        except Exception as exc:
+            logger.warning("Errore fetch playlist %s: %s", pid, exc)
+        return pid, track_ids, artists, release_dates, added_dates
 
     tasks = [fetch_playlist_data(p) for p in playlists_to_analyze]
-    results = await asyncio.gather(*tasks)
+    results = await gather_in_chunks(tasks, chunk_size=4)
 
-    for pid, track_ids, artists, release_dates, added_dates in results:
+    for r in results:
+        if isinstance(r, Exception):
+            logger.warning("Errore fetch playlist batch: %s", r)
+            continue
+        pid, track_ids, artists, release_dates, added_dates = r
         playlist_tracks[pid] = set(track_ids)
 
         artist_concentration = round(len(artists) / max(len(track_ids), 1), 2)
@@ -98,18 +102,20 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
 
         p_info = next((p for p in all_playlists if p["id"] == pid), {})
         images = p_info.get("images", [])
-        playlist_details.append({
-            "id": pid,
-            "name": p_info.get("name", ""),
-            "image": images[0]["url"] if images else None,
-            "track_count": len(track_ids),
-            "unique_artists": len(artists),
-            "artist_concentration": artist_concentration,
-            "freshness_year": freshness,
-            "staleness_days": staleness,
-            "is_public": p_info.get("public", False),
-            "is_collaborative": p_info.get("collaborative", False),
-        })
+        playlist_details.append(
+            {
+                "id": pid,
+                "name": p_info.get("name", ""),
+                "image": images[0]["url"] if images else None,
+                "track_count": len(track_ids),
+                "unique_artists": len(artists),
+                "artist_concentration": artist_concentration,
+                "freshness_year": freshness,
+                "staleness_days": staleness,
+                "is_public": p_info.get("public", False),
+                "is_collaborative": p_info.get("collaborative", False),
+            }
+        )
 
     # 4. Overlap matrix (Jaccard index)
     overlap_matrix = _compute_overlap_matrix(playlist_details, playlist_tracks)

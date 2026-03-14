@@ -13,18 +13,35 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config
+    const status = error.response?.status
+    const data = error.response?.data
 
-    if (error.response?.status === 429 && (!config._retryCount || config._retryCount < 2)) {
-      const retryAfter = parseInt(error.response.headers['retry-after'] || '0', 10)
-      // Se Spotify è in ban mode (Retry-After > 30s) non riprovare — mostra errore
+    if (status === 429) {
+      const retryAfter = parseFloat(error.response.headers['retry-after'] || '0')
+
+      // Throttle preventivo del backend — mostra countdown al frontend
+      if (data?.detail?.throttled || data?.throttled) {
+        const waitSeconds = data?.detail?.retry_after || retryAfter || 5
+        // Emetti evento per il countdown UI
+        window.dispatchEvent(new CustomEvent('api:throttle', {
+          detail: { retryAfter: waitSeconds, url: config.url }
+        }))
+        // Riprova automaticamente dopo il countdown
+        await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000))
+        return api(config)
+      }
+
+      // 429 da Spotify — comportamento esistente
       if (retryAfter > 30) return Promise.reject(error)
-      config._retryCount = (config._retryCount || 0) + 1
-      const delay = retryAfter > 0 ? retryAfter * 1000 : 1000 * config._retryCount
-      await new Promise((resolve) => setTimeout(resolve, delay))
-      return api(config)
+      if (!config._retryCount || config._retryCount < 2) {
+        config._retryCount = (config._retryCount || 0) + 1
+        const delay = retryAfter > 0 ? retryAfter * 1000 : 1000 * config._retryCount
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return api(config)
+      }
     }
 
-    if (error.response?.status === 401) {
+    if (status === 401) {
       window.dispatchEvent(new Event('auth:expired'))
     }
     return Promise.reject(error)

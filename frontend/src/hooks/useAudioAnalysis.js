@@ -5,11 +5,11 @@ import api from '../lib/api'
  * Hook for on-demand audio feature analysis via polling.
  * POST /api/analyze-tracks → task_id → poll GET every 2.5s → progressive results.
  *
- * @param {string[]} trackIds - Track IDs to analyze
+ * @param {Array<{id: string, name?: string, preview_url?: string, artists?: Array}>} tracks - Track objects (must include id, preview_url)
  * @param {boolean} enabled - If false, analysis won't start (default true)
  * @returns {{ features, progress, isAnalyzing, error, startAnalysis }}
  */
-export function useAudioAnalysis(trackIds, enabled = true) {
+export function useAudioAnalysis(tracks, enabled = true) {
   const [features, setFeatures] = useState({})
   const [progress, setProgress] = useState({ total: 0, completed: 0, percent: 0 })
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -28,11 +28,11 @@ export function useAudioAnalysis(trackIds, enabled = true) {
     }
   }, [])
 
-  // Stabilize trackIds dependency via join key
-  const trackIdsKey = trackIds?.join(',') || ''
+  // Stabilize dependency via joined IDs
+  const trackIdsKey = tracks?.map(t => t.id).join(',') || ''
 
   const startAnalysis = useCallback(async () => {
-    if (!trackIds?.length || startedRef.current) return
+    if (!tracks?.length || startedRef.current) return
     startedRef.current = true
 
     setIsAnalyzing(true)
@@ -41,8 +41,15 @@ export function useAudioAnalysis(trackIds, enabled = true) {
     setProgress({ total: 0, completed: 0, percent: 0 })
 
     try {
+      // Send track objects so the backend doesn't need to re-fetch from Spotify
+      const trackPayload = tracks.map(t => ({
+        id: t.id,
+        name: t.name || '',
+        artist: t.artists?.[0]?.name || t.artist || '',
+        preview_url: t.preview_url || null,
+      }))
       const { data } = await api.post('/api/analyze-tracks', {
-        track_ids: trackIds,
+        tracks: trackPayload,
       })
 
       if (!mountedRef.current) return
@@ -101,9 +108,9 @@ export function useAudioAnalysis(trackIds, enabled = true) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stabilized via trackIdsKey
   }, [trackIdsKey])
 
-  // Auto-start when trackIds change and enabled is true
+  // Auto-start when tracks change and enabled is true
   useEffect(() => {
-    if (enabled && trackIds?.length > 0) {
+    if (enabled && tracks?.length > 0) {
       startAnalysis()
     }
     return () => {

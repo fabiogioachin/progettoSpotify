@@ -40,18 +40,20 @@ async def get_playlists(
 
     try:
         # Get user's Spotify ID to determine playlist ownership
-        user_result = await db.execute(
-            select(User).where(User.id == user_id)
-        )
+        user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one_or_none()
         user_spotify_id = user.spotify_id if user else ""
 
-        data = await retry_with_backoff(client.get_playlists, limit=limit, offset=offset)
+        data = await retry_with_backoff(
+            client.get_playlists, limit=limit, offset=offset
+        )
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except Exception as exc:
         logger.error("Errore nel caricamento playlist: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore nel caricamento delle playlist")
+        raise HTTPException(
+            status_code=500, detail="Errore nel caricamento delle playlist"
+        )
     finally:
         await client.close()
 
@@ -59,15 +61,21 @@ async def get_playlists(
     for item in data.get("items", []):
         if not item:
             continue
-        playlists.append({
-            "id": item["id"],
-            "name": item.get("name", ""),
-            "description": item.get("description", ""),
-            "image": (item.get("images", [{}])[0].get("url") if item.get("images") else None),
-            "track_count": item.get("tracks", {}).get("total", 0),
-            "owner": item.get("owner", {}).get("display_name", ""),
-            "is_owner": item.get("owner", {}).get("id") == user_spotify_id,
-        })
+        playlists.append(
+            {
+                "id": item["id"],
+                "name": item.get("name", ""),
+                "description": item.get("description", ""),
+                "image": (
+                    item.get("images", [{}])[0].get("url")
+                    if item.get("images")
+                    else None
+                ),
+                "track_count": item.get("tracks", {}).get("total", 0),
+                "owner": item.get("owner", {}).get("display_name", ""),
+                "is_owner": item.get("owner", {}).get("id") == user_spotify_id,
+            }
+        )
 
     return {"playlists": playlists, "total": data.get("total", 0)}
 
@@ -88,7 +96,9 @@ async def compare_playlists(
     # Validazione formato Spotify playlist ID
     for pid in playlist_ids:
         if not re.match(r"^[a-zA-Z0-9]{1,50}$", pid):
-            raise HTTPException(status_code=400, detail="Formato playlist ID non valido")
+            raise HTTPException(
+                status_code=400, detail="Formato playlist ID non valido"
+            )
 
     client = SpotifyClient(db, user_id)
     results = []
@@ -109,8 +119,10 @@ async def compare_playlists(
                 offset = 0
                 while True:
                     items_data = await retry_with_backoff(
-                        client.get, f"/playlists/{pid}/items",
-                        limit=50, offset=offset,
+                        client.get,
+                        f"/playlists/{pid}/items",
+                        limit=50,
+                        offset=offset,
                     )
                     items = items_data.get("items", [])
                     for item in items:
@@ -126,7 +138,12 @@ async def compare_playlists(
             except Exception:
                 logger.warning("Failed to fetch playlist %s", pid)
 
-            logger.info("Playlist %s (%s): %d tracks fetched", pid, playlist_name, len(all_tracks))
+            logger.info(
+                "Playlist %s (%s): %d tracks fetched",
+                pid,
+                playlist_name,
+                len(all_tracks),
+            )
             playlist_data_map[pid] = {
                 "name": playlist_name,
                 "tracks": all_tracks,
@@ -144,17 +161,15 @@ async def compare_playlists(
         # Fetch genres for unique artists (deduplicated, single pass)
         artist_genres_cache: dict[str, list[str]] = {}
         artist_list = list(global_artist_ids)[:25]  # global cap across all playlists
-        sem_artists = asyncio.Semaphore(2)
 
         async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:
-            async with sem_artists:
-                try:
-                    artist = await retry_with_backoff(client.get_artist, aid)
-                    return aid, artist.get("genres", [])
-                except SpotifyAuthError:
-                    raise
-                except Exception:
-                    return aid, []
+            try:
+                artist = await retry_with_backoff(client.get_artist, aid)
+                return aid, artist.get("genres", [])
+            except SpotifyAuthError:
+                raise
+            except Exception:
+                return aid, []
 
         genre_results = await asyncio.gather(
             *[_fetch_artist_genres(aid) for aid in artist_list],
@@ -182,15 +197,23 @@ async def compare_playlists(
                 popularity_stats = {"avg": 0.0, "min": 0.0, "max": 0.0}
 
             # Top tracks by popularity
-            sorted_tracks = sorted(all_tracks, key=lambda t: t.get("popularity", 0), reverse=True)
+            sorted_tracks = sorted(
+                all_tracks, key=lambda t: t.get("popularity", 0), reverse=True
+            )
             top_tracks = []
             for t in sorted_tracks[:5]:
-                artist_name = t.get("artists", [{}])[0].get("name", "Sconosciuto") if t.get("artists") else "Sconosciuto"
-                top_tracks.append({
-                    "name": t.get("name", ""),
-                    "artist": artist_name,
-                    "popularity": t.get("popularity", 0),
-                })
+                artist_name = (
+                    t.get("artists", [{}])[0].get("name", "Sconosciuto")
+                    if t.get("artists")
+                    else "Sconosciuto"
+                )
+                top_tracks.append(
+                    {
+                        "name": t.get("name", ""),
+                        "artist": artist_name,
+                        "popularity": t.get("popularity", 0),
+                    }
+                )
 
             # Genre distribution (from cached artist genres)
             playlist_genres: list[str] = []
@@ -215,38 +238,63 @@ async def compare_playlists(
             try:
                 features = await get_or_fetch_features(db, track_ids[:200])
                 if features:
-                    keys = ["danceability", "energy", "valence", "acousticness",
-                            "instrumentalness", "liveness", "speechiness", "tempo"]
+                    keys = [
+                        "danceability",
+                        "energy",
+                        "valence",
+                        "acousticness",
+                        "instrumentalness",
+                        "liveness",
+                        "speechiness",
+                        "tempo",
+                    ]
                     for key in keys:
-                        vals = [f[key] for f in features.values() if f.get(key) is not None]
+                        vals = [
+                            f[key] for f in features.values() if f.get(key) is not None
+                        ]
                         averages[key] = round(sum(vals) / len(vals), 3) if vals else 0.0
                     analyzed_count = len(features)
             except Exception:
                 logger.warning("Failed to fetch audio features for playlist %s", pid)
 
-            results.append({
-                "playlist_id": pid,
-                "playlist_name": pdata["name"],
-                "track_count": len(all_tracks),
-                "analyzed_count": analyzed_count,
-                "averages": averages,
-                "popularity_stats": popularity_stats,
-                "genre_distribution": genre_distribution,
-                "top_tracks": top_tracks,
-            })
+            results.append(
+                {
+                    "playlist_id": pid,
+                    "playlist_name": pdata["name"],
+                    "track_count": len(all_tracks),
+                    "analyzed_count": analyzed_count,
+                    "averages": averages,
+                    "popularity_stats": popularity_stats,
+                    "genre_distribution": genre_distribution,
+                    "top_tracks": top_tracks,
+                }
+            )
     except SpotifyAuthError:
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except RateLimitError as e:
+        from app.utils.rate_limiter import ThrottleError
+
+        is_throttle = isinstance(e, ThrottleError)
         raise HTTPException(
             status_code=429,
-            detail="Troppe richieste a Spotify, riprova tra poco",
+            detail={
+                "message": "Carico API elevato — dati in arrivo tra poco"
+                if is_throttle
+                else "Troppe richieste a Spotify, riprova tra poco",
+                "throttled": is_throttle,
+                "retry_after": round(e.retry_after or 5, 1),
+            },
             headers={"Retry-After": str(int(e.retry_after or 5))},
         )
     except SpotifyServerError:
-        raise HTTPException(status_code=502, detail="Spotify non disponibile, riprova tra poco")
+        raise HTTPException(
+            status_code=502, detail="Spotify non disponibile, riprova tra poco"
+        )
     except Exception as exc:
         logger.exception("Errore imprevisto nel confronto playlist: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore durante il confronto delle playlist")
+        raise HTTPException(
+            status_code=500, detail="Errore durante il confronto delle playlist"
+        )
     finally:
         await client.close()
 

@@ -22,6 +22,8 @@ async def retry_with_backoff(
         try:
             return await coro_func(*args, **kwargs)
         except RateLimitError as e:
+            if isinstance(e, ThrottleError):
+                raise  # Non ritentare — il frontend gestisce il countdown
             if attempt == max_retries:
                 raise
             delay = base_delay * (2**attempt)
@@ -53,12 +55,27 @@ class RateLimitError(Exception):
         super().__init__(f"Rate limited. Retry after {retry_after}s")
 
 
+class ThrottleError(RateLimitError):
+    """Self-imposed rate limit — budget API quasi esaurito."""
+
+    pass
+
+
 class SpotifyServerError(Exception):
     pass
 
 
 class SpotifyAuthError(Exception):
     pass
+
+
+async def gather_in_chunks(coros, chunk_size=4):
+    """Esegue coroutine in batch sequenziali per limitare i burst."""
+    results = []
+    for i in range(0, len(coros), chunk_size):
+        chunk = coros[i : i + chunk_size]
+        results.extend(await asyncio.gather(*chunk, return_exceptions=True))
+    return results
 
 
 class APIRateLimiter(BaseHTTPMiddleware):

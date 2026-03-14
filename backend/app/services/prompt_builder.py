@@ -17,8 +17,14 @@ def build_claude_prompt(
 
     # Sezione dati compatti
     data_section = _build_data_section(
-        top_tracks, features_profile, trends, genres, playlist_comparison,
-        taste_evolution, artist_network, temporal_patterns,
+        top_tracks,
+        features_profile,
+        trends,
+        genres,
+        playlist_comparison,
+        taste_evolution,
+        artist_network,
+        temporal_patterns,
     )
 
     # Prompt pre-compilato
@@ -36,7 +42,9 @@ def build_claude_prompt(
     return {
         "export_text": full_export,
         "estimated_tokens": estimated_tokens,
-        "data_preview": data_section[:500] + "..." if len(data_section) > 500 else data_section,
+        "data_preview": data_section[:500] + "..."
+        if len(data_section) > 500
+        else data_section,
     }
 
 
@@ -98,7 +106,9 @@ def _build_data_section(
         for key in ["energy", "valence", "danceability"]:
             val = feat.get(key, "N/A")
             lines.append(f"- {key}: {val}")
-        lines.append(f"- Genere top: {trend.get('genres', {}).get(next(iter(trend.get('genres', {})), ''), 'N/A') if trend.get('genres') else 'N/A'}")
+        lines.append(
+            f"- Genere top: {trend.get('genres', {}).get(next(iter(trend.get('genres', {})), ''), 'N/A') if trend.get('genres') else 'N/A'}"
+        )
         lines.append("")
 
     # Generi
@@ -125,11 +135,17 @@ def _build_data_section(
         loyal = artists.get("loyal", [])
         falling = artists.get("falling", [])
         if rising:
-            lines.append(f"- **Rising**: {', '.join(a.get('name', '') for a in rising[:10])}")
+            lines.append(
+                f"- **Rising**: {', '.join(a.get('name', '') for a in rising[:10])}"
+            )
         if loyal:
-            lines.append(f"- **Loyal**: {', '.join(a.get('name', '') for a in loyal[:10])}")
+            lines.append(
+                f"- **Loyal**: {', '.join(a.get('name', '') for a in loyal[:10])}"
+            )
         if falling:
-            lines.append(f"- **Falling**: {', '.join(a.get('name', '') for a in falling[:10])}")
+            lines.append(
+                f"- **Falling**: {', '.join(a.get('name', '') for a in falling[:10])}"
+            )
         metrics = taste_evolution.get("metrics", {})
         if metrics:
             lines.append(f"- **Loyalty Score**: {metrics.get('loyalty_score', 'N/A')}%")
@@ -149,7 +165,10 @@ def _build_data_section(
             lines.append(f"- **Cluster {i + 1}**: {', '.join(names[:8])}")
         bridges = artist_network.get("bridges", [])
         if bridges:
-            bridge_strs = [f"{b.get('name', '')} (score: {b.get('bridge_score', 0)})" for b in bridges[:5]]
+            bridge_strs = [
+                f"{b.get('name', '')} (score: {b.get('bridge_score', 0)})"
+                for b in bridges[:5]
+            ]
             lines.append(f"- **Bridge Artists**: {', '.join(bridge_strs)}")
         metrics = artist_network.get("metrics", {})
         lines.append(f"- **Total Nodes**: {metrics.get('total_nodes', 'N/A')}")
@@ -169,7 +188,9 @@ def _build_data_section(
         patterns = temporal_patterns.get("patterns", {})
         lines.append(f"- **Weekday %**: {patterns.get('weekday_pct', 'N/A')}%")
         sessions = temporal_patterns.get("sessions", {})
-        lines.append(f"- **Durata Media Sessione**: {sessions.get('avg_duration_minutes', 'N/A')} min")
+        lines.append(
+            f"- **Durata Media Sessione**: {sessions.get('avg_duration_minutes', 'N/A')} min"
+        )
         lines.append("")
 
     return "\n".join(lines)

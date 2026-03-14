@@ -40,16 +40,21 @@ async def compute_temporal_patterns(
             continue
         dt = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
         track = item.get("track", {})
-        api_plays.append({
-            "datetime": dt,
-            "weekday": dt.weekday(),
-            "hour": dt.hour,
-            "track_name": track.get("name", ""),
-            "track_id": track.get("id", ""),
-            "artist_name": (track.get("artists", [{}])[0].get("name", "")
-                           if track.get("artists") else ""),
-            "duration_ms": track.get("duration_ms", 0),
-        })
+        api_plays.append(
+            {
+                "datetime": dt,
+                "weekday": dt.weekday(),
+                "hour": dt.hour,
+                "track_name": track.get("name", ""),
+                "track_id": track.get("id", ""),
+                "artist_name": (
+                    track.get("artists", [{}])[0].get("name", "")
+                    if track.get("artists")
+                    else ""
+                ),
+                "duration_ms": track.get("duration_ms", 0),
+            }
+        )
 
     # Persist to DB if available (accumulate historical data)
     stored_count = 0
@@ -64,7 +69,8 @@ async def compute_temporal_patterns(
             plays = db_plays
             logger.info(
                 "Temporal patterns: using %d accumulated plays (vs %d from API)",
-                len(plays), len(api_plays),
+                len(plays),
+                len(api_plays),
             )
 
     if not plays:
@@ -128,7 +134,9 @@ async def compute_temporal_patterns(
     track_counts = defaultdict(int)
     for play in plays:
         track_counts[play["track_name"]] += 1
-    most_played = max(track_counts.items(), key=lambda x: x[1]) if track_counts else ("", 0)
+    most_played = (
+        max(track_counts.items(), key=lambda x: x[1]) if track_counts else ("", 0)
+    )
 
     # Top 5 most played tracks
     top_tracks = sorted(track_counts.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -167,9 +175,7 @@ async def compute_temporal_patterns(
     }
 
 
-async def _store_plays(
-    db: AsyncSession, user_id: int, plays: list[dict]
-) -> int:
+async def _store_plays(db: AsyncSession, user_id: int, plays: list[dict]) -> int:
     """Salva nuovi ascolti nel DB, ignorando duplicati."""
     stored = 0
     for play in plays:
@@ -219,16 +225,19 @@ async def _load_plays(db: AsyncSession, user_id: int) -> list[dict]:
         dt = r.played_at
         if dt.tzinfo is None:
             from datetime import timezone
+
             dt = dt.replace(tzinfo=timezone.utc)
-        plays.append({
-            "datetime": dt,
-            "weekday": dt.weekday(),
-            "hour": dt.hour,
-            "track_name": r.track_name,
-            "track_id": r.track_spotify_id,
-            "artist_name": r.artist_name,
-            "duration_ms": r.duration_ms or 0,
-        })
+        plays.append(
+            {
+                "datetime": dt,
+                "weekday": dt.weekday(),
+                "hour": dt.hour,
+                "track_name": r.track_name,
+                "track_id": r.track_spotify_id,
+                "artist_name": r.artist_name,
+                "duration_ms": r.duration_ms or 0,
+            }
+        )
     return plays
 
 

@@ -31,6 +31,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # --- OAuth state helpers (stateless, HMAC-signed) ---
 
+
 def _sign_state(nonce: str) -> str:
     """Crea state firmato: nonce.signature (sopravvive a restart/reload)."""
     sig = hmac.new(
@@ -57,6 +58,7 @@ def _verify_state(state: str) -> bool:
 
 # --- Cookie helpers ---
 
+
 def set_session_cookie(response: Response, user_id: int):
     """Imposta il cookie di sessione firmato."""
     from itsdangerous import URLSafeSerializer
@@ -75,6 +77,7 @@ def set_session_cookie(response: Response, user_id: int):
 
 
 # --- Routes ---
+
 
 @router.get("/spotify/login")
 async def spotify_login(request: Request):
@@ -125,8 +128,12 @@ async def spotify_callback(
         )
 
     if token_resp.status_code != 200:
-        logger.warning("Token exchange failed: %s %s", token_resp.status_code, token_resp.text)
-        return RedirectResponse(url=f"{settings.frontend_url}?error=token_exchange_failed")
+        logger.warning(
+            "Token exchange failed: %s %s", token_resp.status_code, token_resp.text
+        )
+        return RedirectResponse(
+            url=f"{settings.frontend_url}?error=token_exchange_failed"
+        )
 
     token_data = token_resp.json()
     access_token = token_data["access_token"]
@@ -144,14 +151,18 @@ async def spotify_callback(
             if profile_resp.status_code == 429:
                 retry_after = int(profile_resp.headers.get("Retry-After", 5))
                 logger.warning(
-                    "GET /v1/me → 429 (attempt %d/5), Retry-After=%ds", attempt + 1, retry_after
+                    "GET /v1/me → 429 (attempt %d/5), Retry-After=%ds",
+                    attempt + 1,
+                    retry_after,
                 )
                 await asyncio.sleep(retry_after)
                 continue
             break
 
     if profile_resp is None or profile_resp.status_code != 200:
-        return RedirectResponse(url=f"{settings.frontend_url}?error=profile_fetch_failed")
+        return RedirectResponse(
+            url=f"{settings.frontend_url}?error=profile_fetch_failed"
+        )
 
     profile = profile_resp.json()
     spotify_id = profile["id"]
@@ -165,7 +176,11 @@ async def spotify_callback(
             spotify_id=spotify_id,
             display_name=profile.get("display_name"),
             email=profile.get("email"),
-            avatar_url=(profile.get("images", [{}])[0].get("url") if profile.get("images") else None),
+            avatar_url=(
+                profile.get("images", [{}])[0].get("url")
+                if profile.get("images")
+                else None
+            ),
             country=profile.get("country"),
         )
         db.add(user)
@@ -173,11 +188,15 @@ async def spotify_callback(
     else:
         user.display_name = profile.get("display_name")
         user.email = profile.get("email")
-        user.avatar_url = (profile.get("images", [{}])[0].get("url") if profile.get("images") else None)
+        user.avatar_url = (
+            profile.get("images", [{}])[0].get("url") if profile.get("images") else None
+        )
         user.updated_at = datetime.now(timezone.utc)
 
     # Salva/aggiorna token
-    result = await db.execute(select(SpotifyToken).where(SpotifyToken.user_id == user.id))
+    result = await db.execute(
+        select(SpotifyToken).where(SpotifyToken.user_id == user.id)
+    )
     token_record = result.scalar_one_or_none()
 
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)

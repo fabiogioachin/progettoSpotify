@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { Compass, Sparkles, Star, BarChart3, Music } from 'lucide-react'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
@@ -24,12 +23,11 @@ export default function DiscoveryPage() {
   const recommendationsSource = discoveryData?.recommendations_source || 'spotify'
 
   // Audio analysis: trigger when no audio features available
-  const trackIds = useMemo(() => tracks.map(t => t.id), [tracks])
   const {
     features: analysisFeatures,
     progress: analysisProgress,
     isAnalyzing,
-  } = useAudioAnalysis(trackIds, !hasAudioFeatures && tracks.length > 0 && !topLoading && !discoveryLoading)
+  } = useAudioAnalysis(tracks, !hasAudioFeatures && tracks.length > 0 && !topLoading && !discoveryLoading)
 
   // Enrich tracks with analysis features for MoodScatter
   const enrichedTracks = tracks.map(t => {

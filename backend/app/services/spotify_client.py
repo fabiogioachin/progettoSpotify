@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -16,7 +17,12 @@ from app.config import settings
 from app.models.user import SpotifyToken
 from cryptography.fernet import InvalidToken
 
-from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
+from app.utils.rate_limiter import (
+    RateLimitError,
+    SpotifyAuthError,
+    SpotifyServerError,
+    ThrottleError,
+)
 from app.utils.token_manager import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -55,13 +61,18 @@ SCOPES = [
 
 
 class SpotifyClient:
-    # Global cooldown shared across all instances — when any request gets a 429
-    # with retry_after > _COOLDOWN_THRESHOLD, all subsequent requests fail immediately
-    # without hitting Spotify (to avoid increasing the retry_after further).
-    _cooldown_until: float = 0.0  # epoch timestamp
-    _COOLDOWN_THRESHOLD: float = (
-        10 * 60
-    )  # 10 minutes: if retry_after exceeds this, activate global cooldown
+    # Global cooldown shared across all instances — ANY 429 activates cooldown
+    # so pending requests in the semaphore don't keep hitting Spotify.
+    _cooldown_until: float = 0.0  # monotonic timestamp
+
+    # Global semaphore — max 6 concurrent Spotify API requests across all instances
+    _global_sem = asyncio.Semaphore(6)
+
+    # Sliding window throttle — preventive rate limiting
+    _call_timestamps: deque = deque()
+    _WINDOW_SIZE: float = 30.0
+    _MAX_CALLS_PER_WINDOW: int = 25
+    _window_lock = asyncio.Lock()
 
     def __init__(self, db: AsyncSession, user_id: int):
         self.db = db
@@ -124,47 +135,84 @@ class SpotifyClient:
 
     async def _request(self, method: str, url: str, **kwargs) -> Any:
         """Esegue una richiesta autenticata alla Spotify API con retry su 401."""
-        # Global cooldown check — don't hit Spotify if we're in cooldown
-        now = time.monotonic()
-        if SpotifyClient._cooldown_until > now:
-            remaining = SpotifyClient._cooldown_until - now
-            logger.warning(
-                "Global cooldown active (%.0fs remaining) — skipping request to %s",
-                remaining,
-                url,
-            )
-            raise RateLimitError(remaining)
-
-        access_token = await self._get_valid_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        resp = await self._client.request(method, url, headers=headers, **kwargs)
-
-        # Su 401, tenta un refresh forzato e riprova una volta
-        if resp.status_code == 401:
-            access_token = await self._force_refresh()
-            headers = {"Authorization": f"Bearer {access_token}"}
-            resp = await self._client.request(method, url, headers=headers, **kwargs)
-            if resp.status_code == 401:
-                raise SpotifyAuthError("Token non valido dopo refresh")
-
-        if resp.status_code == 429:
-            retry_after = float(resp.headers.get("Retry-After", "1"))
-            # If retry_after exceeds threshold, activate global cooldown
-            # to prevent further requests from making it worse
-            if retry_after > self._COOLDOWN_THRESHOLD:
-                SpotifyClient._cooldown_until = now + retry_after
+        async with SpotifyClient._global_sem:
+            # Global cooldown check — don't hit Spotify if we're in cooldown
+            now = time.monotonic()
+            if SpotifyClient._cooldown_until > now:
+                remaining = SpotifyClient._cooldown_until - now
                 logger.warning(
-                    "Spotify rate limit with retry_after=%.0fs — activating global cooldown for %.0f min",
-                    retry_after,
-                    retry_after / 60,
+                    "Global cooldown active (%.0fs remaining) — skipping request to %s",
+                    remaining,
+                    url,
                 )
-            raise RateLimitError(retry_after)
-        if resp.status_code >= 500:
-            raise SpotifyServerError(f"Spotify server error: {resp.status_code}")
+                raise RateLimitError(remaining)
 
-        resp.raise_for_status()
-        return resp.json()
+            # Sliding window throttle — preventive rate limiting
+            wait_time = 0.0
+            async with SpotifyClient._window_lock:
+                now_w = time.monotonic()
+                while (
+                    SpotifyClient._call_timestamps
+                    and SpotifyClient._call_timestamps[0]
+                    < now_w - SpotifyClient._WINDOW_SIZE
+                ):
+                    SpotifyClient._call_timestamps.popleft()
+
+                if (
+                    len(SpotifyClient._call_timestamps)
+                    >= SpotifyClient._MAX_CALLS_PER_WINDOW
+                ):
+                    oldest = SpotifyClient._call_timestamps[0]
+                    wait_time = oldest + SpotifyClient._WINDOW_SIZE - now_w
+
+            if wait_time > 0:
+                logger.info(
+                    "Throttle preventivo: attesa %.1fs (budget %d/%d in 30s)",
+                    wait_time,
+                    SpotifyClient._MAX_CALLS_PER_WINDOW,
+                    SpotifyClient._MAX_CALLS_PER_WINDOW,
+                )
+                raise ThrottleError(wait_time)
+
+            # Registra la chiamata nel window
+            async with SpotifyClient._window_lock:
+                SpotifyClient._call_timestamps.append(time.monotonic())
+
+            access_token = await self._get_valid_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
+
+            resp = await self._client.request(method, url, headers=headers, **kwargs)
+
+            # Su 401, tenta un refresh forzato e riprova una volta
+            if resp.status_code == 401:
+                access_token = await self._force_refresh()
+                headers = {"Authorization": f"Bearer {access_token}"}
+                resp = await self._client.request(
+                    method, url, headers=headers, **kwargs
+                )
+                if resp.status_code == 401:
+                    raise SpotifyAuthError("Token non valido dopo refresh")
+
+            if resp.status_code == 429:
+                retry_after = float(resp.headers.get("Retry-After", "1"))
+                SpotifyClient._cooldown_until = now + retry_after
+                if retry_after > 60:
+                    logger.warning(
+                        "Spotify rate limit con retry_after=%.0fs — cooldown globale per %.0f min",
+                        retry_after,
+                        retry_after / 60,
+                    )
+                else:
+                    logger.info(
+                        "Spotify rate limit con retry_after=%.0fs — cooldown breve",
+                        retry_after,
+                    )
+                raise RateLimitError(retry_after)
+            if resp.status_code >= 500:
+                raise SpotifyServerError(f"Spotify server error: {resp.status_code}")
+
+            resp.raise_for_status()
+            return resp.json()
 
     async def _force_refresh(self) -> str:
         """Forza il refresh del token ignorando la scadenza. Restituisce il nuovo access_token."""
@@ -241,5 +289,10 @@ class SpotifyClient:
 
     async def get_artist(self, artist_id: str) -> dict:
         _validate_spotify_id(artist_id)
-        return await self.get(f"/artists/{artist_id}")
-
+        key = _cache_key(self.user_id, "artist", artist_id)
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get(f"/artists/{artist_id}")
+        _cache_5m[key] = result
+        return result

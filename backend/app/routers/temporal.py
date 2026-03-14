@@ -29,7 +29,9 @@ async def get_temporal_patterns(
         raise HTTPException(status_code=401, detail="Sessione scaduta")
     except Exception as exc:
         logger.error("Errore temporal_patterns: %s", exc)
-        raise HTTPException(status_code=500, detail="Errore nell'analisi pattern temporali")
+        raise HTTPException(
+            status_code=500, detail="Errore nell'analisi pattern temporali"
+        )
     finally:
         await client.close()
     return result
