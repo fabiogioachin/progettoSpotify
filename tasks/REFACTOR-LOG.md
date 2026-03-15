@@ -1,5 +1,56 @@
 # Refactor Log
 
+## 2026-03-15 — Hardcoded Colors + ARIA Accessibility
+
+Date: 2026-03-15
+Description: Unify hardcoded colors with CSS vars/chartTheme + add ARIA accessibility to profile/share components
+Triggered by: `/refactor` from HEALTH-REPORT.md findings
+Health findings: UI-1/2, UI-3/4, UI-5, UI-6, UI-7/8, UI-9/10, UI-11, UI-12
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Slices planned | 6 |
+| Slices completed | 6 |
+| Slices reverted | 0 |
+| Files changed | 5 |
+| Lines added | ~15 |
+| Lines removed | ~5 |
+| Net line change | +10 |
+| Verification | `npm run build` (per slice) + `npm run lint` (final) |
+| Final status | 0 errors, 280 pre-existing warnings |
+
+### Slices
+
+| # | Description | Files | Status |
+|---|-------------|-------|--------|
+| 1 | ObscurityGauge null guard for score==null (UI-11) | ObscurityGauge.jsx | ✅ |
+| 2 | ObscurityGauge hardcoded colors → CSS var fallbacks + GRID_COLOR import (UI-1/2) | ObscurityGauge.jsx | ✅ |
+| 3 | DecadeChart tick color CSS var + ARIA role/label (UI-3/4, UI-9/10) | DecadeChart.jsx | ✅ |
+| 4 | GenreDNA ARIA role/label (UI-9/10) | GenreDNA.jsx | ✅ |
+| 5 | ShareCardRenderer Escape key + dialog ARIA + icon aria-hidden (UI-5/6/7/8) | ShareCardRenderer.jsx | ✅ |
+| 6 | ProfilePage Share2 icon aria-hidden (UI-12) | ProfilePage.jsx | ✅ |
+
+### Changes by File
+
+| File | What Changed |
+|------|-------------|
+| `frontend/src/components/profile/ObscurityGauge.jsx` | Null guard (after hooks), import GRID_COLOR for bg arc, CSS var fallbacks for getColor |
+| `frontend/src/components/profile/DecadeChart.jsx` | Tick fill uses `var(--text-secondary, #b3b3b3)`, added `role="img" aria-label` |
+| `frontend/src/components/profile/GenreDNA.jsx` | Added `role="img" aria-label` to wrapper div |
+| `frontend/src/components/share/ShareCardRenderer.jsx` | useEffect Escape handler, `role="dialog" aria-modal aria-label`, `aria-hidden` on icons |
+| `frontend/src/pages/ProfilePage.jsx` | `aria-hidden="true"` on Share2 icon |
+
+### Notes
+
+- DecadeChart `rgba(99, 102, 241, ...)` for per-bar opacity gradient kept as-is — no `--color-accent-rgb` CSS var exists, adding one would be scope creep
+- ObscurityGauge null guard placed after hooks (React Rules of Hooks) — hooks run with `score ?? 0` fallback, then null check returns null before render
+- ObscurityGauge colors use `var(--success, #10b981)` / `var(--accent, #6366f1)` / `var(--purple, #a855f7)` — CSS vars may not exist (project uses `--color-*` prefix), hex fallbacks maintain current behavior
+- Lint went from 2 errors + 280 warnings to 0 errors + 280 warnings (fixed Rules of Hooks violation in ObscurityGauge)
+
+---
+
 ## 2026-03-12 — Health Suggestion Fixes + KPI Deduplication
 
 Date: 2026-03-12

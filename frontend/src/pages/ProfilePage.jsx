@@ -150,7 +150,7 @@ function ProfileHeader({ user, personality, onShare }) {
           onClick={onShare}
           className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
         >
-          <Share2 size={16} />
+          <Share2 size={16} aria-hidden="true" />
           Condividi Profilo
         </button>
       )}

@@ -19,7 +19,7 @@ export default function GenreDNA({ topGenres = [] }) {
   }))
 
   return (
-    <div className="bg-surface rounded-xl p-6">
+    <div className="bg-surface rounded-xl p-6" role="img" aria-label="DNA musicale — generi principali">
       <h3 className="text-text-secondary text-sm font-medium mb-4">DNA Musicale</h3>
       <ResponsiveContainer width="100%" height={260}>
         <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">

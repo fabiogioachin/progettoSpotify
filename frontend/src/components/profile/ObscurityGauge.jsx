@@ -1,14 +1,15 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { GRID_COLOR } from '../../lib/chartTheme'
 
 const RADIUS = 80
 const STROKE_WIDTH = 12
 const CIRCUMFERENCE = Math.PI * RADIUS // semicircle
 
 function getColor(score) {
-  if (score < 30) return '#10b981' // green — mainstream
-  if (score < 60) return '#6366f1' // indigo — mid
-  return '#a855f7' // purple — obscure
+  if (score < 30) return 'var(--success, #10b981)' // green — mainstream
+  if (score < 60) return 'var(--accent, #6366f1)' // indigo — mid
+  return 'var(--purple, #a855f7)' // purple — obscure
 }
 
 function getLabel(score) {
@@ -25,6 +26,8 @@ export default function ObscurityGauge({ score }) {
   const color = useMemo(() => getColor(normalizedScore), [normalizedScore])
   const label = useMemo(() => getLabel(normalizedScore), [normalizedScore])
 
+  if (score == null) return null
+
   return (
     <div className="bg-surface rounded-xl p-6 flex flex-col items-center">
       <h3 className="text-text-secondary text-sm font-medium mb-4">Indice di Oscurit&agrave;</h3>
@@ -38,7 +41,7 @@ export default function ObscurityGauge({ score }) {
           <path
             d="M 20 110 A 80 80 0 0 1 180 110"
             fill="none"
-            stroke="#282828"
+            stroke={GRID_COLOR}
             strokeWidth={STROKE_WIDTH}
             strokeLinecap="round"
           />

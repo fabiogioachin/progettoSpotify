@@ -9,7 +9,7 @@ export default function DecadeChart({ decadeDistribution = {} }) {
   if (data.length === 0) return null
 
   return (
-    <div className="bg-surface rounded-xl p-6">
+    <div className="bg-surface rounded-xl p-6" role="img" aria-label="Distribuzione brani per decade">
       <h3 className="text-text-secondary text-sm font-medium mb-4">Distribuzione per Decade</h3>
       <ResponsiveContainer width="100%" height={Math.max(160, data.length * 40 + 20)}>
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
@@ -17,7 +17,7 @@ export default function DecadeChart({ decadeDistribution = {} }) {
           <YAxis
             type="category"
             dataKey="decade"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            tick={{ fill: 'var(--text-secondary, #b3b3b3)', fontSize: 12 }}
             width={50}
             axisLine={false}
             tickLine={false}
