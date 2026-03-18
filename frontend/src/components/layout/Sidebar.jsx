@@ -9,6 +9,7 @@ import {
   BarChart3,
   Sparkles,
   UserCircle,
+  HeartHandshake,
   Menu,
   X,
 } from 'lucide-react'
@@ -38,6 +39,12 @@ const NAV_SECTIONS = [
     items: [
       { href: '/playlists', icon: ListMusic, label: 'Confronto' },
       { href: '/playlist-analytics', icon: BarChart3, label: 'Analisi' },
+    ],
+  },
+  {
+    title: 'Sociale',
+    items: [
+      { href: '/friends', icon: HeartHandshake, label: 'Amici' },
     ],
   },
 ]

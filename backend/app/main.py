@@ -24,6 +24,7 @@ from app.routers import (
     playlist_analytics,
     playlists,
     profile,
+    social,
     taste_evolution,
     temporal,
     wrapped,
@@ -118,7 +119,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -136,6 +137,7 @@ app.include_router(playlist_analytics.router)
 app.include_router(historical.router)
 app.include_router(wrapped.router)
 app.include_router(profile.router)
+app.include_router(social.router)
 
 
 @app.get("/health")

@@ -114,3 +114,7 @@ rm frontend/src/components/share/ReceiptCard.jsx
 ```
 /refactor Unify hardcoded colors in ObscurityGauge.jsx and DecadeChart.jsx — import GRID_COLOR from chartTheme, replace hex values with CSS variables var(--accent), var(--text-secondary). Add Escape key handler + ARIA attributes to ShareCardRenderer.jsx. Add null guard to ObscurityGauge (UI-1/2, UI-3/4, UI-5, UI-6, UI-7/8, UI-11)
 ```
+
+## Invalidated by /feature on 2026-03-15
+Feature: Tier 2 — Social Layer (amici, compatibilità, leaderboard, FriendsPage, route /friends)
+Re-run /health for an updated report.

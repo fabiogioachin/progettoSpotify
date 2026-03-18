@@ -15,6 +15,7 @@ const ArtistNetworkPage = lazy(() => import('./pages/ArtistNetworkPage'))
 const PlaylistAnalyticsPage = lazy(() => import('./pages/PlaylistAnalyticsPage'))
 const WrappedPage = lazy(() => import('./pages/WrappedPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const FriendsPage = lazy(() => import('./pages/FriendsPage'))
 
 function ProtectedRoute({ children, withLayout = true }) {
   const { user, loading } = useAuth()
@@ -105,6 +106,22 @@ function AppRoutes() {
           element={
             <ProtectedRoute withLayout={false}>
               <WrappedPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/friends"
+          element={
+            <ProtectedRoute>
+              <FriendsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/invite/:code"
+          element={
+            <ProtectedRoute>
+              <FriendsPage />
             </ProtectedRoute>
           }
         />
