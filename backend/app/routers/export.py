@@ -11,7 +11,6 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.services.artist_network import build_artist_network
 from app.services.audio_analyzer import (
-    compute_profile,
     compute_trends,
     get_or_fetch_features,
 )
@@ -19,7 +18,12 @@ from app.services.prompt_builder import build_claude_prompt
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_evolution import compute_taste_evolution
 from app.services.temporal_patterns import compute_temporal_patterns
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import (
+    RateLimitError,
+    SpotifyAuthError,
+    SpotifyServerError,
+    retry_with_backoff,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +43,11 @@ async def generate_claude_prompt(
     client = SpotifyClient(db, user_id)
 
     try:
-        # Recupera top tracks con features
+        # Recupera top tracks con features (limit=50 for cache alignment, slice to 20)
         top_data = await retry_with_backoff(
-            client.get_top_tracks, time_range=time_range, limit=20
+            client.get_top_tracks, time_range=time_range, limit=50
         )
-        top_items = top_data.get("items", [])
+        top_items = top_data.get("items", [])[:20]
 
         # Costruisci lista compatta
         track_ids = [t["id"] for t in top_items]
@@ -61,9 +65,9 @@ async def generate_claude_prompt(
                 t["features"] = feat
             top_tracks.append(t)
 
-        # Profilo e trend
-        profile = await compute_profile(db, client, time_range)
+        # Trend (includes profile for the requested time_range — no separate compute_profile needed)
         trends = await compute_trends(db, client, user_id)
+        profile = next((t for t in trends if t["period"] == time_range), {})
         genres = profile.get("genres", {})
 
         # Fetch additional data in parallel (graceful degradation)
@@ -85,7 +89,7 @@ async def generate_claude_prompt(
 
         async def safe_temporal():
             try:
-                return await compute_temporal_patterns(client)
+                return await compute_temporal_patterns(client, db=db, user_id=user_id)
             except SpotifyAuthError:
                 raise
             except Exception:
@@ -106,8 +110,8 @@ async def generate_claude_prompt(
             temporal_patterns=temp_pat,
         )
 
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore nella generazione dell'export: %s", exc)
         raise HTTPException(

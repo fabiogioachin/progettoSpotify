@@ -118,3 +118,11 @@ rm frontend/src/components/share/ReceiptCard.jsx
 ## Invalidated by /feature on 2026-03-15
 Feature: Tier 2 — Social Layer (amici, compatibilità, leaderboard, FriendsPage, route /friends)
 Re-run /health for an updated report.
+
+## Invalidated by /feature on 2026-03-18
+Feature: Rate Limit Hardening Refactor — global error handlers, TOCTOU fix, burst control, budget caps
+Re-run /health for an updated report.
+
+## Invalidated by /feature on 2026-03-18
+Feature: API Call Optimization — cache key fragmentation, cross-user artist cache, genre dedup, playlist items cache, export dedup
+Re-run /health for an updated report.

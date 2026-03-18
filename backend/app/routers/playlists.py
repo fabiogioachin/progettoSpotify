@@ -1,6 +1,5 @@
 """Router per playlist e confronto."""
 
-import asyncio
 import logging
 import re
 from collections import Counter
@@ -19,6 +18,7 @@ from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
     SpotifyServerError,
+    gather_in_chunks,
     retry_with_backoff,
 )
 
@@ -47,8 +47,8 @@ async def get_playlists(
         data = await retry_with_backoff(
             client.get_playlists, limit=limit, offset=offset
         )
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore nel caricamento playlist: %s", exc)
         raise HTTPException(
@@ -119,8 +119,8 @@ async def compare_playlists(
                 offset = 0
                 while True:
                     items_data = await retry_with_backoff(
-                        client.get,
-                        f"/playlists/{pid}/items",
+                        client.get_playlist_items,
+                        pid,
                         limit=50,
                         offset=offset,
                     )
@@ -133,6 +133,8 @@ async def compare_playlists(
                     if not items_data.get("next") or len(items) < 50:
                         break
                     offset += 50
+                    if offset >= 500:  # Cap: max 500 tracks per playlist
+                        break
             except SpotifyAuthError:
                 raise
             except Exception:
@@ -160,7 +162,7 @@ async def compare_playlists(
 
         # Fetch genres for unique artists (deduplicated, single pass)
         artist_genres_cache: dict[str, list[str]] = {}
-        artist_list = list(global_artist_ids)[:25]  # global cap across all playlists
+        artist_list = list(global_artist_ids)[:20]  # global cap across all playlists
 
         async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:
             try:
@@ -171,11 +173,13 @@ async def compare_playlists(
             except Exception:
                 return aid, []
 
-        genre_results = await asyncio.gather(
-            *[_fetch_artist_genres(aid) for aid in artist_list],
-            return_exceptions=True,
+        genre_results = await gather_in_chunks(
+            [_fetch_artist_genres(aid) for aid in artist_list],
+            chunk_size=4,
         )
         for gr in genre_results:
+            if isinstance(gr, SpotifyAuthError):
+                raise gr
             if isinstance(gr, tuple):
                 artist_genres_cache[gr[0]] = gr[1]
 
@@ -269,27 +273,8 @@ async def compare_playlists(
                     "top_tracks": top_tracks,
                 }
             )
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
-    except RateLimitError as e:
-        from app.utils.rate_limiter import ThrottleError
-
-        is_throttle = isinstance(e, ThrottleError)
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "message": "Carico API elevato — dati in arrivo tra poco"
-                if is_throttle
-                else "Troppe richieste a Spotify, riprova tra poco",
-                "throttled": is_throttle,
-                "retry_after": round(e.retry_after or 5, 1),
-            },
-            headers={"Retry-After": str(int(e.retry_after or 5))},
-        )
-    except SpotifyServerError:
-        raise HTTPException(
-            status_code=502, detail="Spotify non disponibile, riprova tra poco"
-        )
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.exception("Errore imprevisto nel confronto playlist: %s", exc)
         raise HTTPException(

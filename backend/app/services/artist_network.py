@@ -41,20 +41,15 @@ async def build_artist_network(
     """Costruisce il grafo di artisti basato su generi condivisi."""
 
     # Fetch top artists from 3 time ranges for richer data (~45 unique artists)
+    # Always use default limit=50 to maximise cache hits with other endpoints
     short_task = _safe_fetch(
-        retry_with_backoff(
-            client.get_top_artists, time_range="short_term", limit=max_seed_artists
-        )
+        retry_with_backoff(client.get_top_artists, time_range="short_term")
     )
     medium_task = _safe_fetch(
-        retry_with_backoff(
-            client.get_top_artists, time_range="medium_term", limit=max_seed_artists
-        )
+        retry_with_backoff(client.get_top_artists, time_range="medium_term")
     )
     long_task = _safe_fetch(
-        retry_with_backoff(
-            client.get_top_artists, time_range="long_term", limit=max_seed_artists
-        )
+        retry_with_backoff(client.get_top_artists, time_range="long_term")
     )
 
     short_data, medium_data, long_data = await asyncio.gather(

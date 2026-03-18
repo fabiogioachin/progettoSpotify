@@ -1,6 +1,5 @@
 """Aggregazione e analisi audio features."""
 
-import asyncio
 import json
 import logging
 from collections import Counter
@@ -12,7 +11,12 @@ from app.constants import FEATURE_KEYS
 from app.models.listening_history import ListeningSnapshot
 from app.models.track import AudioFeatures
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import (
+    RateLimitError,
+    SpotifyAuthError,
+    gather_in_chunks,
+    retry_with_backoff,
+)
 
 # NOTE: Spotify Audio Features API è deprecata (403 permanente da Feb 2026).
 # get_or_fetch_features() fa solo cache lookup — non chiama mai l'API.
@@ -21,9 +25,16 @@ logger = logging.getLogger(__name__)
 
 
 async def compute_profile(
-    db: AsyncSession, client: SpotifyClient, time_range: str = "medium_term"
+    db: AsyncSession,
+    client: SpotifyClient,
+    time_range: str = "medium_term",
+    pre_genres: dict[str, float] | None = None,
 ) -> dict:
-    """Calcola il profilo audio completo dell'utente per un periodo."""
+    """Calcola il profilo audio completo dell'utente per un periodo.
+
+    Args:
+        pre_genres: if provided, skip _extract_genres and use these directly.
+    """
     data = await retry_with_backoff(
         client.get_top_tracks, time_range=time_range, limit=50
     )
@@ -67,8 +78,10 @@ async def compute_profile(
     tempos = [f["tempo"] for f in features.values() if f.get("tempo") is not None]
     averages["tempo"] = round(sum(tempos) / len(tempos), 1) if tempos else 0
 
-    # Distribuzione generi (dai top artists)
-    genres = await _extract_genres(client, items)
+    # Distribuzione generi — usa pre_genres se forniti, altrimenti fetch
+    genres = (
+        pre_genres if pre_genres is not None else await _extract_genres(client, items)
+    )
 
     return {
         "features": averages,
@@ -96,10 +109,8 @@ async def compute_trends(
 ) -> list[dict]:
     """Calcola i trend confrontando short, medium e long term.
 
-    Esegue sequenzialmente perché tutti condividono la stessa AsyncSession
-    (SQLAlchemy non permette operazioni concorrenti su una sessione).
-    Le chiamate Spotify sottostanti sono cachate con TTL 5min, quindi la
-    penalità è trascurabile.
+    Fetches genres ONCE for all unique artists across the 3 time ranges,
+    then passes pre-computed genre distributions to each compute_profile call.
     """
     labels = {
         "short_term": "Ultimo mese",
@@ -108,9 +119,72 @@ async def compute_trends(
     }
     time_ranges = ["short_term", "medium_term", "long_term"]
 
+    # Step 1: Fetch top_tracks for all 3 ranges (cached, ~0 API calls)
+    all_period_tracks: dict[str, list] = {}
+    for tr in time_ranges:
+        try:
+            data = await retry_with_backoff(
+                client.get_top_tracks, time_range=tr, limit=50
+            )
+            all_period_tracks[tr] = data.get("items", [])
+        except SpotifyAuthError:
+            raise
+        except Exception as exc:
+            logger.warning("compute_trends: fetch top_tracks(%s) fallito: %s", tr, exc)
+            all_period_tracks[tr] = []
+
+    # Step 2: Collect ALL unique artist IDs across all periods
+    all_artist_ids: set[str] = set()
+    for tracks in all_period_tracks.values():
+        for t in tracks:
+            for a in t.get("artists", []):
+                if a.get("id"):
+                    all_artist_ids.add(a["id"])
+
+    # Step 3: Fetch genres ONCE for unique artists (cap=20)
+    artist_genres_map: dict[str, list[str]] = {}
+    capped = list(all_artist_ids)[:20]
+
+    async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:
+        try:
+            artist = await retry_with_backoff(client.get_artist, aid)
+            return aid, artist.get("genres", [])
+        except SpotifyAuthError:
+            raise
+        except Exception:
+            return aid, []
+
+    results = await gather_in_chunks(
+        [_fetch_artist_genres(aid) for aid in capped],
+        chunk_size=4,
+    )
+    for r in results:
+        if isinstance(r, (SpotifyAuthError, RateLimitError)):
+            raise r
+        if isinstance(r, tuple):
+            artist_genres_map[r[0]] = r[1]
+
+    # Step 4: Build per-period genre distributions from cached genres
+    def _genres_for_period(tracks: list[dict]) -> dict[str, float]:
+        counter = Counter()
+        for t in tracks:
+            for a in t.get("artists", []):
+                aid = a.get("id")
+                if aid and aid in artist_genres_map:
+                    for g in artist_genres_map[aid]:
+                        counter[g] += 1
+        if not counter:
+            return {}
+        total = sum(counter.values())
+        return {g: round(c / total * 100, 1) for g, c in counter.most_common(15)}
+
+    # Step 5: Compute profiles with pre-computed genres
     trends = []
     for tr in time_ranges:
-        profile = await _safe_compute(compute_profile(db, client, tr), tr)
+        pre_genres = _genres_for_period(all_period_tracks[tr])
+        profile = await _safe_compute(
+            compute_profile(db, client, tr, pre_genres=pre_genres), tr
+        )
         if profile is not None:
             trends.append({"period": tr, "label": labels[tr], **profile})
     return trends
@@ -214,11 +288,13 @@ async def _extract_genres(
         except Exception:
             return []
 
-    results = await asyncio.gather(
-        *[_fetch_genres(aid) for aid in artist_list],
-        return_exceptions=True,
+    results = await gather_in_chunks(
+        [_fetch_genres(aid) for aid in artist_list],
+        chunk_size=4,
     )
     for r in results:
+        if isinstance(r, SpotifyAuthError):
+            raise r
         if isinstance(r, list):
             all_genres.extend(r)
 

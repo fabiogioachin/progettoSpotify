@@ -9,7 +9,7 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.services.artist_network import build_artist_network
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/artist-network", tags=["artist-network"])
@@ -25,8 +25,8 @@ async def get_artist_network(
     client = SpotifyClient(db, user_id)
     try:
         result = await build_artist_network(client)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore artist_network: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nel grafo artisti")

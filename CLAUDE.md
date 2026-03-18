@@ -52,7 +52,9 @@ Each request: `require_auth` extracts user_id from signed session cookie → rou
 
 **Token refresh**: proactive (5-min buffer before expiry) + reactive retry-on-401 with forced refresh. Lock prevents concurrent refreshes.
 
-**Rate limiting**: Two layers — API middleware (120 req/min per IP) + Spotify 429 propagation with Retry-After header to frontend.
+**Rate limiting**: Two layers — API middleware (120 req/min per IP) + Spotify 429 propagation with Retry-After header to frontend. Sliding window throttle (25 calls/30s) in SpotifyClient with atomic lock. Global semaphore(3).
+
+**Error handling**: Centralized via 3 global exception handlers in `main.py` — `SpotifyAuthError` → 401, `RateLimitError`/`ThrottleError` → 429, `SpotifyServerError` → 502. Routers only catch `(SpotifyAuthError, RateLimitError, SpotifyServerError): raise` + `except Exception` for logging. New API endpoints get error handling for free.
 
 **Background jobs** (APScheduler): `sync_recent_plays` hourly (accumulates beyond Spotify's 50-item hard limit), `save_daily_snapshot` on first daily login via `UserSnapshot` model, `compute_daily_aggregates` at 02:00 daily.
 

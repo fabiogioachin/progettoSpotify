@@ -54,8 +54,8 @@ async def get_historical_top_songs(client) -> dict:
         offset = 0
         while True:
             data = await retry_with_backoff(
-                client.get,
-                f"/playlists/{pl_info['playlist_id']}/items",
+                client.get_playlist_items,
+                pl_info["playlist_id"],
                 limit=50,
                 offset=offset,
             )

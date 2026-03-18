@@ -25,25 +25,8 @@ async def get_taste_evolution(
     client = SpotifyClient(db, user_id)
     try:
         result = await compute_taste_evolution(client)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
-    except RateLimitError as e:
-        from app.utils.rate_limiter import ThrottleError
-
-        is_throttle = isinstance(e, ThrottleError)
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "message": "Carico API elevato — dati in arrivo tra poco"
-                if is_throttle
-                else "Troppe richieste a Spotify, riprova tra poco",
-                "throttled": is_throttle,
-                "retry_after": round(e.retry_after or 5, 1),
-            },
-            headers={"Retry-After": str(int(e.retry_after or 5))},
-        )
-    except SpotifyServerError:
-        raise HTTPException(status_code=502, detail="Spotify non disponibile")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore taste_evolution: %s", exc)
         raise HTTPException(

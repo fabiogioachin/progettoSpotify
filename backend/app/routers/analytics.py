@@ -42,25 +42,8 @@ async def get_audio_features_profile(
             await save_snapshot(db, user_id, time_range, profile)
         except Exception as snap_exc:
             logger.warning("Snapshot non salvato: %s", snap_exc)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
-    except RateLimitError as e:
-        from app.utils.rate_limiter import ThrottleError
-
-        is_throttle = isinstance(e, ThrottleError)
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "message": "Carico API elevato — dati in arrivo tra poco"
-                if is_throttle
-                else "Troppe richieste a Spotify, riprova tra poco",
-                "throttled": is_throttle,
-                "retry_after": round(e.retry_after or 5, 1),
-            },
-            headers={"Retry-After": str(int(e.retry_after or 5))},
-        )
-    except SpotifyServerError:
-        raise HTTPException(status_code=502, detail="Spotify non disponibile")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore compute_profile: %s", exc)
         raise HTTPException(
@@ -84,25 +67,8 @@ async def get_trends(
     try:
         trends = await compute_trends(db, client, user_id)
         historical = await get_historical_snapshots(db, user_id)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
-    except RateLimitError as e:
-        from app.utils.rate_limiter import ThrottleError
-
-        is_throttle = isinstance(e, ThrottleError)
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "message": "Carico API elevato — dati in arrivo tra poco"
-                if is_throttle
-                else "Troppe richieste a Spotify, riprova tra poco",
-                "throttled": is_throttle,
-                "retry_after": round(e.retry_after or 5, 1),
-            },
-            headers={"Retry-After": str(int(e.retry_after or 5))},
-        )
-    except SpotifyServerError:
-        raise HTTPException(status_code=502, detail="Spotify non disponibile")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore compute_trends: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nel calcolo dei trend")
@@ -123,25 +89,8 @@ async def get_discovery(
 
     try:
         results = await discover(db, client)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
-    except RateLimitError as e:
-        from app.utils.rate_limiter import ThrottleError
-
-        is_throttle = isinstance(e, ThrottleError)
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "message": "Carico API elevato — dati in arrivo tra poco"
-                if is_throttle
-                else "Troppe richieste a Spotify, riprova tra poco",
-                "throttled": is_throttle,
-                "retry_after": round(e.retry_after or 5, 1),
-            },
-            headers={"Retry-After": str(int(e.retry_after or 5))},
-        )
-    except SpotifyServerError:
-        raise HTTPException(status_code=502, detail="Spotify non disponibile")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore discovery: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nelle raccomandazioni")

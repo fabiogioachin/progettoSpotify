@@ -58,7 +58,7 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
             offset = 0
             while True:
                 data = await retry_with_backoff(
-                    client.get, f"/playlists/{pid}/items", limit=50, offset=offset
+                    client.get_playlist_items, pid, limit=50, offset=offset
                 )
                 items = data.get("items", [])
                 for item in items:
@@ -80,6 +80,8 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
                 if not data.get("next") or len(items) < 50:
                     break
                 offset += 50
+                if offset >= 200:  # Cap: max 200 tracks per playlist (4 pages)
+                    break
         except SpotifyAuthError:
             raise
         except Exception as exc:
@@ -90,6 +92,8 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
     results = await gather_in_chunks(tasks, chunk_size=4)
 
     for r in results:
+        if isinstance(r, SpotifyAuthError):
+            raise r
         if isinstance(r, Exception):
             logger.warning("Errore fetch playlist batch: %s", r)
             continue

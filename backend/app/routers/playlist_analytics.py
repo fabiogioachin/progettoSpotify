@@ -9,7 +9,7 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.services.playlist_analytics import analyze_playlists
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/playlist-analytics", tags=["playlist-analytics"])
@@ -25,8 +25,8 @@ async def get_playlist_analytics(
     client = SpotifyClient(db, user_id)
     try:
         result = await analyze_playlists(client)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore playlist_analytics: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nell'analisi playlist")

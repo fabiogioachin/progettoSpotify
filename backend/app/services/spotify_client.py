@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 # Module-level TTL caches for read-only Spotify API responses
 _cache_5m = TTLCache(maxsize=256, ttl=300)  # 5 min for most methods
 _cache_2m = TTLCache(maxsize=64, ttl=120)  # 2 min for recently played
+_artist_cache_1h = TTLCache(
+    maxsize=512, ttl=3600
+)  # 1h — artist data is user-independent
 
 
 def _cache_key(user_id, method_name, *args, **kwargs):
@@ -65,8 +68,9 @@ class SpotifyClient:
     # so pending requests in the semaphore don't keep hitting Spotify.
     _cooldown_until: float = 0.0  # monotonic timestamp
 
-    # Global semaphore — max 6 concurrent Spotify API requests across all instances
-    _global_sem = asyncio.Semaphore(6)
+    # Global semaphore — max 3 concurrent Spotify API requests across all instances
+    # (dev mode punishes bursts with extreme retry_after values)
+    _global_sem = asyncio.Semaphore(3)
 
     # Sliding window throttle — preventive rate limiting
     _call_timestamps: deque = deque()
@@ -147,8 +151,7 @@ class SpotifyClient:
                 )
                 raise RateLimitError(remaining)
 
-            # Sliding window throttle — preventive rate limiting
-            wait_time = 0.0
+            # Sliding window throttle — atomic check + register (no TOCTOU gap)
             async with SpotifyClient._window_lock:
                 now_w = time.monotonic()
                 while (
@@ -164,19 +167,16 @@ class SpotifyClient:
                 ):
                     oldest = SpotifyClient._call_timestamps[0]
                     wait_time = oldest + SpotifyClient._WINDOW_SIZE - now_w
+                    logger.info(
+                        "Throttle preventivo: attesa %.1fs (budget %d/%d in 30s)",
+                        wait_time,
+                        SpotifyClient._MAX_CALLS_PER_WINDOW,
+                        SpotifyClient._MAX_CALLS_PER_WINDOW,
+                    )
+                    raise ThrottleError(wait_time)
 
-            if wait_time > 0:
-                logger.info(
-                    "Throttle preventivo: attesa %.1fs (budget %d/%d in 30s)",
-                    wait_time,
-                    SpotifyClient._MAX_CALLS_PER_WINDOW,
-                    SpotifyClient._MAX_CALLS_PER_WINDOW,
-                )
-                raise ThrottleError(wait_time)
-
-            # Registra la chiamata nel window
-            async with SpotifyClient._window_lock:
-                SpotifyClient._call_timestamps.append(time.monotonic())
+                # Register call in the same lock — no gap for other coroutines
+                SpotifyClient._call_timestamps.append(now_w)
 
             access_token = await self._get_valid_token()
             headers = {"Authorization": f"Bearer {access_token}"}
@@ -276,7 +276,13 @@ class SpotifyClient:
         return result
 
     async def get_saved_tracks(self, limit: int = 50, offset: int = 0) -> dict:
-        return await self.get("/me/tracks", limit=limit, offset=offset)
+        key = _cache_key(self.user_id, "saved_tracks", limit, offset)
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get("/me/tracks", limit=limit, offset=offset)
+        _cache_5m[key] = result
+        return result
 
     async def get_playlists(self, limit: int = 50, offset: int = 0) -> dict:
         key = _cache_key(self.user_id, "playlists", limit, offset)
@@ -287,12 +293,29 @@ class SpotifyClient:
         _cache_5m[key] = result
         return result
 
-    async def get_artist(self, artist_id: str) -> dict:
-        _validate_spotify_id(artist_id)
-        key = _cache_key(self.user_id, "artist", artist_id)
+    async def get_playlist_items(
+        self, playlist_id: str, limit: int = 50, offset: int = 0
+    ) -> dict:
+        _validate_spotify_id(playlist_id)
+        key = _cache_key(self.user_id, "playlist_items", playlist_id, limit, offset)
         cached = _cache_5m.get(key)
         if cached is not None:
             return cached
-        result = await self.get(f"/artists/{artist_id}")
+        result = await self.get(
+            f"/playlists/{playlist_id}/items", limit=limit, offset=offset
+        )
         _cache_5m[key] = result
+        return result
+
+    async def get_artist(self, artist_id: str) -> dict:
+        _validate_spotify_id(artist_id)
+        key = (
+            "artist",
+            artist_id,
+        )  # user-independent — artist data is identical for all users
+        cached = _artist_cache_1h.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get(f"/artists/{artist_id}")
+        _artist_cache_1h[key] = result
         return result

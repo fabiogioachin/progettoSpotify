@@ -9,7 +9,7 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.services.spotify_client import SpotifyClient
 from app.services.temporal_patterns import compute_temporal_patterns
-from app.utils.rate_limiter import SpotifyAuthError
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/temporal", tags=["temporal"])
@@ -25,8 +25,8 @@ async def get_temporal_patterns(
     client = SpotifyClient(db, user_id)
     try:
         result = await compute_temporal_patterns(client, db=db, user_id=user_id)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore temporal_patterns: %s", exc)
         raise HTTPException(

@@ -9,7 +9,7 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.services.historical_tops import get_historical_top_songs
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["historical"])
@@ -25,8 +25,8 @@ async def historical_tops(
     client = SpotifyClient(db, user_id)
     try:
         result = await get_historical_top_songs(client)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore historical_tops: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nel caricamento storico")

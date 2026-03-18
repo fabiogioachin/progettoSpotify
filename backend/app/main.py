@@ -30,7 +30,13 @@ from app.routers import (
     wrapped,
 )
 from app.services.background_tasks import compute_daily_aggregates, sync_recent_plays
-from app.utils.rate_limiter import APIRateLimiter, RateLimitError
+from app.utils.rate_limiter import (
+    APIRateLimiter,
+    RateLimitError,
+    SpotifyAuthError,
+    SpotifyServerError,
+    ThrottleError,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -89,19 +95,46 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(SpotifyAuthError)
+async def spotify_auth_exception_handler(request, exc: SpotifyAuthError):
+    """Token scaduto/corrotto → 401, il frontend redirige al login."""
+    logger.warning("SpotifyAuthError: %s", exc)
+    return JSONResponse(
+        status_code=401,
+        content={"detail": "Sessione scaduta"},
+    )
+
+
 @app.exception_handler(RateLimitError)
 async def rate_limit_exception_handler(request, exc: RateLimitError):
     """Propaga i 429 di Spotify al frontend con il corretto Retry-After."""
-    retry_after = int(exc.retry_after) if exc.retry_after else 60
+    retry_after = round(exc.retry_after or 5, 1)
+    is_throttle = isinstance(exc, ThrottleError)
     logger.warning(
-        "Spotify rate limit propagato al frontend: Retry-After=%ds", retry_after
+        "Rate limit propagato al frontend: Retry-After=%.0fs, throttled=%s",
+        retry_after,
+        is_throttle,
     )
     return JSONResponse(
         status_code=429,
         content={
-            "detail": f"Spotify rate limit attivo. Riprova tra {retry_after} secondi."
+            "detail": {
+                "message": f"Troppe richieste. Riprova tra {int(retry_after)} secondi.",
+                "throttled": is_throttle,
+                "retry_after": retry_after,
+            }
         },
-        headers={"Retry-After": str(retry_after)},
+        headers={"Retry-After": str(int(retry_after))},
+    )
+
+
+@app.exception_handler(SpotifyServerError)
+async def spotify_server_exception_handler(request, exc: SpotifyServerError):
+    """Errore transitorio lato Spotify → 502."""
+    logger.warning("SpotifyServerError: %s", exc)
+    return JSONResponse(
+        status_code=502,
+        content={"detail": "Spotify non disponibile al momento"},
     )
 
 

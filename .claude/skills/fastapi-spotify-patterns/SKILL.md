@@ -9,7 +9,13 @@ Patterns codificati in questo progetto. Leggere PRIMA di scrivere qualsiasi codi
 
 ## Router Pattern
 
-Ogni router segue questa struttura esatta — **tutti e 4 gli except sono obbligatori**:
+**Gestione errori centralizzata** — `main.py` registra 3 global exception handler:
+
+- `SpotifyAuthError` → 401 `"Sessione scaduta"`
+- `RateLimitError` (incluso `ThrottleError`) → 429 con `Retry-After` + `throttled` flag
+- `SpotifyServerError` → 502 `"Spotify non disponibile"`
+
+I router NON devono gestire questi errori individualmente. Basta ri-lanciarli:
 
 ```python
 from app.services.spotify_client import SpotifyClient
@@ -24,43 +30,31 @@ async def handler(
     client = SpotifyClient(db, user_id)
     try:
         result = await some_service(client)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
-    except RateLimitError as e:
-        raise HTTPException(
-            status_code=429,
-            detail="Troppe richieste, riprova tra poco",
-            headers={"Retry-After": str(int(e.retry_after))},
-        )
-    except SpotifyServerError:
-        raise HTTPException(status_code=502, detail="Spotify non disponibile")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
-        logger.exception("Errore descrittivo: %s", exc)
+        logger.error("Errore descrittivo: %s", exc)
         raise HTTPException(status_code=500, detail="Messaggio in italiano")
     finally:
         await client.close()
     return result
 ```
 
-### Invariante critica: SpotifyAuthError PRIMA di Exception
+### Invariante critica: mai inghiottire SpotifyAuthError/RateLimitError
 
 ```python
-# CORRETTO — ordine: SpotifyAuthError → RateLimitError → SpotifyServerError → Exception
-except SpotifyAuthError:
-    raise HTTPException(status_code=401, detail="Sessione scaduta")
-except RateLimitError as e:
-    ...
-except SpotifyServerError:
-    ...
+# CORRETTO — ri-lancia, il global handler converte in 401/429/502
+except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+    raise
 except Exception as exc:
     ...
 
-# SBAGLIATO — inghiotte il 401, l'utente vede dati stale
+# SBAGLIATO — inghiotte il 401/429, l'utente vede 500 o dati stale
 except Exception as exc:
     ...
 ```
 
-Se `SpotifyAuthError` viene catturato da un generico `except Exception`, il frontend non riceve il 401 e non redirige al login.
+Se `SpotifyAuthError` viene catturato da un generico `except Exception`, il frontend non riceve il 401 e non redirige al login. Se `RateLimitError` viene inghiottito, il frontend non vede il `Retry-After`.
 
 ## SpotifyClient Lifecycle
 
@@ -131,17 +125,14 @@ except Exception as snap_exc:
 
 Prima di ogni `asyncio.gather` con N chiamate API, calcolare il worst-case budget. Se > 30 chiamate, ristrutturare.
 
-### Semaphore ≤ 2 per Spotify API
+### Global Semaphore = 3
 
 ```python
-sem = asyncio.Semaphore(2)  # dev mode burst protection
-
-async def fetch_with_sem(artist_id):
-    async with sem:
-        return await retry_with_backoff(client.get_artist, artist_id)
+# In SpotifyClient (class-level):
+_global_sem = asyncio.Semaphore(3)
 ```
 
-**Mai Semaphore > 2** per chiamate Spotify. 5 richieste simultanee nello stesso istante sono un burst — dev mode lo punisce con `retry_after` enormi.
+Il semaphore globale in `SpotifyClient._request()` limita a 3 richieste Spotify concorrenti. Non creare semaphore locali nei servizi — il globale gestisce tutto. Non aumentare oltre 3: dev mode punisce i burst con `retry_after` enormi (75000s+).
 
 ### Dedup e cap artisti
 

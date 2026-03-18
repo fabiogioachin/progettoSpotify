@@ -155,6 +155,14 @@ async def spotify_callback(
                     attempt + 1,
                     retry_after,
                 )
+                if retry_after > 30:
+                    logger.error(
+                        "Retry-After=%ds exceeds 30s cap — aborting auth",
+                        retry_after,
+                    )
+                    return RedirectResponse(
+                        url=f"{settings.frontend_url}?error=rate_limited"
+                    )
                 await asyncio.sleep(retry_after)
                 continue
             break

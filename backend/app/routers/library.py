@@ -11,7 +11,12 @@ from app.dependencies import require_auth
 from app.schemas import TopTracksResponse, RecentTracksResponse, SavedTracksResponse
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.spotify_client import SpotifyClient
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import (
+    RateLimitError,
+    SpotifyAuthError,
+    SpotifyServerError,
+    retry_with_backoff,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +75,8 @@ async def get_top_tracks(
             if feat:
                 track["features"] = feat
 
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore nel caricamento top tracks: %s", exc)
         raise HTTPException(status_code=500, detail="Errore nel caricamento dei brani")
@@ -97,8 +102,8 @@ async def get_recent_tracks(
 
     try:
         data = await retry_with_backoff(client.get_recently_played, limit=limit)
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore nel caricamento brani recenti: %s", exc)
         raise HTTPException(
@@ -145,8 +150,8 @@ async def get_saved_tracks(
         data = await retry_with_backoff(
             client.get_saved_tracks, limit=limit, offset=offset
         )
-    except SpotifyAuthError:
-        raise HTTPException(status_code=401, detail="Sessione scaduta")
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise  # Handled by global exception handlers in main.py
     except Exception as exc:
         logger.error("Errore nel caricamento brani salvati: %s", exc)
         raise HTTPException(
