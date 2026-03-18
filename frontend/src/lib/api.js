@@ -8,9 +8,20 @@ const api = axios.create({
   },
 })
 
-// Interceptor: retry su 429 (solo se Retry-After <= 30s), redirect a login su 401
+// Interceptor: emetti usage events + retry su 429 + redirect a login su 401
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const usage = response.headers['x-ratelimit-usage']
+    if (usage) {
+      const [current, max] = usage.split('/').map(Number)
+      if (!isNaN(current) && !isNaN(max)) {
+        window.dispatchEvent(new CustomEvent('api:usage', {
+          detail: { current, max, pct: Math.round(current / max * 100) }
+        }))
+      }
+    }
+    return response
+  },
   async (error) => {
     const config = error.config
     const status = error.response?.status

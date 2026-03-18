@@ -13,7 +13,7 @@ function ArtistGroup({ title, artists, highlight }) {
         {artists.slice(0, 3).map((artist, i) => (
           <StaggerItem key={artist.name || i} className="flex flex-col items-center">
             <img
-              src={artist.image_url || artist.images?.[0]?.url}
+              src={artist.image || artist.image_url || artist.images?.[0]?.url}
               alt={artist.name}
               className={`w-20 h-20 rounded-full object-cover ${
                 highlight ? 'ring-2 ring-accent' : ''

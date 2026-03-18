@@ -1,5 +1,104 @@
 # Refactor Log
 
+## 2026-03-18 — Health report fixes (DEAD + UI)
+
+Date: 2026-03-18
+Description: Fix health report findings — dead code removal, Wrapped slide field mismatches, empty state guards, StreakDisplay wiring, GenreDNA values
+Triggered by: `/health` report findings
+Health findings: DEAD-1, DEAD-2, DEP-1, DEP-2, UI-1, UI-2, UI-3, UI-4, UI-8, UI-9, UI-10, UI-11, UI-12
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Slices planned | 8 |
+| Slices completed | 8 |
+| Slices reverted | 0 |
+| Files changed | 12 |
+| Lines added | ~30 |
+| Lines removed | ~20 |
+| Net line change | +10 |
+| Verification | `pytest -q` (159 passed) + `npm run build` + `ruff check` |
+| Final status | all passing |
+
+### Slices
+
+| # | Description | Files | Status |
+|---|-------------|-------|--------|
+| 1 | Delete orphan ReceiptCard.jsx (DEAD-1) | ReceiptCard.jsx | deleted |
+| 2 | Remove unused TIME_RANGES/TIME_RANGE_LABELS (DEAD-2) | constants.py | done |
+| 3 | Remove redundant soundfile pin (DEP-1) | requirements-dev.txt | done |
+| 4 | Wrapped slide field mismatches (UI-2, UI-3, UI-4) | SlideArtistEvolution, SlideArtistNetwork, SlideTopTracks | done |
+| 5 | SlidePeakHours: derive weekend_pct + early return (UI-8, UI-11) | SlidePeakHours.jsx | done |
+| 6 | SlideListeningHabits: zero-data guard (UI-10) | SlideListeningHabits.jsx | done |
+| 7 | SlideOutro: useCORS + try/catch (UI-12) | SlideOutro.jsx | done |
+| 8 | GenreDNA: rank-based decay instead of fake linear (UI-9) | GenreDNA.jsx | done |
+| 9 | StreakDisplay: backend active_last_7 + frontend wiring (UI-1) | temporal_patterns.py, TemporalPage.jsx | done |
+
+### Changes by File
+
+| File | What Changed |
+|------|-------------|
+| `frontend/src/components/share/ReceiptCard.jsx` | Deleted (orphan, 0 importers) |
+| `backend/app/constants.py` | Removed unused `TIME_RANGES`, `TIME_RANGE_LABELS` |
+| `backend/requirements-dev.txt` | Removed redundant `soundfile==0.12.1` (transitive of librosa) |
+| `frontend/src/components/wrapped/slides/SlideArtistEvolution.jsx` | Image src: `image \|\| image_url \|\| images[0].url` |
+| `frontend/src/components/wrapped/slides/SlideArtistNetwork.jsx` | `cluster_names`: Object.values() for object→array conversion |
+| `frontend/src/components/wrapped/slides/SlideTopTracks.jsx` | Image src: `album_image \|\| album.images[0].url \|\| image_url` |
+| `frontend/src/components/wrapped/slides/SlidePeakHours.jsx` | `weekendPct = 100 - weekdayPct`, early return on empty data |
+| `frontend/src/components/wrapped/slides/SlideListeningHabits.jsx` | Return null when all values are zero |
+| `frontend/src/components/wrapped/slides/SlideOutro.jsx` | `useCORS: true` + try/catch on handleDownload |
+| `frontend/src/components/profile/GenreDNA.jsx` | Rank-based decay (100→50) instead of `100 - i*12` |
+| `backend/app/services/temporal_patterns.py` | Added `active_last_7` boolean array to streak response |
+| `frontend/src/pages/TemporalPage.jsx` | Pass `activeDays={streak.active_last_7}` to StreakDisplay |
+
+### Notes
+
+- UI-5, UI-6, UI-7 (`bg-spotify`/`text-spotify`): **false positives** — `spotify` color is defined in `tailwind.config.js:18` as `#1DB954`. Classes work correctly.
+- DEP-2 (.env.example): blocked by hook `protect-critical-files.sh` — needs manual edit to add `RAPIDAPI_KEY` comment
+- DEAD-3 (library routes), DEAD-4 (AudioFeatures columns), DEAD-6 (taste_map audio_features), DEP-3 (numpy cap): deferred — product/migration decisions, not pure refactor
+
+---
+
+## 2026-03-18 — DRY cleanup for bug fix changes
+
+Date: 2026-03-18
+Description: Extract shared constant, deduplicate test helpers
+Triggered by: `/refactor` after bug fix implementation (popularity enrichment, genre cap, track count fallback)
+Health findings: none
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Slices planned | 2 |
+| Slices completed | 2 |
+| Slices reverted | 0 |
+| Files changed | 4 |
+| Lines added | 6 |
+| Lines removed | 24 |
+| Net line change | -18 |
+| Verification | `python -m pytest -q` (159 passed) + `ruff check` + `ruff format` |
+| Final status | all passing |
+
+### Slices
+
+| # | Description | Files | Status |
+|---|-------------|-------|--------|
+| 1 | Extract `ARTIST_GENRE_CAP = 50` into `constants.py`, replace magic number in 3 locations | constants.py, playlists.py, audio_analyzer.py, test_playlists.py |  |
+| 2 | Deduplicate 6x `_fake_retry` into shared `_passthrough_retry` helper | test_playlists.py |  |
+
+### Changes by File
+
+| File | What Changed |
+|------|-------------|
+| `backend/app/constants.py` | Added `ARTIST_GENRE_CAP = 50` |
+| `backend/app/routers/playlists.py` | Import `ARTIST_GENRE_CAP`, replaced `[:50]` with `[:ARTIST_GENRE_CAP]` |
+| `backend/app/services/audio_analyzer.py` | Import `ARTIST_GENRE_CAP`, replaced `[:50]` in 2 locations, fixed stale comment `cap=20` → `cap=50` |
+| `backend/tests/test_playlists.py` | Import `ARTIST_GENRE_CAP`, added shared `_passthrough_retry`, removed 6 inline `_fake_retry` defs, tests reference constant instead of hardcoded 50 |
+
+---
+
 ## 2026-03-15 — Hardcoded Colors + ARIA Accessibility
 
 Date: 2026-03-15

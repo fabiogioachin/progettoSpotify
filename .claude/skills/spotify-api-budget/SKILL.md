@@ -76,10 +76,10 @@ Count every Spotify API call. Each endpoint must stay under budget.
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
 | `get_top_tracks(short/medium/long)` | 3 | 5 min | 0-3 |
-| `get_artist` × 20 (deduped, cross-user 1h) | 20 | **1 hour** | **0-20** |
-| **Total worst-case** | **23** | | **0-23** |
+| `get_artist` × 50 (deduped, cross-user 1h) | 50 | **1 hour** | **0-50** |
+| **Total worst-case** | **53** | | **0-53** |
 
-Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, deduplicates, caps at 20 globally, and fetches genres in a single pass. Previous: 3 × 20 = 60 artist calls. Now: max 20. Cross-user artist cache makes subsequent users' calls nearly free.
+Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, deduplicates, caps at `ARTIST_GENRE_CAP` (50) globally, and fetches genres in a single pass. Cross-user artist cache makes subsequent users' calls nearly free.
 
 ### Discovery (`GET /api/analytics/discovery`)
 
@@ -120,10 +120,11 @@ Note: `get_top_tracks(limit=50)` now used everywhere (was `limit=10`). Items sli
 |------|-------|-----------|-----------|
 | `get(/playlists/{pid})` × N | N (2-4) | none | 2-4 |
 | `get_playlist_items(pid)` × pages | ~4-40 | **5 min** | 0-40 |
-| `get_artist` × 20 (global dedup) | 20 | **1 hour** | 0-20 |
-| **Total worst-case (4 playlists)** | **~64** | | **~4-64** |
+| `get_track(tid)` × 100 (popularity enrichment) | ≤100 | **5 min** | 0-100 |
+| `get_artist` × 50 (global dedup) | 50 | **1 hour** | 0-50 |
+| **Total worst-case (4 playlists)** | **~194** | | **~4-194** |
 
-Note: `get_playlist_items()` is now cached with 5min TTL. On page refresh, playlist items are served from cache.
+Note: `get_playlist_items()` cached 5min TTL. `get_track()` enriches tracks missing popularity (dev mode), capped at 100 cross-playlist. `get_artist` cap raised to `ARTIST_GENRE_CAP` (50) for better genre coverage.
 
 ### Export (`GET /api/export/claude-prompt`)
 
@@ -234,4 +235,4 @@ Animated countdown on 429 with `throttled: true`. Auto-retries after countdown.
 | Background job continues after 429 | Cascading rate limits | `break` on RateLimitError |
 | `get_artist` with `user_id` in cache key | Same artist fetched per-user | Use `_artist_cache_1h` with `("artist", id)` key |
 | `compute_profile` + `compute_trends` for same range | Duplicate work | Extract profile from trends result |
-| `_extract_genres` called per-period in loops | 3 × 20 = 60 artist calls | Collect all IDs, dedup, fetch once, cap=20 |
+| `_extract_genres` called per-period in loops | 3 × 50 = 150 artist calls | Collect all IDs, dedup, fetch once, cap=ARTIST_GENRE_CAP |

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants import ARTIST_GENRE_CAP
 from app.database import get_db
 from app.dependencies import require_auth
 from app.models.user import User
@@ -47,6 +48,50 @@ async def get_playlists(
         data = await retry_with_backoff(
             client.get_playlists, limit=limit, offset=offset
         )
+
+        playlists = []
+        for item in data.get("items", []):
+            if not item:
+                continue
+            playlists.append(
+                {
+                    "id": item["id"],
+                    "name": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "image": (
+                        item.get("images", [{}])[0].get("url")
+                        if item.get("images")
+                        else None
+                    ),
+                    "track_count": item.get("tracks", {}).get("total", 0),
+                    "owner": item.get("owner", {}).get("display_name", ""),
+                    "is_owner": item.get("owner", {}).get("id") == user_spotify_id,
+                }
+            )
+
+        # Fallback: track_count può essere 0 se /me/playlists non restituisce
+        # tracks.total in dev mode. Fetch metadata individuale per quelle playlist.
+        zero_count = [p for p in playlists if p["track_count"] == 0]
+        if zero_count:
+            to_fix = zero_count[:20]  # cap per limitare chiamate API
+
+            async def _fetch_playlist_meta(p: dict) -> None:
+                try:
+                    meta = await retry_with_backoff(client.get, f"/playlists/{p['id']}")
+                    total = meta.get("tracks", {}).get("total")
+                    if total is not None:
+                        p["track_count"] = total
+                except SpotifyAuthError:
+                    raise
+                except Exception:
+                    pass  # non-critical, mantieni track_count=0
+
+            await gather_in_chunks(
+                [_fetch_playlist_meta(p) for p in to_fix],
+                chunk_size=5,
+            )
+
+        return {"playlists": playlists, "total": data.get("total", 0)}
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py
     except Exception as exc:
@@ -56,28 +101,6 @@ async def get_playlists(
         )
     finally:
         await client.close()
-
-    playlists = []
-    for item in data.get("items", []):
-        if not item:
-            continue
-        playlists.append(
-            {
-                "id": item["id"],
-                "name": item.get("name", ""),
-                "description": item.get("description", ""),
-                "image": (
-                    item.get("images", [{}])[0].get("url")
-                    if item.get("images")
-                    else None
-                ),
-                "track_count": item.get("tracks", {}).get("total", 0),
-                "owner": item.get("owner", {}).get("display_name", ""),
-                "is_owner": item.get("owner", {}).get("id") == user_spotify_id,
-            }
-        )
-
-    return {"playlists": playlists, "total": data.get("total", 0)}
 
 
 @router.get("/compare", response_model=PlaylistComparisonResponse)
@@ -152,6 +175,53 @@ async def compare_playlists(
                 "track_ids": track_ids,
             }
 
+        # --- Phase 1b: popularity enrichment ---
+        # /playlists/{id}/items non restituisce popularity in dev mode;
+        # fetch individuale per i track con popularity mancante o zero.
+        missing_pop_ids: set[str] = set()
+        for pdata in playlist_data_map.values():
+            for t in pdata["tracks"]:
+                if t.get("id") and not t.get("popularity"):
+                    missing_pop_ids.add(t["id"])
+
+        # Cap a 100 track cross-playlist per limitare le chiamate API
+        missing_pop_list = list(missing_pop_ids)[:100]
+
+        if missing_pop_list:
+
+            async def _fetch_track_pop(tid: str) -> tuple[str, int | None]:
+                try:
+                    track = await retry_with_backoff(client.get_track, tid)
+                    return tid, track.get("popularity")
+                except SpotifyAuthError:
+                    raise
+                except Exception:
+                    return tid, None
+
+            pop_results = await gather_in_chunks(
+                [_fetch_track_pop(tid) for tid in missing_pop_list],
+                chunk_size=5,
+            )
+            pop_map: dict[str, int] = {}
+            for r in pop_results:
+                if isinstance(r, SpotifyAuthError):
+                    raise r
+                if isinstance(r, tuple) and r[1] is not None:
+                    pop_map[r[0]] = r[1]
+
+            # Merge popularity nei track objects già in playlist_data_map
+            for pdata in playlist_data_map.values():
+                for t in pdata["tracks"]:
+                    tid = t.get("id")
+                    if tid and tid in pop_map:
+                        t["popularity"] = pop_map[tid]
+
+            logger.info(
+                "Popularity enrichment: %d/%d track arricchiti",
+                len(pop_map),
+                len(missing_pop_list),
+            )
+
         # --- Phase 2: collect all unique artist IDs across ALL playlists, fetch genres once ---
         global_artist_ids: set[str] = set()
         for pdata in playlist_data_map.values():
@@ -162,7 +232,7 @@ async def compare_playlists(
 
         # Fetch genres for unique artists (deduplicated, single pass)
         artist_genres_cache: dict[str, list[str]] = {}
-        artist_list = list(global_artist_ids)[:20]  # global cap across all playlists
+        artist_list = list(global_artist_ids)[:ARTIST_GENRE_CAP]
 
         async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:
             try:

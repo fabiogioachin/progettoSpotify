@@ -9,7 +9,9 @@ export default function SlidePeakHours({ data }) {
   const peakHours = temporal?.peak_hours?.slice(0, 3) || []
   const patterns = temporal?.patterns
   const weekdayPct = patterns?.weekday_pct ?? 50
-  const weekendPct = patterns?.weekend_pct ?? 50
+  const weekendPct = 100 - weekdayPct
+
+  if (!peakHours.length) return null
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[100dvh] px-6 py-16 relative">

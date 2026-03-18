@@ -92,6 +92,7 @@ export default function TemporalPage() {
               <StreakDisplay
                 streak={streak.max_streak || 0}
                 uniqueDays={streak.unique_days || 0}
+                activeDays={streak.active_last_7 || []}
               />
               <SessionStats
                 sessions={sessions}

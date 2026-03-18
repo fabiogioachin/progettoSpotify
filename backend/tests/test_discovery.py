@@ -1,6 +1,5 @@
 """Test per discovery.py — verifica integrazione sklearn (Isolation Forest + cosine similarity)."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

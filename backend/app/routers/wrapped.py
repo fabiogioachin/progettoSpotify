@@ -13,6 +13,7 @@ from app.services.audio_analyzer import compute_profile
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_evolution import compute_taste_evolution
 from app.services.temporal_patterns import compute_temporal_patterns
+from app.utils.json_utils import sanitize_nans
 from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
@@ -107,11 +108,13 @@ async def get_wrapped(
 
     available.append("outro")  # always shown
 
-    return {
-        "temporal": results.get("temporal"),
-        "evolution": results.get("evolution"),
-        "profile": results.get("profile"),
-        "top_tracks": top_tracks_items,
-        "network": results.get("network"),
-        "available_slides": available,
-    }
+    return sanitize_nans(
+        {
+            "temporal": results.get("temporal"),
+            "evolution": results.get("evolution"),
+            "profile": results.get("profile"),
+            "top_tracks": top_tracks_items,
+            "network": results.get("network"),
+            "available_slides": available,
+        }
+    )

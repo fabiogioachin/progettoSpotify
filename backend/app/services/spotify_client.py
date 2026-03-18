@@ -307,6 +307,16 @@ class SpotifyClient:
         _cache_5m[key] = result
         return result
 
+    async def get_track(self, track_id: str) -> dict:
+        _validate_spotify_id(track_id)
+        key = _cache_key(self.user_id, "track", track_id)
+        cached = _cache_5m.get(key)
+        if cached is not None:
+            return cached
+        result = await self.get(f"/tracks/{track_id}")
+        _cache_5m[key] = result
+        return result
+
     async def get_artist(self, artist_id: str) -> dict:
         _validate_spotify_id(artist_id)
         key = (

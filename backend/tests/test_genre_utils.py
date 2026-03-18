@@ -1,6 +1,5 @@
 """Test per genre_utils.py — unit test puro, nessuna dipendenza esterna."""
 
-import pytest
 
 from app.services.genre_utils import (
     build_genre_vocabulary,

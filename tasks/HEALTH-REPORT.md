@@ -1,6 +1,6 @@
 # Project Health Report
 
-Generated: 2026-03-14 (post scikit-learn + NetworkX integration)
+Generated: 2026-03-18 (post bug-fix batch)
 Project: Spotify Listening Intelligence
 Stack: FastAPI (Python 3.12) + React 18 + Vite + Tailwind + SQLite + NetworkX + scikit-learn
 Mode: scan-only
@@ -9,120 +9,91 @@ Mode: scan-only
 
 | Metric | Count |
 |--------|-------|
-| Total findings | 10 |
-| Auto-fixed | 0 |
-| Manual action needed | 10 |
-| Dead code | 1 file (ReceiptCard.jsx, ~33 lines) |
-| Dependencies cleaned | 0 |
-| UI issues found | 8 |
-| Circular imports | 0 |
-| Bug fix | not requested |
+| Total findings | 19 |
+| Auto-fixed | 0 (--fix not passed) |
+| Manual action needed | 19 |
+| Dead code found | 2 files, ~30 lines |
+| Dependencies to clean | 1 package |
+| UI issues found | 12 |
 
-## Scan Results
+## Manual Action Required
 
-### Dead Code
+### CRITICAL / P0
 
-| # | ID | Severity | File | Issue | Evidence | Safe to Remove |
-|---|-----|----------|------|-------|----------|----------------|
-| 1 | DEAD-1 | P2 | `frontend/src/components/share/ReceiptCard.jsx` | Orphan component — 0 importers across all source files | grep "ReceiptCard" returns only self-reference | YES |
-
-No other orphan files found. All backend services have at least 1 importer. All frontend pages are routed in App.jsx and linked in Sidebar.jsx (routes match 1:1).
-
-### Dependencies
-
-All dependencies are actively used:
-
-**Backend** (14 packages — all verified):
-- `aiosqlite`: no direct import, but used as SQLAlchemy async driver via `sqlite+aiosqlite://` in config.py
-- `networkx`: imported in artist_network.py (NEW)
-- `scikit-learn`: imported as `sklearn` in taste_clustering.py (NEW)
-- All other packages: 1-26 direct imports each
-
-**Frontend** (8 packages — all verified):
-- All packages have 1-27 importers across source files
-- No unused dependencies, no missing packages
-- devDependencies (eslint, vite, tailwindcss, etc.) are config/tooling only — correct placement
-
-**Circular imports**: None detected. Dependency graph is a clean DAG:
-```
-genre_utils ← taste_clustering ← { artist_network, discovery, taste_map }
-spotify_client ← { artist_network, discovery, taste_map, ... }
-```
-
-### UI Issues (carried forward from pre-integration scan, still valid)
+| # | ID | File | Issue | Suggested Fix | Effort |
+|---|-----|------|-------|--------------|--------|
+| 1 | DEAD-1 | `frontend/src/components/share/ReceiptCard.jsx` | Orphan component — exported but never imported anywhere | Delete file | 1 min |
+| 2 | DEAD-2 | `backend/app/constants.py:13-19` | `TIME_RANGES` and `TIME_RANGE_LABELS` exported but never imported | Remove lines 13–19 | 1 min |
 
 ### HIGH / P1
 
 | # | ID | File | Issue | Suggested Fix | Effort |
 |---|-----|------|-------|--------------|--------|
-| 1 | UI-5 | `share/ShareCardRenderer.jsx` | Modal non chiudibile con Escape (WCAG 2.1 SC 2.1.1) | Aggiungere `useEffect` con `keydown` listener per Escape | 5 min |
+| 3 | UI-1 | `frontend/src/pages/TemporalPage.jsx:93` | StreakDisplay `activeDays` prop never passed — 7-day calendar always empty | Derive active days from streak data and pass as prop | 15 min |
+| 4 | UI-2 | `frontend/src/components/wrapped/slides/SlideArtistEvolution.jsx:17` | Artist images broken — reads `image_url` but backend returns `image` | Change to `artist.image \|\| artist.image_url \|\| artist.images?.[0]?.url` | 2 min |
+| 5 | UI-3 | `frontend/src/components/wrapped/slides/SlideArtistNetwork.jsx:9` | Cluster pills never render — `.map()` on object instead of array | Use `Object.values(network.cluster_names)` | 2 min |
+| 6 | UI-4 | `frontend/src/components/wrapped/slides/SlideTopTracks.jsx:31` | All track images broken — reads `album.images` but backend returns `album_image` | Use `track.album_image \|\| track.album?.images?.[0]?.url` | 2 min |
+| 7 | DEAD-3 | `backend/app/routers/library.py:93-187` | `GET /api/library/recent` and `GET /api/library/saved` — no frontend consumer | Keep if planned for future use, or remove | 5 min |
+| 8 | DEAD-4 | `backend/app/models/track.py:21-24` | `loudness`, `key`, `mode`, `time_signature` columns never read/written by app code | Remove columns + migration (legacy from deprecated API) | 10 min |
+| 9 | DEP-1 | `backend/requirements-dev.txt` | `soundfile==0.12.1` — already transitive dep of librosa, redundant pin | Remove from requirements-dev.txt | 1 min |
+| 10 | DEP-2 | `.env.example` | `RAPIDAPI_KEY` not documented — devs won't know it exists | Add commented entry to .env.example | 1 min |
 
 ### MEDIUM / P2
 
 | # | ID | File | Issue | Suggested Fix | Effort |
 |---|-----|------|-------|--------------|--------|
-| 2 | DEAD-1 | `share/ReceiptCard.jsx` | Componente orfano, 0 importers | Eliminare | 1 min |
-| 3 | UI-1/2 | `profile/ObscurityGauge.jsx` | Colori hardcoded (#10b981, #6366f1, #a855f7, #282828) | Importare `GRID_COLOR` da chartTheme + usare CSS vars | 10 min |
-| 4 | UI-3/4 | `profile/DecadeChart.jsx` | Colori hardcoded (#b3b3b3, rgba accent) | Usare `var(--text-secondary)` e `var(--accent)` | 10 min |
-| 5 | UI-6 | `share/ShareCardRenderer.jsx` | Modal senza `role="dialog"` e `aria-modal="true"` | Aggiungere attributi ARIA al motion.div esterno | 5 min |
+| 11 | UI-5 | `frontend/src/pages/TasteEvolutionPage.jsx:177` | Selected year button invisible — `bg-spotify` class undefined | Replace with `bg-accent` | 1 min |
+| 12 | UI-6 | `frontend/src/components/charts/SessionStats.jsx:119` | Weekend bar invisible — `bg-spotify` class undefined | Replace with `bg-emerald-400` or `bg-accent` | 1 min |
+| 13 | UI-7 | `frontend/src/pages/TasteEvolutionPage.jsx:147` | Calendar icon colorless — `text-spotify` class undefined | Replace with `text-accent` | 1 min |
+| 14 | UI-8 | `frontend/src/components/wrapped/slides/SlidePeakHours.jsx:10-11` | Weekend % reads non-existent `weekend_pct` — bars overflow | Derive from `100 - weekday_pct` | 2 min |
+| 15 | UI-9 | `frontend/src/components/profile/GenreDNA.jsx:16-19` | Radar chart uses synthetic values (100 - i*12) instead of real genre frequency | Wire actual genre count data from backend | 15 min |
+| 16 | UI-10 | `frontend/src/components/wrapped/slides/SlideListeningHabits.jsx:17` | All stats show "0" with sparse history — looks broken | Return null when all values are zero | 2 min |
+| 17 | DEAD-6 | `backend/app/services/taste_map.py:48` | `audio_features` hardcoded to `None` — audio branch unreachable | Known gap (in todo.md) — implement or document | 30 min |
+| 18 | DEP-3 | `backend/requirements.txt:11` | `numpy<2.0` upper cap may be over-restrictive now | Relax to `numpy>=1.24` after compatibility check | 5 min |
 
 ### LOW / P3
 
 | # | ID | File | Issue | Suggested Fix | Effort |
 |---|-----|------|-------|--------------|--------|
-| 6 | UI-7/8 | `share/ShareCardRenderer.jsx` | Icone Download/Share2 senza `aria-hidden="true"` | Aggiungere `aria-hidden="true"` alle icone | 2 min |
-| 7 | UI-9/10 | `profile/DecadeChart.jsx`, `profile/GenreDNA.jsx` | Chart container senza `role="img"` e `aria-label` | Aggiungere ruoli ARIA ai wrapper div | 5 min |
-| 8 | UI-11 | `profile/ObscurityGauge.jsx` | Gauge a 0 con score null (mostra "Molto mainstream") | Aggiungere `if (score == null) return null` | 2 min |
-| 9 | UI-12 | `pages/ProfilePage.jsx` | Icona Share2 nel bottone senza `aria-hidden` | Aggiungere `aria-hidden="true"` | 1 min |
-
-### New Code Quality Notes (scikit-learn + NetworkX integration)
-
-| # | ID | Severity | File | Issue | Note |
-|---|-----|----------|------|-------|------|
-| 10 | NOTE-1 | P3 | `taste_map.py:48` | `# TODO: fetch from AudioFeatures table if available` | Audio features enrichment not yet wired — works fine on genre+popularity mode |
-
-## Integration Health
-
-The scikit-learn + NetworkX integration is clean:
-- **No circular imports** in the new service graph
-- **Pure-compute invariant respected**: genre_utils.py and taste_clustering.py never import SpotifyClient
-- **All new exports used**: every function in genre_utils, taste_clustering, taste_map has at least 1 consumer
-- **No new deprecated API calls**: NetworkX/sklearn operate on local data only
-- **All 113 backend tests pass** (89 new + 24 existing)
-- **Frontend builds clean** (0 errors, 280 warnings — all pre-existing unused imports in unrelated files)
+| 19 | UI-11 | `frontend/src/components/wrapped/slides/SlidePeakHours.jsx:75` | Empty slide body when no peak-hour data | Return null to skip slide | 1 min |
+| 20 | UI-12 | `frontend/src/components/wrapped/slides/SlideOutro.jsx:25-37` | Download fails silently on cross-origin images (missing `useCORS: true`) | Add useCORS + try/catch | 5 min |
 
 ## Quick-Fix Commands
 
 ```bash
-# Delete orphan file (DEAD-1)
+# Remove orphan file
 rm frontend/src/components/share/ReceiptCard.jsx
+
+# Remove redundant dev dependency
+cd backend && pip uninstall soundfile  # reinstalled by librosa anyway
+
+# Replace all bg-spotify / text-spotify with accent (UI-5, UI-6, UI-7)
+# In TasteEvolutionPage.jsx: bg-spotify → bg-accent, text-spotify → text-accent
+# In SessionStats.jsx: bg-spotify → bg-emerald-400
 ```
 
 ## Files Safe to Delete
 
-- `frontend/src/components/share/ReceiptCard.jsx` — 0 importers, no side effects, no dynamic imports
+- `frontend/src/components/share/ReceiptCard.jsx` — 0 importers, no side effects
 
 ## Suggested Follow-Up Commands
 
 | Condition | Suggested Command | Scope |
 |-----------|------------------|-------|
-| 8 UI findings in profile/share | `/refactor` | profile + share components |
-| Hardcoded colors pattern | `/ux-audit` | All profile components |
+| 4 HIGH UI issues in Wrapped slides | `/ux-audit` | Wrapped stories flow |
+| UI-9 GenreDNA fake data | `/refactor` | ProfilePage genre wiring |
+| DEAD-3, DEAD-4 backend cleanup | `/refactor` | library router + AudioFeatures model |
 
 ### Refactor Commands
 
 ```
-/refactor Unify hardcoded colors in ObscurityGauge.jsx and DecadeChart.jsx — import GRID_COLOR from chartTheme, replace hex values with CSS variables var(--accent), var(--text-secondary). Add Escape key handler + ARIA attributes to ShareCardRenderer.jsx. Add null guard to ObscurityGauge (UI-1/2, UI-3/4, UI-5, UI-6, UI-7/8, UI-11)
+/refactor fix Wrapped slide field mismatches — align image/album field names in SlideArtistEvolution, SlideArtistNetwork, SlideTopTracks, SlidePeakHours with backend response shapes (UI-2, UI-3, UI-4, UI-8)
 ```
 
-## Invalidated by /feature on 2026-03-15
-Feature: Tier 2 — Social Layer (amici, compatibilità, leaderboard, FriendsPage, route /friends)
-Re-run /health for an updated report.
+```
+/refactor replace undefined bg-spotify/text-spotify classes with bg-accent/text-accent across TasteEvolutionPage and SessionStats (UI-5, UI-6, UI-7)
+```
 
-## Invalidated by /feature on 2026-03-18
-Feature: Rate Limit Hardening Refactor — global error handlers, TOCTOU fix, burst control, budget caps
-Re-run /health for an updated report.
-
-## Invalidated by /feature on 2026-03-18
-Feature: API Call Optimization — cache key fragmentation, cross-user artist cache, genre dedup, playlist items cache, export dedup
-Re-run /health for an updated report.
+```
+/refactor wire real genre frequency data into GenreDNA radar chart — replace synthetic 100-i*12 values with actual percentages from profile endpoint (UI-9)
+```

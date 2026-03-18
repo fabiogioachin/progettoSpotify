@@ -16,6 +16,7 @@ from app.services.audio_analyzer import (
 )
 from app.services.discovery import discover
 from app.services.spotify_client import SpotifyClient
+from app.utils.json_utils import sanitize_nans
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ async def get_audio_features_profile(
     finally:
         await client.close()
 
-    return profile
+    return sanitize_nans(profile)
 
 
 @router.get("/trends")
@@ -75,7 +76,7 @@ async def get_trends(
     finally:
         await client.close()
 
-    return {"current": trends, "historical": historical}
+    return sanitize_nans({"current": trends, "historical": historical})
 
 
 @router.get("/discovery")
@@ -97,4 +98,4 @@ async def get_discovery(
     finally:
         await client.close()
 
-    return results
+    return sanitize_nans(results)

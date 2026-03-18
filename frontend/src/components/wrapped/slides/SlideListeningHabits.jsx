@@ -20,6 +20,8 @@ export default function SlideListeningHabits({ data }) {
       : 0,
   }
 
+  if (!values.total_plays && !values.max_streak && !values.sessions && !values.avg_duration) return null
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[100dvh] px-6 py-16 relative">
       <motion.h2

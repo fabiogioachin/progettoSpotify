@@ -6,7 +6,7 @@ Ogni volta che viene chiamato, salva i nuovi ascolti e analizza l'intero storico
 
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -130,6 +130,14 @@ async def compute_temporal_patterns(
     unique_days = sorted(set(p["datetime"].date() for p in plays))
     max_streak = _compute_streak(unique_days)
 
+    # Last 7 calendar days activity (Mon→Sun aligned with DAY_LABELS)
+    today = datetime.now().date()
+    unique_days_set = set(unique_days)
+    active_last_7 = []
+    for offset in range(6, -1, -1):  # 6 days ago → today
+        day = today - timedelta(days=offset)
+        active_last_7.append(day in unique_days_set)
+
     # Most played track
     track_counts = defaultdict(int)
     for play in plays:
@@ -163,6 +171,7 @@ async def compute_temporal_patterns(
         "streak": {
             "max_streak": max_streak,
             "unique_days": len(unique_days),
+            "active_last_7": active_last_7,
         },
         "most_played": {
             "track_name": most_played[0],
@@ -276,7 +285,7 @@ def _empty_result():
             "weekend_plays": 0,
             "weekday_pct": 0,
         },
-        "streak": {"max_streak": 0, "unique_days": 0},
+        "streak": {"max_streak": 0, "unique_days": 0, "active_last_7": [False] * 7},
         "most_played": {"track_name": "", "count": 0},
         "top_tracks": [],
         "total_plays": 0,

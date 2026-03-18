@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -9,6 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from app.config import settings
@@ -30,6 +32,7 @@ from app.routers import (
     wrapped,
 )
 from app.services.background_tasks import compute_daily_aggregates, sync_recent_plays
+from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import (
     APIRateLimiter,
     RateLimitError,
@@ -85,6 +88,23 @@ async def lifespan(app: FastAPI):
 
     scheduler.shutdown(wait=False)
     logger.info("APScheduler arrestato")
+
+
+class RateLimitHeaderMiddleware(BaseHTTPMiddleware):
+    """Inject X-RateLimit-Usage header into every /api/ response."""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            now = time.monotonic()
+            current = sum(
+                1
+                for t in SpotifyClient._call_timestamps
+                if t > now - SpotifyClient._WINDOW_SIZE
+            )
+            max_calls = SpotifyClient._MAX_CALLS_PER_WINDOW
+            response.headers["X-RateLimit-Usage"] = f"{current}/{max_calls}"
+        return response
 
 
 app = FastAPI(
@@ -154,7 +174,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
+    expose_headers=["X-RateLimit-Usage"],
 )
+
+# Rate limit usage header (runs inside CORS — added after CORSMiddleware)
+app.add_middleware(RateLimitHeaderMiddleware)
 
 # Routers
 app.include_router(auth.router)
@@ -191,3 +215,23 @@ async def health():
     return JSONResponse(
         content={"status": status, "checks": checks}, status_code=status_code
     )
+
+
+@app.get("/api/rate-limit-status")
+async def rate_limit_status():
+    """Stato corrente del budget API Spotify (sliding window)."""
+    now = time.monotonic()
+    current = sum(
+        1
+        for t in SpotifyClient._call_timestamps
+        if t > now - SpotifyClient._WINDOW_SIZE
+    )
+    max_calls = SpotifyClient._MAX_CALLS_PER_WINDOW
+    cooldown_remaining = max(0, SpotifyClient._cooldown_until - now)
+    return {
+        "calls_in_window": current,
+        "max_calls": max_calls,
+        "window_seconds": SpotifyClient._WINDOW_SIZE,
+        "usage_pct": round(current / max_calls * 100, 1) if max_calls else 0,
+        "cooldown_remaining": round(cooldown_remaining, 1),
+    }

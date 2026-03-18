@@ -1,6 +1,6 @@
 """Test per artist_network.py — unit test con mock di SpotifyClient."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

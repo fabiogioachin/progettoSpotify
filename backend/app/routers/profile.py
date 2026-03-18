@@ -1,6 +1,5 @@
 """Router per il profilo utente con metriche aggregate."""
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,6 +13,7 @@ from app.services.personality import compute_archetype
 from app.services.profile_metrics import compute_profile_metrics, get_recent_daily_stats
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_map import compute_taste_map
+from app.utils.json_utils import sanitize_nans
 from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
@@ -44,13 +44,19 @@ async def get_profile(
     """Profilo utente con metriche aggregate, personalità e statistiche giornaliere."""
     client = SpotifyClient(db, user_id)
     try:
-        results = dict(
-            await asyncio.gather(
-                _safe_fetch("metrics", compute_profile_metrics(db, client, user_id)),
-                _safe_fetch("user", retry_with_backoff(client.get_me)),
-                _safe_fetch("daily", get_recent_daily_stats(db, user_id, days=30)),
-                _safe_fetch("taste_map", compute_taste_map(db, client, user_id)),
-            )
+        # SQLAlchemy async sessions do NOT support concurrent operations.
+        # compute_profile_metrics and compute_taste_map both use db for reads,
+        # so we cannot run them in the same asyncio.gather. Strategy:
+        # 1. Fetch user profile (Spotify-only, no direct db reads) concurrently
+        #    with metrics (heaviest, does Spotify + db reads sequentially)
+        # 2. Then taste_map (Spotify + pure compute) — sequential after metrics
+        # 3. Then daily stats (db-only read) — sequential after taste_map
+        _, metrics_result = await _safe_fetch(
+            "metrics", compute_profile_metrics(db, client, user_id)
+        )
+        _, user_result = await _safe_fetch("user", retry_with_backoff(client.get_me))
+        _, taste_map_result = await _safe_fetch(
+            "taste_map", compute_taste_map(db, client, user_id)
         )
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py
@@ -62,9 +68,15 @@ async def get_profile(
     finally:
         await client.close()
 
-    metrics = results.get("metrics")
-    user_data = results.get("user")
-    daily_stats = results.get("daily") or []
+    # Daily stats: sequential DB read to avoid concurrent session use
+    try:
+        daily_stats = await get_recent_daily_stats(db, user_id, days=30) or []
+    except Exception as exc:
+        logger.warning("Profile daily stats failed: %s", exc)
+        daily_stats = []
+
+    metrics = metrics_result
+    user_data = user_result
 
     # Personality archetype
     personality = compute_archetype(metrics) if metrics else None
@@ -86,13 +98,15 @@ async def get_profile(
             "country": user_data.get("country", ""),
         }
 
-    taste_map = results.get("taste_map")
+    taste_map = taste_map_result
 
-    return {
-        "user": user_info,
-        "metrics": metrics,
-        "personality": personality,
-        "daily_stats": daily_stats,
-        "has_metrics": existing_metrics is not None or metrics is not None,
-        "taste_map": taste_map,
-    }
+    return sanitize_nans(
+        {
+            "user": user_info,
+            "metrics": metrics,
+            "personality": personality,
+            "daily_stats": daily_stats,
+            "has_metrics": existing_metrics is not None or metrics is not None,
+            "taste_map": taste_map,
+        }
+    )

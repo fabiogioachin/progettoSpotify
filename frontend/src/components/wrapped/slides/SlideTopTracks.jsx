@@ -28,7 +28,7 @@ export default function SlideTopTracks({ data }) {
           transition={{ duration: 0.5, delay: 0.2 }}
         >
           <img
-            src={top.album?.images?.[0]?.url || top.image_url}
+            src={top.album_image || top.album?.images?.[0]?.url || top.image_url}
             alt={top.name}
             className="w-40 h-40 rounded-lg object-cover shadow-lg mb-4"
           />
@@ -50,7 +50,7 @@ export default function SlideTopTracks({ data }) {
                 {i + 2}
               </span>
               <img
-                src={track.album?.images?.[0]?.url || track.image_url}
+                src={track.album_image || track.album?.images?.[0]?.url || track.image_url}
                 alt={track.name}
                 className="w-12 h-12 rounded object-cover flex-shrink-0"
               />

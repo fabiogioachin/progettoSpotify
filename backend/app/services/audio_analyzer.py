@@ -7,7 +7,7 @@ from collections import Counter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import FEATURE_KEYS
+from app.constants import ARTIST_GENRE_CAP, FEATURE_KEYS
 from app.models.listening_history import ListeningSnapshot
 from app.models.track import AudioFeatures
 from app.services.spotify_client import SpotifyClient
@@ -141,9 +141,9 @@ async def compute_trends(
                 if a.get("id"):
                     all_artist_ids.add(a["id"])
 
-    # Step 3: Fetch genres ONCE for unique artists (cap=20)
+    # Step 3: Fetch genres ONCE for unique artists (cap=50)
     artist_genres_map: dict[str, list[str]] = {}
-    capped = list(all_artist_ids)[:20]
+    capped = list(all_artist_ids)[:ARTIST_GENRE_CAP]
 
     async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:
         try:
@@ -275,9 +275,7 @@ async def _extract_genres(
 
     # Fetch artists individually (batch GET /artists removed in dev mode Feb 2026)
     all_genres: list[str] = []
-    artist_list = list(artist_ids)[
-        :20
-    ]  # cap to limit API calls (reduced for dev mode rate limits)
+    artist_list = list(artist_ids)[:ARTIST_GENRE_CAP]
 
     async def _fetch_genres(aid: str) -> list[str]:
         try:

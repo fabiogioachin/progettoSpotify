@@ -1,49 +1,13 @@
 # Spotify Listening Intelligence — Task List
 
-## In Progress: API Call Optimization (5 slices)
-
-### Slice 1 — Fix cache key fragmentation
-- [ ] `wrapped.py:62` → remove `limit=10` from `get_top_tracks`, slice `[:10]` in-memory
-- [ ] `artist_network.py:46-57` → remove `limit=max_seed_artists` from `get_top_artists`, slice `[:max_seed_artists]` in-memory
-- Files: `backend/app/routers/wrapped.py`, `backend/app/services/artist_network.py`
-
-### Slice 2 — Artist cache cross-user (most impactful)
-- [ ] Add `_artist_cache_1h = TTLCache(maxsize=512, ttl=3600)` module-level in `spotify_client.py`
-- [ ] `get_artist()` → cache key = `("artist", artist_id)` without `user_id` (artist data is identical for all users)
-- Files: `backend/app/services/spotify_client.py`
-
-### Slice 3 — Deduplicate _extract_genres in compute_trends
-- [ ] `compute_trends` calls `compute_profile` 3x, each calling `_extract_genres(cap=20)` independently → up to 60 artist fetches
-- [ ] Refactor: collect all unique artist IDs from all 3 periods' tracks, dedup, fetch once with global cap=20, pass pre-fetched genres to `compute_profile`
-- [ ] Add `pre_genres` parameter to `compute_profile` to skip `_extract_genres` when provided
-- Files: `backend/app/services/audio_analyzer.py`
-
-### Slice 4 — Cache playlist items in SpotifyClient
-- [ ] Add `get_playlist_items(playlist_id, limit=50, offset=0)` method with `_cache_5m` TTL
-- [ ] Update `playlists.py:compare_playlists` to use the new cached method
-- Files: `backend/app/services/spotify_client.py`, `backend/app/routers/playlists.py`
-
-### Slice 5 — Eliminate duplicate compute_profile in export.py
-- [ ] `export.py:70-71` calls `compute_profile(time_range)` then `compute_trends()` which re-calls `compute_profile` for the same range
-- [ ] Pass already-computed profile into `compute_trends` via new `precomputed` parameter
-- Files: `backend/app/routers/export.py`, `backend/app/services/audio_analyzer.py`
-
-### Slice 6 — Verification + docs update
-- [ ] `ruff check + format`
-- [ ] `pytest`
-- [ ] Update `spotify-api-budget` skill with new budget numbers
-- [ ] Update CLAUDE.md if needed
-
----
-
 ## Bug Aperti
 
-- [ ] **Confronto playlist** — dati incompleti:
-  - [ ] Numero di brani presenti in ogni playlist assente prima del confronto
-  - [ ] Popularity media = 0: track objects da `/items` senza campo `popularity` → enrichment individuale con `GET /tracks/{id}`
-  - [ ] Genere = "—": conseguenza del fix popularity + verifica artist genre cap
-- [ ] **Dashboard**: popolarita media 0/100 non coerente, genere top nullo
-- [ ] **Evoluzione del Gusto**: controllare verita dati dei labels Fedelta, Turnover, Artisti Fedeli, Tracce Persistenti
+- [x] **Confronto playlist** — dati incompleti: ✅ FIXED
+  - [x] Numero di brani presenti in ogni playlist assente prima del confronto → fallback `GET /playlists/{id}` metadata
+  - [x] Popularity media = 0 → enrichment individuale con `GET /tracks/{id}` (cap 100)
+  - [x] Genere = "—" → artist genre cap alzato da 20 a 50
+- [x] **Dashboard**: genere top nullo → artist genre cap alzato da 20 a 50 (popularity non era un bug — `/me/top/tracks` restituisce popularity completa)
+- [x] **Evoluzione del Gusto** — ❌ NON È UN BUG: formule verificate corrette (fedeltà, turnover, artisti fedeli, tracce persistenti)
 
 ---
 
@@ -77,8 +41,12 @@
 
 ## Completato
 
-- **API Call Optimization** (2026-03-18) — Cache key fragmentation, cross-user artist cache, genre dedup, playlist items cache, export dedup
-- **Rate Limit Hardening Refactor** (2026-03-18) — Global error handlers, TOCTOU fix, burst control, budget caps, cache, skills update
+- **Health Report Fixes** (2026-03-18) — Dead code: ReceiptCard.jsx (orphan), TIME_RANGES/TIME_RANGE_LABELS (unused). Wrapped slides: field mismatches (image→image_url, cluster_names object→array, album_image), SlidePeakHours weekend_pct derivation + empty guard, SlideListeningHabits zero guard, SlideOutro useCORS. GenreDNA rank-based decay instead of fake linear. StreakDisplay active_last_7 backend+frontend wiring. DEP: soundfile removed from requirements-dev.txt
+- **Fix Bug Aperti** (2026-03-18) — Playlist comparison: popularity enrichment via individual `GET /tracks/{id}` (cap 100), track count fallback via `GET /playlists/{id}` metadata (cap 20), artist genre cap 20→50 in playlists.py + audio_analyzer.py (×3 locations). New `SpotifyClient.get_track()` method. Evoluzione del Gusto confermato non-bug. 25 nuovi test in test_playlists.py
+- **Fix NaN JSON serialization** (2026-03-18) — sanitize_nans() utility in json_utils.py, applied su 5 router (profile, analytics×3, artist_network, wrapped), 21 test, PCA zero-variance guard + concurrent session fix in profile.py
+- **ThrottleBanner proattivo** (2026-03-18) — Middleware X-RateLimit-Usage header, endpoint GET /api/rate-limit-status, ThrottleBanner 3 livelli (>60% ambra, >85% rosso, 429 countdown), badge compatto in Header con uso corrente
+- **API Call Optimization** (2026-03-18) — Cache key fragmentation fix (limit=50 + slice), cross-user artist cache (_artist_cache_1h TTL 1h), genre dedup in compute_trends (60→20 calls), playlist items caching (get_playlist_items TTL 5min), export dedup (profile from trends), SpotifyAuthError+RateLimitError re-raise from gather_in_chunks
+- **Rate Limit Hardening Refactor** (2026-03-18) — Global error handlers (main.py), TOCTOU fix (atomic sliding window), semaphore 6→3, gather_in_chunks burst control, budget caps (200/500 tracks, retry_after 30s), saved_tracks cache, skills update
 - **Tier 2: Social Layer** (2026-03-15) — Friendship + FriendInviteLink models, social router (invite/accept/list/delete/compare/leaderboard), compatibility service (Jaccard generi, artist overlap, popularity cosine similarity), CompatibilityMeter + TasteComparison + Leaderboard + FriendCard + InviteModal components, FriendsPage, Sidebar + App.jsx wiring
 - **Phase 1-3: scikit-learn + NetworkX** (2026-03-14) — genre_utils, artist_network refactor (Louvain/PageRank/betweenness), taste_clustering (DBSCAN/PCA/IsolationForest/cosine), taste_map, TasteMap.jsx, similarity badges, Top per Cerchia, tooltips fix
 - **Tier 1: Foundation + Hardening** (2026-03-14) — Profile, metriche DB, ShareCard, daily aggregates, cachetools, librosa, rate limit hardening, discovery, deprecated API cleanup

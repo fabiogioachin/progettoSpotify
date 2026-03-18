@@ -6,7 +6,11 @@ export default function SlideArtistNetwork({ data }) {
 
   const metrics = network.metrics
   const clusterCount = metrics?.cluster_count || 0
-  const clusterNames = network.cluster_names || []
+  const clusterNames = network.cluster_names
+    ? (Array.isArray(network.cluster_names)
+        ? network.cluster_names
+        : Object.values(network.cluster_names))
+    : []
   const topGenres = network.top_genres?.slice(0, 3) || []
 
   return (

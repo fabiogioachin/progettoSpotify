@@ -9,6 +9,7 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.services.artist_network import build_artist_network
 from app.services.spotify_client import SpotifyClient
+from app.utils.json_utils import sanitize_nans
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
@@ -32,4 +33,4 @@ async def get_artist_network(
         raise HTTPException(status_code=500, detail="Errore nel grafo artisti")
     finally:
         await client.close()
-    return result
+    return sanitize_nans(result)

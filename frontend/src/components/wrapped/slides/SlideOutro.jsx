@@ -24,16 +24,21 @@ export default function SlideOutro({ data }) {
 
   const handleDownload = async () => {
     if (!cardRef.current) return
-    const canvas = await html2canvas(cardRef.current, {
-      backgroundColor: '#121212',
-      scale: 2,
-    })
-    const url = canvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'my-wrapped-2026.png'
-    a.click()
-    canvas.remove()
+    try {
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: '#121212',
+        scale: 2,
+        useCORS: true,
+      })
+      const url = canvas.toDataURL('image/png')
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'my-wrapped-2026.png'
+      a.click()
+      canvas.remove()
+    } catch (err) {
+      console.warn('Download failed:', err)
+    }
   }
 
   const handleShare = async () => {
@@ -43,6 +48,7 @@ export default function SlideOutro({ data }) {
       canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#121212',
         scale: 2,
+        useCORS: true,
       })
       const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
       const file = new File([blob], 'my-wrapped-2026.png', { type: 'image/png' })

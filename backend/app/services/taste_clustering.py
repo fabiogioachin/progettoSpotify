@@ -268,11 +268,31 @@ def compute_taste_pca(
             "feature_mode": "insufficient",
         }
 
+    # Guard: if all features have zero variance (identical rows after scaling),
+    # PCA produces NaN in explained_variance_ratio_. Skip PCA and return
+    # zero coordinates instead — there's no meaningful variation to project.
+    col_variance = np.var(matrix, axis=0)
+    if np.all(col_variance < 1e-10):
+        logger.info(
+            "TasteMap: zero-variance matrix (%d rows), skipping PCA", matrix.shape[0]
+        )
+        points = [{"id": aid, "x": 0.0, "y": 0.0} for aid in ids]
+        return {
+            "points": points,
+            "variance_explained": [0.0] * n_components,
+            "feature_mode": "genre_popularity",
+        }
+
     actual_components = min(n_components, matrix.shape[0], matrix.shape[1])
     pca = PCA(n_components=actual_components)
     projected = pca.fit_transform(matrix)
 
+    # Sanitize any NaN/inf that may slip through numerical edge cases
+    projected = np.nan_to_num(projected, nan=0.0, posinf=0.0, neginf=0.0)
+
     variance = pca.explained_variance_ratio_.tolist()
+    # Sanitize variance values
+    variance = [0.0 if (math.isnan(v) or math.isinf(v)) else v for v in variance]
     # Pad to n_components if needed
     while len(variance) < n_components:
         variance.append(0.0)
@@ -288,8 +308,10 @@ def compute_taste_pca(
     points = []
     for i, aid in enumerate(ids):
         point = {"id": aid}
-        point["x"] = float(projected[i, 0]) if actual_components >= 1 else 0.0
-        point["y"] = float(projected[i, 1]) if actual_components >= 2 else 0.0
+        x = float(projected[i, 0]) if actual_components >= 1 else 0.0
+        y = float(projected[i, 1]) if actual_components >= 2 else 0.0
+        point["x"] = 0.0 if (math.isnan(x) or math.isinf(x)) else x
+        point["y"] = 0.0 if (math.isnan(y) or math.isinf(y)) else y
         points.append(point)
 
     return {

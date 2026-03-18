@@ -3,6 +3,12 @@
 ## Active
 Lessons that affect future tasks. Target: under 15 entries.
 
+### 2026-03-18 — [codebase] NaN from numpy/sklearn crashes JSON serialization
+**Context**: `GET /api/profile` returned 500 — `ValueError: Out of range float values are not JSON compliant: nan`
+**What happened**: PCA, StandardScaler, NetworkX PageRank/betweenness, and cosine similarity can produce NaN/inf when input data has zero variance or edge cases. Python's `json.dumps` rejects non-finite floats.
+**Root cause**: No defense-in-depth — individual fixes (e.g. nan_to_num in PCA) missed other NaN sources in the same response pipeline.
+**Action**: Always wrap router returns with `sanitize_nans()` from `app.utils.json_utils` when the response includes float data from numpy/sklearn/NetworkX. Applied to profile, analytics, artist_network, wrapped.
+
 ### 2026-03-14 — [codebase] Spotify dev mode keeps removing endpoints
 **Context**: `/artists/{id}/related-artists` started returning 403
 **What happened**: Fourth+ deprecated endpoint. artist_network.py and discovery.py wasted calls on always-failing requests.
