@@ -1,7 +1,7 @@
 import { Users, Shuffle } from 'lucide-react'
 import { StaggerContainer, StaggerItem } from '../ui/StaggerContainer'
 
-function ComparisonItem({ item, type, icon: Icon }) {
+function ComparisonItem({ item, icon: Icon }) {
   return (
     <div className="flex items-center gap-2.5 py-1.5">
       <Icon size={14} className="text-text-muted flex-shrink-0" />

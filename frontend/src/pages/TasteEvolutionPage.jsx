@@ -235,7 +235,7 @@ export default function TasteEvolutionPage() {
   )
 }
 
-function ArtistColumn({ id, title, icon: Icon, iconColor, artists, emptyText, tooltip }) {
+function ArtistColumn({ id, title, icon: Icon, iconColor, artists, tooltip }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const hoverTimer = useRef(null)

@@ -262,7 +262,6 @@ class TestDiscoverSimilarityScoring:
         recs = result["recommendations"]
         if recs:
             # At least some should have similarity_score (artist name match)
-            has_score = [r for r in recs if "similarity_score" in r]
             # Score might not be present if artist name doesn't match
             # but the code shouldn't error
             assert isinstance(recs, list)
@@ -340,7 +339,7 @@ class TestDiscoverSimilarityScoring:
                 "app.services.discovery.compute_cosine_similarities"
             ) as mock_cos,
         ):
-            result = await discover(mock_db, mock_client)
+            await discover(mock_db, mock_client)
 
         mock_cos.assert_not_called()
 

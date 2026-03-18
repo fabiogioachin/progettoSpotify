@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trophy, Medal } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { StaggerContainer, StaggerItem } from '../ui/StaggerContainer'
 

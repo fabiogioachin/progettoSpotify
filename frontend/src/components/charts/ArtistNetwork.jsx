@@ -62,7 +62,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     const cx = width / 2
     const cy = height / 2
 
-    const initPos = nodes.map((_, i) => ({
+    const initPos = nodes.map(() => ({
       x: cx + (Math.random() - 0.5) * 300,
       y: cy + (Math.random() - 0.5) * 250,
     }))
@@ -150,7 +150,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
     }
-  }, [dataKey, nodeIndex])
+  }, [dataKey, nodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMouseEnter = useCallback((node, pos) => {
     const clusterId = nodeClusterMap[node.id]
