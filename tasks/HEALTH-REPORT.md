@@ -97,3 +97,10 @@ cd backend && pip uninstall soundfile  # reinstalled by librosa anyway
 ```
 /refactor wire real genre frequency data into GenreDNA radar chart — replace synthetic 100-i*12 values with actual percentages from profile endpoint (UI-9)
 ```
+
+## Invalidated by /feature on 2026-03-18
+Feature: API efficiency + bug fixes — trends budget reduction, taste_map wiring, dead endpoint removal, StrictMode removal, SWR cache.
+
+## Invalidated by /feature on 2026-03-19
+Feature: Bug fix sprint — popularity enrichment, playlist track count fallback, ThrottleBanner rolling countdown.
+Re-run /health for an updated report.

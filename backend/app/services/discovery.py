@@ -13,13 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import FEATURE_KEYS
 from app.services.audio_analyzer import get_or_fetch_features
+from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_clustering import (
     build_feature_matrix,
     compute_cosine_similarities,
     detect_outliers_isolation_forest,
 )
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import (
+    SpotifyAuthError,
+    retry_with_backoff,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,10 @@ async def discover(
     top_items = top_data.get("items", [])
     top_artists = artists_data.get("items", [])
     short_items = short_data.get("items", [])
+
+    # Popularity: leggi dalla cache DB (zero API calls)
+    all_track_items = top_items + short_items
+    await read_popularity_cache(all_track_items, db)
 
     if not top_items:
         return {

@@ -1,19 +1,42 @@
 # Spotify Listening Intelligence — Task List
 
-## Bug Aperti
+## Bug Aperti (priorità alta)
 
-- [x] **Confronto playlist** — dati incompleti: ✅ FIXED
-  - [x] Numero di brani presenti in ogni playlist assente prima del confronto → fallback `GET /playlists/{id}` metadata
-  - [x] Popularity media = 0 → enrichment individuale con `GET /tracks/{id}` (cap 100)
-  - [x] Genere = "—" → artist genre cap alzato da 20 a 50
-- [x] **Dashboard**: genere top nullo → artist genre cap alzato da 20 a 50 (popularity non era un bug — `/me/top/tracks` restituisce popularity completa)
-- [x] **Evoluzione del Gusto** — ❌ NON È UN BUG: formule verificate corrette (fedeltà, turnover, artisti fedeli, tracce persistenti)
+### BUG-1: Popolarità brani ancora nulla ovunque
+- Popolarità = null in Dashboard, Discovery ("distribuzione popolarità"), playlist singole
+- Hidden Gems in Discovery vuote (dipendono da popolarità)
+- La cache `TrackPopularity` non sta funzionando o non viene popolata correttamente
+- **Impatto**: Dashboard, Discovery, Playlist Analytics
 
----
+### BUG-2: Conteggio brani playlist buggato
+- **Confronto**: quasi ok, ma ancora sbagliato per playlist con molti brani e una playlist con 23 brani
+- **Analisi**: tutte le playlist risultano vuote nel grafico "distribuzione dimensioni" (regressione)
+- **Root cause da investigare**: il fallback via `/items?limit=1` o il campo `total` non funziona
 
-## Known Gaps
+### BUG-3: Diversità artisti supera 100%
+- In schede playlist singole (Analisi), `artist_concentration` > 1.0 nonostante il cap
+- Il cap a 1.0 introdotto nel fix precedente non è applicato correttamente
 
-- [ ] `taste_map.py` non legge audio features dal DB — gira sempre in modalita `genre_popularity`. Wiring con tabella `AudioFeatures` da implementare.
+### BUG-4: Dashboard spreca chiamate API senza valore
+- Troppe chiamate API senza portare dati utili alla pagina
+- Popolarità mancante nella dashboard
+- Il grafico "trend temporale" non ha senso — da rivedere o rimuovere
+
+### BUG-5: Discovery — dati nulli e dato mock sospetto
+- Grafico "distribuzione popolarità" vuoto (dipende da BUG-1)
+- "Scoperte recenti" vuote
+- Il dato "50% affine" nelle scoperte recenti sembra mock/inventato — verificare provenienza
+- Se il dato non è reale, rimuoverlo
+
+### BUG-6: Cerchie artisti non funzionano correttamente
+- In "Ecosistema Artisti" e nel Wrapped, le cerchie non sono interconnesse
+- I nomi delle cerchie non sono significativi (nomi generici invece di descrittivi)
+- Il clustering/naming va rivisto
+
+### BUG-7: Orizzonte temporale limitato
+- Il grafico "tempo di ascolto" in Dashboard ha un orizzonte troppo corto
+- Aggiungere finestre temporali più ampie (1 settimana, 1 mese, 3 mesi, tutto)
+- Stessa funzionalità richiesta per il grafico a griglia in "Pattern Temporali"
 
 ---
 
@@ -39,14 +62,13 @@
 
 ---
 
-## Completato
+## Completato (recente)
 
-- **Health Report Fixes** (2026-03-18) — Dead code: ReceiptCard.jsx (orphan), TIME_RANGES/TIME_RANGE_LABELS (unused). Wrapped slides: field mismatches (image→image_url, cluster_names object→array, album_image), SlidePeakHours weekend_pct derivation + empty guard, SlideListeningHabits zero guard, SlideOutro useCORS. GenreDNA rank-based decay instead of fake linear. StreakDisplay active_last_7 backend+frontend wiring. DEP: soundfile removed from requirements-dev.txt
-- **Fix Bug Aperti** (2026-03-18) — Playlist comparison: popularity enrichment via individual `GET /tracks/{id}` (cap 100), track count fallback via `GET /playlists/{id}` metadata (cap 20), artist genre cap 20→50 in playlists.py + audio_analyzer.py (×3 locations). New `SpotifyClient.get_track()` method. Evoluzione del Gusto confermato non-bug. 25 nuovi test in test_playlists.py
-- **Fix NaN JSON serialization** (2026-03-18) — sanitize_nans() utility in json_utils.py, applied su 5 router (profile, analytics×3, artist_network, wrapped), 21 test, PCA zero-variance guard + concurrent session fix in profile.py
-- **ThrottleBanner proattivo** (2026-03-18) — Middleware X-RateLimit-Usage header, endpoint GET /api/rate-limit-status, ThrottleBanner 3 livelli (>60% ambra, >85% rosso, 429 countdown), badge compatto in Header con uso corrente
-- **API Call Optimization** (2026-03-18) — Cache key fragmentation fix (limit=50 + slice), cross-user artist cache (_artist_cache_1h TTL 1h), genre dedup in compute_trends (60→20 calls), playlist items caching (get_playlist_items TTL 5min), export dedup (profile from trends), SpotifyAuthError+RateLimitError re-raise from gather_in_chunks
-- **Rate Limit Hardening Refactor** (2026-03-18) — Global error handlers (main.py), TOCTOU fix (atomic sliding window), semaphore 6→3, gather_in_chunks burst control, budget caps (200/500 tracks, retry_after 30s), saved_tracks cache, skills update
-- **Tier 2: Social Layer** (2026-03-15) — Friendship + FriendInviteLink models, social router (invite/accept/list/delete/compare/leaderboard), compatibility service (Jaccard generi, artist overlap, popularity cosine similarity), CompatibilityMeter + TasteComparison + Leaderboard + FriendCard + InviteModal components, FriendsPage, Sidebar + App.jsx wiring
-- **Phase 1-3: scikit-learn + NetworkX** (2026-03-14) — genre_utils, artist_network refactor (Louvain/PageRank/betweenness), taste_clustering (DBSCAN/PCA/IsolationForest/cosine), taste_map, TasteMap.jsx, similarity badges, Top per Cerchia, tooltips fix
-- **Tier 1: Foundation + Hardening** (2026-03-14) — Profile, metriche DB, ShareCard, daily aggregates, cachetools, librosa, rate limit hardening, discovery, deprecated API cleanup
+- **Bug Fix Sprint v2** (2026-03-19) — Centralized `TrackPopularity` DB cache (24h TTL) replaces 4 duplicate enrichment blocks. Playlist analytics: `sizes` updated from actual fetched counts (fix empty histogram), `artist_concentration` capped at 1.0. Track count fallback cap 20→50 with logging. Dashboard: `PopularityTrend` replaced with "Tempo di Ascolto" area chart (daily_minutes from DailyListeningStats/RecentPlay, zero API calls). 168 tests pass.
+- **Bug Fix Sprint** (2026-03-19) — Popularity enrichment via `GET /tracks/{id}` in library/audio_analyzer/discovery (cap 50), playlist track count fallback via `/items?limit=1`, ThrottleBanner rolling countdown con `X-RateLimit-Reset` header. 9 nuovi test (168 totali).
+- **API Efficiency + Bug Fixes** (2026-03-18) — Trends budget 53->23 calls, taste_map AudioFeatures DB wiring, dead endpoints removed, React.StrictMode removed, useSpotifyData stale-while-revalidate cache, playlists.py null-safe fixes. Skills updated.
+- **Health Report Fixes** (2026-03-18) — Dead code cleanup (ReceiptCard, TIME_RANGES), Wrapped slides field mismatches, GenreDNA rank-based decay, StreakDisplay wiring, soundfile removed.
+- **Fix Bug Aperti (parziale)** (2026-03-18) — Playlist comparison: popularity enrichment via `GET /tracks/{id}` (cap 100), track count fallback via `GET /playlists/{id}` metadata (cap 20), artist genre cap 20->50. 25 nuovi test.
+- **ThrottleBanner proattivo** (2026-03-18) — Middleware X-RateLimit-Usage header, endpoint GET /api/rate-limit-status, ThrottleBanner 3 livelli, badge compatto in Header.
+- **Rate Limit Hardening** (2026-03-18) — Global error handlers, TOCTOU fix, semaphore 6->3, gather_in_chunks burst control, budget caps.
+- **Phase 1-3: scikit-learn + NetworkX** (2026-03-14) — genre_utils, artist_network (Louvain/PageRank), taste_clustering (DBSCAN/PCA), taste_map, TasteMap.jsx.

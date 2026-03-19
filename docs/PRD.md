@@ -1,37 +1,71 @@
 # Spotify Listening Intelligence — Product Requirements Document
 
 ## 1. Visione
-Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'utente, visualizzando pattern, evoluzione del gusto e ecosistema musicale con una UI ispirata a Spotify.
+Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'utente, visualizzando pattern, evoluzione del gusto e ecosistema musicale con una UI dark-theme ispirata a Spotify.
 
 ## 2. Utenti Target
 - Ascoltatori Spotify curiosi del proprio profilo musicale
 - Music enthusiast che vogliono insight sul proprio gusto
 - Utenti che cercano nuove scoperte basate sui propri pattern
+- **Vincolo**: max 5 utenti in dev mode Spotify (Premium only)
 
 ## 3. Architettura Tecnica
 - **Backend**: FastAPI (async) + SQLAlchemy async + SQLite
-- **Frontend**: React 18 + Vite + Tailwind CSS + Recharts
-- **Auth**: OAuth2 PKCE con Spotify
-- **Deploy**: Docker Compose operativo (backend: uvicorn, frontend: nginx porta 5173)
+- **Frontend**: React 18 + Vite + Tailwind CSS + Recharts + framer-motion
+- **Auth**: OAuth2 PKCE con state HMAC-signed, session cookie (itsdangerous), token Fernet-encrypted
+- **ML/Analytics**: scikit-learn (PCA, DBSCAN, Isolation Forest, cosine similarity), NetworkX (Louvain, PageRank, betweenness)
+- **Audio**: librosa per analisi on-demand da preview MP3 (zero chiamate API Spotify)
+- **Deploy**: Docker Compose (backend: uvicorn :8001, frontend: nginx :5173)
 
-## 4. Limitazioni API Spotify
-- **Deprecati** (non usati): Audio Features, Audio Analysis, Recommendations
-- **Sempre disponibili**: Artist genres/popularity/followers, Track popularity/preview_url, Top Artists/Tracks, Recently Played, Playlists, Related Artists
-- **Time ranges fissi**: short_term (~4 settimane), medium_term (~6 mesi), long_term (storico completo)
-- **Nessuna granularità custom via API**: Spotify non espone time ranges intermedi (es. 2 settimane, 3 mesi). L'unico modo è accumulare dati localmente e computare range personalizzati
-- **Recently played**: max 50 items (hard limit API)
-- **Workaround accumulo**: modello `RecentPlay` in DB — sync automatico ogni 60 minuti via APScheduler + salvataggio ad ogni visita pagina Temporal. Lo storico cresce nel tempo
-- **Workaround range custom**: con sufficiente storico accumulato in `RecentPlay`, si possono computare range arbitrari (ultimi 7 giorni, 2 settimane, 3 mesi) filtrando per `played_at` nel DB anziché affidarsi ai time ranges API
-- **Workaround storico**: playlist "Your Top Songs 20XX" per dati multi-anno
-- **Workaround snapshot giornalieri**: modello `UserSnapshot` salva top_artists/top_tracks JSON una volta al giorno → confronto settimana-su-settimana e mese-su-mese senza dipendere dai time ranges API
+## 4. Limitazioni API Spotify (Dev Mode Feb 2026+)
+
+### Endpoint rimossi (403 permanente — non usare)
+- Audio Features (`GET /audio-features`)
+- Recommendations (`GET /recommendations`)
+- Related Artists (`GET /artists/{id}/related-artists`)
+- Artist Top Tracks (`GET /artists/{id}/top-tracks`)
+- Batch endpoints (`GET /artists?ids=`, `GET /tracks?ids=`, `GET /albums?ids=`)
+
+### Cambiamenti breaking
+- `/playlists/{id}/tracks` → **`/playlists/{id}/items`** (vecchio ritorna 403)
+- `GET /playlists/{id}` non include più `tracks` nella risposta
+- Campo dati: `item.get("item") or item.get("track")` per backwards compat
+- `GET /me/top/tracks` **non restituisce `popularity`** nel track object in dev mode
+- `/playlists/{id}/items` ha `limit` max 50, non 100
+
+### Sempre disponibili
+- Artist genres, followers, images
+- Track metadata (name, album, artists, duration_ms, preview_url)
+- User profile (`GET /me`)
+- Top Artists/Tracks (3 time ranges, max 50 per range)
+- Recently Played (max 50 items — hard limit)
+- Playlists + playlist items (paginato, max 50 per pagina)
+- Individual track/artist (`GET /tracks/{id}`, `GET /artists/{id}`)
+
+### Rate Limiting
+- **Rolling window 30 secondi** (non "X calls al minuto")
+- Limite esatto non pubblicato — community reports ~30-50 calls/30s
+- 429 con `Retry-After` — valori estremi in dev mode (fino a 75000s+)
+- **Budget app**: sliding window throttle 25 calls/30s + global semaphore(3) + cooldown globale su 429
+
+### Workaround implementati
+- **Accumulo storico**: modello `RecentPlay` in DB — sync ogni 60 min via APScheduler + salvataggio ad ogni visita
+- **Snapshot giornalieri**: modello `UserSnapshot` salva top_artists/top_tracks JSON 1x/giorno
+- **Aggregati**: `DailyListeningStats` computati alle 02:00 — minuti e ascolti per giorno
+- **Popularity**: non disponibile in dev mode (non restituita da API). Cache DB `TrackPopularity` per eventuale enrichment futuro. Nessuna chiamata API inline per popolarità — le feature dipendenti sono nascoste quando i dati non sono disponibili
+- **Generi artista**: endpoint individuali `GET /artists/{id}` con cache cross-user 1h, dedup globale, cap 20-50
+- **Audio features**: librosa su preview MP3 (CDN, non API Spotify) — analisi on-demand
 
 ## 5. Funzionalità
 
 ### 5.1 Dashboard (`/dashboard`)
-- KPI: brani analizzati, popolarità media, artisti unici, artista top
-- Top 50 brani con play overlay e mini barre (quando features disponibili)
-- Radar audio features (con rilevamento all-zero → messaggio fallback), trend timeline (popularity fallback se features assenti), genre treemap
-- Export Claude AI per analisi personalizzata
+- **KPI**: brani analizzati, streak di ascolto, genere top (con %), artisti unici
+- **Tempo di Ascolto**: area chart minuti/giorno con selettore temporale (7gg / 30gg / 3M / Tutto). Dati da `DailyListeningStats` pre-aggregati o fallback da `RecentPlay`
+- **Trend features**: se audio features disponibili (da librosa), mostra trend 3 periodi. Altrimenti mostra Tempo di Ascolto
+- **Audio Radar**: radar chart 7 feature audio (da cache DB o analisi librosa on-demand con progress bar)
+- **Top 50 brani**: lista scrollabile con TrackCard
+- **Genre Treemap**: visualizzazione generi dominanti
+- **Export Claude AI**: prompt strutturato con dati per analisi personalizzata
 
 ### 5.2 Evoluzione del Gusto (`/evolution`)
 - Confronto artisti/brani tra 3 periodi temporali
@@ -40,82 +74,152 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Storico annuale via playlist "Your Top Songs"
 
 ### 5.3 Pattern Temporali (`/temporal`)
-- Heatmap 7x24 stile Spotify Wrapped (gradiente multi-colore)
-- Streak di ascolto stile Duolingo (fiamma animata, progress ring, milestone)
-- Statistiche sessioni con gamification
+- **Selettore temporale**: 7gg / 30gg / 3M / Tutto (filtra heatmap, sessioni, statistiche)
+- Heatmap 7×24 (gradiente multi-colore)
+- Streak di ascolto stile Duolingo (fiamma animata, progress ring)
+- Statistiche sessioni (media, massima, tracks per sessione)
 - Peak hours e pattern weekday/weekend
 - Top 5 brani più ascoltati (da storico accumulato)
-- Accumulo DB progressivo: ogni visita salva nuovi ascolti, indicatore "ascolti accumulati" vs "solo API"
+- Minuti di ascolto giornalieri (da DailyListeningStats o fallback in-memory)
+- Indicatore accumulo dati: "X ascolti accumulati" vs "solo API"
 
 ### 5.4 Ecosistema Artisti (`/artists`)
-- Grafo force-directed SVG relazioni artisti
-- Cluster detection (BFS connected components)
-- Bridge artists tra cluster (con generi e popolarità)
-- Metriche diversità musicale
-- Nodi arricchiti: generi, popolarità, followers, numero connessioni (tooltip dettagliato)
-- Genre cloud: top 10 generi dominanti nell'ecosistema
+- **Grafo force-directed SVG** relazioni artisti (3 time ranges merged, ~45 artisti unici)
+- **Edges**: similarità generi (fuzzy matching, soglia 0.15) + fallback popolarità per artisti senza generi
+- **Cluster detection**: Louvain communities (NetworkX) con resolution adattiva
+- **Cluster naming**: TF-IDF-like scoring sul genere più distintivo. Fallback: "Cerchia di {artista più popolare}"
+- **Metriche nodo**: PageRank, betweenness centrality, connessioni, popolarità, followers
+- **Bridge artists**: top 5 per betweenness centrality (connettori tra cluster)
+- **Ranking intra-cluster**: score composito (40% PageRank + 30% popularity + 30% genre diversity)
+- Genre cloud: top 10 generi dominanti
 
 ### 5.5 Analisi Playlist (`/playlist-analytics`)
-- Statistiche per-playlist: concentrazione, freshness, staleness
-- Overlap matrix (Jaccard index)
-- Size distribution histogram
+- Statistiche per-playlist: diversità artisti (cappata a 100%), freshness (anno medio release), staleness (giorni dall'ultimo aggiornamento)
+- Track count: fetch reale via `/items?limit=1` per playlist con `total=0` in dev mode
+- Overlap matrix (Jaccard index) tra top 20 playlist
+- Size distribution histogram (bucket: vuote, 1-10, 11-30, ..., 200+)
 
 ### 5.6 Confronto Playlist (`/compare`)
-- Confronto side-by-side tra playlist selezionate
-- Metriche comparative (audio features se disponibili, altrimenti messaggio informativo)
-- Rendering condizionale: mostra confronto features solo quando i dati audio sono disponibili
+- Confronto side-by-side 2-4 playlist
+- Track count: usa `total` dall'API (include local files), cap 500 tracks per playlist
+- Popularity stats, top tracks, genre distribution
+- Audio features (da cache DB, rendering condizionale)
+- Dedup globale artisti per generi (cap 50, cross-playlist)
 
-### 5.7 Scopri (`/discovery`)
-- Distribuzione generi (treemap) — sempre disponibile via artist genres
-- Distribuzione popolarità (istogramma a barre) — fallback quando MoodScatter non ha features
-- Hidden gems: brani meno popolari tra i preferiti (fallback outlier basato su popolarità anziché distanza audio)
-- Raccomandazioni: API Spotify se disponibile, altrimenti "Scoperte Recenti" (brani in short_term non presenti in medium_term)
-- Flag trasparenza `recommendations_source`: il frontend etichetta chiaramente la sorgente dei suggerimenti
+### 5.7 Discovery (`/discovery`)
+- **Distribuzione generi** (treemap) — sempre disponibile
+- **Distribuzione popolarità**: istogramma — nascosto quando popularity non disponibile (tutti i valori a 0)
+- **MoodScatter**: scatter plot energy×valence — visibile quando audio features disponibili (da librosa)
+- **Outliers/Hidden Gems**: 3 livelli di fallback:
+  1. Isolation Forest (sklearn) — se ≥5 tracce con features
+  2. Distanza euclidea dal centroide — se features disponibili
+  3. Popolarità sotto media — fallback finale
+  - Sezione nascosta quando vuota
+- **Scoperte Recenti**: brani in short_term assenti da medium_term, con badge "Nuovo artista"
+- **Centroid audio**: radar del profilo medio (calcolato da features disponibili)
 
-## 6. Stack Spotify API (Non Deprecato)
-- `GET /me/top/artists` — top artists (3 time ranges, max 50)
-- `GET /me/top/tracks` — top tracks (3 time ranges, max 50)
-- `GET /me/player/recently-played` — ultimi 50 ascolti con timestamp
-- `GET /me/playlists` — playlist utente (paginato)
-- `GET /playlists/{id}/tracks` — tracks di una playlist
-- `GET /artists/{id}/related-artists` — artisti correlati
-- `GET /search` — ricerca contenuti
+### 5.8 Profilo (`/profile`)
+- TasteMap: PCA 2D (scikit-learn) degli artisti top — visualizzazione spaziale del gusto
+- Profilo audio aggregato
+- Evoluzione gusto sintetica
 
-### API Deprecate (con fallback implementato)
-- `GET /audio-features` → fallback: popolarità, generi artista, confronti tra periodi
-- `GET /recommendations` → fallback: scoperte recenti (short_term − medium_term)
+### 5.9 Wrapped Personalizzato (`/wrapped`)
+- Slide-based presentation del profilo musicale
+- Taste evolution (3 periodi)
+- Temporal patterns
+- Artist network
+- Range temporale selezionabile
+
+### 5.10 Social (`/friends`)
+- Amicizie con inviti (codice univoco)
+- Taste compatibility scoring
+- Confronto profili musicali
+
+## 6. Stack Spotify API (Usato)
+
+| Endpoint | Uso | Cache | Budget |
+|----------|-----|-------|--------|
+| `GET /me` | Profilo utente | 5 min | 1 |
+| `GET /me/top/tracks` | Top brani (3 ranges) | 5 min | 1-3 |
+| `GET /me/top/artists` | Top artisti (3 ranges) | 5 min | 1-3 |
+| `GET /me/player/recently-played` | Ultimi 50 ascolti | 2 min | 1 |
+| `GET /me/playlists` | Lista playlist | 5 min | 1 |
+| `GET /playlists/{id}/items` | Tracks playlist | 5 min | 1-N |
+| `GET /playlists/{id}` | Metadata playlist | none | 1 |
+| `GET /artists/{id}` | Generi/popolarità artista | **1h cross-user** | 0-20 |
+| `GET /tracks/{id}` | Dettaglio brano | 5 min | 0-N |
+
+### Budget per pagina (worst-case, cache fredda)
+- **Dashboard**: ~7 calls (top tracks ×3, top artists ×3, recently played)
+- **Trends**: ~23 calls (top tracks ×3 + artists ×20)
+- **Discovery**: ~3 calls (top tracks ×2, top artists ×1 — tutto in cache da dashboard)
+- **Artist Network**: ~3 calls (top artists ×3 — in cache)
+- **Wrapped**: ~11 calls
+- **Playlist Compare**: ~4-194 calls (dipende dal numero e dimensione playlist)
+- **Fresh user total**: ~10-25 unique calls (cache deduplicates)
 
 ## 7. Design System
-- Background: #121212 | Surface: #181818 | Hover: #282828
-- Text: #FFFFFF / #b3b3b3 / #8a8a8a (WCAG AA)
-- Accent: #6366f1 (indigo) | Brand: #1DB954 (Spotify green)
-- Font: Space Grotesk (display) + Inter (body)
-- Sidebar: 240px, always visible desktop, collapsible mobile
+- **Background**: #121212 | **Surface**: #181818 | **Hover**: #282828
+- **Text**: #FFFFFF / #b3b3b3 / #8a8a8a (WCAG AA)
+- **Accent**: #6366f1 (indigo) — differenzia l'app da Spotify
+- **Brand**: #1DB954 (Spotify green — usato solo per badge/indicatori Spotify-specifici)
+- **Font**: Space Grotesk (display) + Inter (body)
+- **Sidebar**: 240px desktop, collapsible mobile con slide animation
+- **UI text**: italiano. Period labels: 1M / 6M / All
+- **Cluster label**: "Cerchia" (non "Cluster")
+- **Sezioni vuote**: nascoste, mai "nessun dato disponibile"
 
-### 7.1 Animazioni e Transizioni Moderne
-- **Scroll-driven animations**: fade-in e slide-up per KPI cards e sezioni al scroll (CSS `@scroll-timeline` o Framer Motion `useInView`)
-- **View Transitions API**: transizioni animate tra route (fade/slide) per navigazione fluida tra pagine
-- **Skeleton loaders**: placeholder che rispecchiano la forma del componente finale (card, lista, grafico) al posto degli spinner generici
-- **Staggered list animations**: animazioni d'ingresso sfalsate per liste e griglie (TopTracks, ArtistCards) con Framer Motion `staggerChildren`
+### 7.1 Animazioni (framer-motion)
+- Page transitions: `AnimatePresence mode="wait"` (fade + slide)
+- KPI cards: `whileInView` scroll-driven fade-in
+- Liste/griglie: `StaggerContainer` + `StaggerItem` (40ms stagger)
+- Sidebar mobile: `motion.aside` slide in/out
+- Loading states: skeleton loaders che rispecchiano la forma del componente
+- Audio analysis: progress bar con conteggio brani analizzati
 
 ## 8. Decisioni Architetturali
-- Nessuna dipendenza esterna per grafici complessi (force-directed = SVG puro)
-- asyncio.Semaphore per rate limiting API calls parallele
-- Export Claude: markdown con dati strutturati + prompt istruzioni
-- Deploy Docker Compose: backend (uvicorn) + frontend (nginx su porta 5173), volume mount per live reload backend
 
-### 8.1 Resilienza e Degradazione Graduale
-- **SpotifyAuthError propagation**: ogni router ri-lancia `SpotifyAuthError` prima di `except Exception` generico → l'utente viene reindirizzato al login anziché vedere dati stalli
-- **Non-blocking snapshots**: scritture DB non critiche wrappate in try/except con logger.warning → l'endpoint risponde anche se il salvataggio snapshot fallisce
-- **_safe_fetch per gather**: `taste_evolution` wrappa ogni chiamata API individualmente → fallimenti parziali restituiscono dati vuoti anziché crashare l'intera pagina
-- **InvalidToken handling**: `spotify_client` cattura Fernet InvalidToken e rilancia SpotifyAuthError → 401
-- **Rendering condizionale frontend**: flag `has_audio_features` e `recommendations_source` dal backend → il frontend mostra alternative appropriate (popolarità, generi) quando le API deprecate falliscono
-- **AudioRadar all-zero detection**: rileva features con tutti valori a 0 → mostra messaggio "dati non disponibili" anziché radar piatto
-- **Nessun dato finto**: tutti i valori default sono 0/null/vuoto, mai valori plausibili che potrebbero fuorviare l'utente
+### 8.1 Rate Limiting (3 livelli)
+1. **API middleware**: 120 req/min per IP (protezione frontend abuse)
+2. **Sliding window throttle**: 25 calls/30s con lock atomico — preventivo, evita di colpire Spotify
+3. **Global cooldown**: attivato su ogni 429 — tutte le richieste pending falliscono immediatamente
 
-### 8.2 Architettura Dati Storici
-- **UserSnapshot giornaliero**: modello `UserSnapshot` salva una volta al giorno (al primo login) i top_artists e top_tracks come JSON serializzato + timestamp
-- **Campi**: `id`, `user_id`, `captured_at` (date, unico per utente), `top_artists_json`, `top_tracks_json`, `recent_plays_count`
-- **Confronti temporali**: con snapshot giornalieri si possono calcolare diff settimana-su-settimana e mese-su-mese senza dipendere dai 3 time ranges fissi di Spotify
-- **Endpoint**: `GET /api/snapshots/diff?period=week` restituisce delta tra snapshot (artisti saliti/scesi, nuovi brani, brani usciti dalla top)
-- **Vantaggio**: dati owned dall'utente, non soggetti a deprecazione API, granularità temporale arbitraria
+### 8.2 Cache Architecture (3 tier cachetools)
+- `_cache_5m` (TTL 300s): user-scoped data (top tracks, playlists, etc.)
+- `_cache_2m` (TTL 120s): recently played
+- `_artist_cache_1h` (TTL 3600s): cross-user artist data (no user_id nella key)
+- **Regola**: sempre `limit=50` per top tracks/artists. Slice in-memory se servono meno items
+
+### 8.3 Popularity
+- Spotify dev mode non restituisce `popularity` in `GET /me/top/tracks`
+- Enrichment via `GET /tracks/{id}` **non è sostenibile** nel budget (50 chiamate per page load esauriscono il window)
+- Approccio: `read_popularity_cache()` legge solo dal DB (zero API calls). Le feature dipendenti da popularity sono nascoste quando i dati non sono disponibili
+- Cache DB: tabella `TrackPopularity` con TTL 24h
+
+### 8.4 Resilienza e Degradazione Graduale
+- **SpotifyAuthError propagation**: ogni `except Exception` è preceduto da `except SpotifyAuthError: raise`
+- **Error handling centralizzato**: 3 global exception handler in `main.py` (401, 429, 502)
+- **Non-blocking snapshots**: scritture DB non critiche in try/except con warning
+- **`_safe_fetch` per gather**: fallimenti parziali → dati vuoti, non crash
+- **Rendering condizionale**: flag `has_audio_features`, `recommendations_source` → frontend mostra alternative
+- **Nessun dato finto**: default 0/null/vuoto, mai valori plausibili
+
+### 8.5 Background Jobs (APScheduler)
+| Job | Frequenza | Calls/user | Descrizione |
+|-----|-----------|------------|-------------|
+| `sync_recent_plays` | Ogni 60 min | 1 | Accumula ascolti oltre il limite API di 50 |
+| `save_daily_snapshot` | 1x/giorno (primo login) | 2 | Snapshot top artists + top tracks |
+| `compute_daily_aggregates` | 02:00 daily | 0 (DB only) | Statistiche giornaliere per charts |
+
+### 8.6 Audio Analysis (On-Demand)
+- `POST /api/analyze-tracks`: frontend invia track objects nel body (no re-fetch API)
+- Backend scarica preview MP3 da CDN Spotify (non conta nel rate limit API)
+- librosa estrae: energy, danceability, valence, acousticness, instrumentalness, speechiness, liveness, tempo
+- Risultati in cache DB (`AudioFeatures` table)
+- Frontend poll asincrono con progress bar
+
+### 8.7 Dati Storici
+- **RecentPlay**: accumulo progressivo ascolti (supera il limite API di 50)
+- **UserSnapshot**: top artists/tracks JSON giornaliero → confronti temporali arbitrari
+- **DailyListeningStats**: minuti e ascolti aggregati per giorno → charts "Tempo di Ascolto"
+- Granularità temporale arbitraria filtrando per date nel DB

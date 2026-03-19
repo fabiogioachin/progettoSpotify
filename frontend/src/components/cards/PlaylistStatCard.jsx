@@ -15,7 +15,7 @@ export default function PlaylistStatCard({ playlist, index = 0 }) {
       : `${Math.round(playlist.staleness_days / 365)}a fa`
     : '—'
 
-  const concentrationPct = Math.round(playlist.artist_concentration * 100)
+  const concentrationPct = Math.min(Math.round(playlist.artist_concentration * 100), 100)
 
   return (
     <motion.div

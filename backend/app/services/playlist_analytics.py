@@ -34,12 +34,39 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
     public_count = sum(1 for p in all_playlists if p.get("public"))
     private_count = len(all_playlists) - public_count
     collaborative_count = sum(1 for p in all_playlists if p.get("collaborative"))
-    sizes = [p.get("tracks", {}).get("total", 0) for p in all_playlists]
+
+    # Dev mode: /me/playlists may return tracks.total=0. Fetch real counts.
+    raw_sizes = {p["id"]: p.get("tracks", {}).get("total", 0) for p in all_playlists}
+    zero_count_pids = [pid for pid, sz in raw_sizes.items() if sz == 0]
+    if zero_count_pids:
+        # Fetch real count for playlists with total=0 (limit=1, read total only)
+        async def _fetch_count(pid: str) -> tuple[str, int]:
+            try:
+                data = await retry_with_backoff(
+                    client.get_playlist_items, pid, limit=1, offset=0
+                )
+                return pid, data.get("total", 0)
+            except SpotifyAuthError:
+                raise
+            except Exception:
+                return pid, 0
+
+        count_results = await gather_in_chunks(
+            [_fetch_count(pid) for pid in zero_count_pids[:50]],
+            chunk_size=5,
+        )
+        for r in count_results:
+            if isinstance(r, SpotifyAuthError):
+                raise r
+            if isinstance(r, tuple):
+                raw_sizes[r[0]] = r[1]
+
+    sizes = [raw_sizes.get(p["id"], 0) for p in all_playlists]
 
     # 3. Analyze top 20 playlists by size (for overlap and details)
     playlists_sorted = sorted(
         all_playlists,
-        key=lambda p: p.get("tracks", {}).get("total", 0),
+        key=lambda p: raw_sizes.get(p["id"], 0),
         reverse=True,
     )
     playlists_to_analyze = playlists_sorted[:20]
@@ -100,7 +127,7 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
         pid, track_ids, artists, release_dates, added_dates = r
         playlist_tracks[pid] = set(track_ids)
 
-        artist_concentration = round(len(artists) / max(len(track_ids), 1), 2)
+        artist_concentration = round(min(len(artists) / max(len(track_ids), 1), 1.0), 2)
         freshness = _compute_freshness(release_dates)
         staleness = _compute_staleness(added_dates)
 
@@ -121,10 +148,18 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
             }
         )
 
-    # 4. Overlap matrix (Jaccard index)
+    # 4. Update sizes with actual fetched track counts
+    # sizes from /me/playlists may be 0 in dev mode; replace with real counts
+    actual_counts = {d["id"]: d["track_count"] for d in playlist_details}
+    sizes = [
+        actual_counts.get(p["id"], p.get("tracks", {}).get("total", 0))
+        for p in all_playlists
+    ]
+
+    # 5. Overlap matrix (Jaccard index)
     overlap_matrix = _compute_overlap_matrix(playlist_details, playlist_tracks)
 
-    # 5. Size distribution histogram
+    # 6. Size distribution histogram
     size_distribution = _compute_size_histogram(sizes)
 
     return {

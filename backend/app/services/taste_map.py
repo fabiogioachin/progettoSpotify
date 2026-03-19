@@ -6,15 +6,104 @@ puro (feature matrix, PCA).
 """
 
 import logging
+from collections import defaultdict
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants import FEATURE_KEYS
+from app.models.listening_history import RecentPlay
+from app.models.track import AudioFeatures
 from app.services.genre_utils import normalize_genre
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_clustering import build_feature_matrix, compute_taste_pca
 from app.utils.rate_limiter import retry_with_backoff
 
 logger = logging.getLogger(__name__)
+
+
+async def _load_audio_features_by_artist(
+    db: AsyncSession, user_id: int, artists: list[dict]
+) -> dict[str, dict] | None:
+    """Carica audio features dal DB e le media per artista.
+
+    Usa la tabella RecentPlay per mappare artist → track, poi AudioFeatures
+    per ottenere le feature. Ritorna {artist_id: {energy, danceability, ...}}
+    oppure None se nessun dato disponibile.
+
+    Pure DB lookup — nessuna chiamata API.
+    """
+    artist_ids = [a["id"] for a in artists if a.get("id")]
+    if not artist_ids:
+        return None
+
+    try:
+        # Step 1: Get track IDs for these artists from RecentPlay
+        result = await db.execute(
+            select(
+                RecentPlay.artist_spotify_id,
+                RecentPlay.track_spotify_id,
+            )
+            .where(
+                RecentPlay.user_id == user_id,
+                RecentPlay.artist_spotify_id.in_(artist_ids),
+            )
+            .distinct()
+        )
+        artist_track_rows = result.all()
+
+        if not artist_track_rows:
+            return None
+
+        # Build mapping: artist_id → [track_ids]
+        artist_to_tracks: dict[str, list[str]] = defaultdict(list)
+        all_track_ids: set[str] = set()
+        for artist_id, track_id in artist_track_rows:
+            artist_to_tracks[artist_id].append(track_id)
+            all_track_ids.add(track_id)
+
+        # Step 2: Fetch AudioFeatures for all track IDs
+        result = await db.execute(
+            select(AudioFeatures).where(
+                AudioFeatures.track_spotify_id.in_(list(all_track_ids))
+            )
+        )
+        features_by_track = {af.track_spotify_id: af for af in result.scalars().all()}
+
+        if not features_by_track:
+            return None
+
+        # Step 3: Average features per artist
+        audio_features: dict[str, dict] = {}
+        for artist_id, track_ids in artist_to_tracks.items():
+            feature_accum: dict[str, list[float]] = defaultdict(list)
+            for tid in track_ids:
+                af = features_by_track.get(tid)
+                if af is None:
+                    continue
+                for key in FEATURE_KEYS:
+                    val = getattr(af, key, None)
+                    if val is not None:
+                        feature_accum[key].append(val)
+
+            if feature_accum:
+                audio_features[artist_id] = {
+                    key: sum(vals) / len(vals) for key, vals in feature_accum.items()
+                }
+
+        if not audio_features:
+            return None
+
+        logger.info(
+            "TasteMap: audio features caricate per %d/%d artisti",
+            len(audio_features),
+            len(artist_ids),
+        )
+        return audio_features
+
+    except Exception as exc:
+        logger.warning("TasteMap: caricamento audio features fallito: %s", exc)
+        return None
 
 
 async def compute_taste_map(
@@ -43,9 +132,9 @@ async def compute_taste_map(
         }
 
     # 2. Try to get audio features from DB cache (optional enrichment)
-    # Audio features are keyed by artist_id with averaged feature values
-    # For now, we work with genres + popularity only (audio is optional enrichment)
-    audio_features = None  # TODO: fetch from AudioFeatures table if available
+    # AudioFeatures is keyed by track_spotify_id; we need {artist_id: avg_features}.
+    # Use RecentPlay to map artist_spotify_id → track_spotify_id, then average.
+    audio_features = await _load_audio_features_by_artist(db, user_id, artists)
 
     # 3. Build feature matrix
     artist_dicts = []

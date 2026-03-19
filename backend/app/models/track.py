@@ -23,3 +23,14 @@ class AudioFeatures(Base):
     mode = Column(Integer)
     time_signature = Column(Integer)
     cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class TrackPopularity(Base):
+    """Cache per popularity dei brani (enrichment centralizzato)."""
+
+    __tablename__ = "track_popularity"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    track_spotify_id = Column(String(255), unique=True, nullable=False, index=True)
+    popularity = Column(Integer, nullable=False, default=0)
+    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

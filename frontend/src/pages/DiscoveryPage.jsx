@@ -55,6 +55,12 @@ export default function DiscoveryPage() {
     return avgs
   })()
 
+  // Hide popularity chart when all tracks have popularity 0 (all counts in first bucket)
+  const totalPopTracks = popularityDistribution.reduce((s, d) => s + d.count, 0)
+  const hasPopularityData = popularityDistribution.length > 0 &&
+    totalPopTracks > 0 &&
+    !(popularityDistribution[0]?.count === totalPopTracks)
+
   const isLoading = topLoading || discoveryLoading
   const hasError = topError || discoveryError
 
@@ -102,9 +108,9 @@ export default function DiscoveryPage() {
               </div>
             ) : hasMoodData ? (
               <MoodScatter tracks={enrichedTracks} />
-            ) : (
+            ) : hasPopularityData ? (
               <PopularityDistribution data={popularityDistribution} />
-            )}
+            ) : null}
 
             {/* Genre Treemap + Centroid Radar o Outliers */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -115,39 +121,41 @@ export default function DiscoveryPage() {
                 <AudioRadar features={displayCentroid} title="Il tuo centro musicale" />
               )}
 
-              <div className="glow-card bg-surface rounded-xl p-5">
-                <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
-                  <Star size={18} className="text-amber-400" />
-                  {hasAudioFeatures ? 'Brani Outlier' : 'Hidden Gems'}
-                </h3>
-                <p className="text-text-muted text-xs mb-3">
-                  {hasAudioFeatures
-                    ? 'Brani che si discostano dal tuo profilo medio'
-                    : 'Brani meno conosciuti tra i tuoi preferiti'}
-                </p>
-                <StaggerContainer className="space-y-2">
-                  {outliers.slice(0, 8).map((track) => (
-                    <StaggerItem key={track.id}>
-                      <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
-                        {track.album_image ? (
-                          <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
-                            <Music size={16} className="text-text-muted" />
+              {outliers.length > 0 && (
+                <div className="glow-card bg-surface rounded-xl p-5">
+                  <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                    <Star size={18} className="text-amber-400" />
+                    {hasAudioFeatures ? 'Brani Outlier' : 'Hidden Gems'}
+                  </h3>
+                  <p className="text-text-muted text-xs mb-3">
+                    {hasAudioFeatures
+                      ? 'Brani che si discostano dal tuo profilo medio'
+                      : 'Brani meno conosciuti tra i tuoi preferiti'}
+                  </p>
+                  <StaggerContainer className="space-y-2">
+                    {outliers.slice(0, 8).map((track) => (
+                      <StaggerItem key={track.id}>
+                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
+                          {track.album_image ? (
+                            <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
+                              <Music size={16} className="text-text-muted" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-text-primary text-sm truncate">{track.name}</p>
+                            <p className="text-text-muted text-xs truncate">{track.artist}</p>
                           </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-text-primary text-sm truncate">{track.name}</p>
-                          <p className="text-text-muted text-xs truncate">{track.artist}</p>
+                          <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
+                            {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
+                          </span>
                         </div>
-                        <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
-                          {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
-                        </span>
-                      </div>
-                    </StaggerItem>
-                  ))}
-                </StaggerContainer>
-              </div>
+                      </StaggerItem>
+                    ))}
+                  </StaggerContainer>
+                </div>
+              )}
             </div>
 
             {/* Recommendations */}
@@ -188,11 +196,7 @@ export default function DiscoveryPage() {
                               Nuovo artista
                             </span>
                           )}
-                          {rec.similarity_score != null ? (
-                            <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                              {rec.similarity_score}% affine
-                            </span>
-                          ) : rec.popularity != null && (
+                          {rec.popularity != null && rec.popularity > 0 && (
                             <span className="text-[10px] text-text-muted">
                               Pop. {rec.popularity}
                             </span>

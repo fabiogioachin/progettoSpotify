@@ -1,8 +1,6 @@
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
@@ -13,7 +11,14 @@ import {
 import { FEATURE_COLORS, TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
 import { FEATURE_LABELS } from '../../lib/constants'
 
-export default function TrendTimeline({ trends, title = 'Trend Temporale', loading = false }) {
+const TEMPORAL_RANGES = [
+  { value: '7d', label: '7gg' },
+  { value: '30d', label: '30gg' },
+  { value: '90d', label: '3M' },
+  { value: 'all', label: 'Tutto' },
+]
+
+export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Temporale', loading = false, temporalRange, onTemporalRangeChange }) {
   if (loading) {
     return (
       <div className="glow-card bg-surface rounded-xl p-5 animate-pulse">
@@ -36,8 +41,8 @@ export default function TrendTimeline({ trends, title = 'Trend Temporale', loadi
     return <FeatureTrend trends={trends} title={title} />
   }
 
-  // Fallback: mostra popolarita' e artisti unici per periodo
-  return <PopularityTrend trends={trends} title={title} />
+  // Fallback: mostra tempo di ascolto giornaliero
+  return <ListeningTimeTrend dailyMinutes={dailyMinutes} temporalRange={temporalRange} onRangeChange={onTemporalRangeChange} />
 }
 
 function FeatureTrend({ trends, title }) {
@@ -99,56 +104,80 @@ function FeatureTrend({ trends, title }) {
   )
 }
 
-function PopularityTrend({ trends, title }) {
-  const data = trends.map((t) => ({
-    name: t.label,
-    popularity: t.popularity_avg || 0,
-    artists: t.unique_artists || 0,
-    tracks: t.track_count || 0,
+function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
+  if (!dailyMinutes || dailyMinutes.length === 0) {
+    return null
+  }
+
+  const data = dailyMinutes.map((d) => ({
+    date: new Date(d.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }),
+    minuti: d.minutes,
+    ascolti: d.plays,
   }))
 
-  const COLORS = {
-    popularity: '#6366f1',
-    artists: '#1DB954',
-    tracks: '#f59e0b',
-  }
-
-  const LABELS = {
-    popularity: 'Popolarità media',
-    artists: 'Artisti unici',
-    tracks: 'Brani analizzati',
-  }
+  const rangeLabel = { '7d': 'ultimi 7 giorni', '30d': 'ultimi 30 giorni', '90d': 'ultimi 3 mesi', 'all': 'tutto lo storico' }
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
-      <h3 className="text-text-primary font-display font-semibold mb-1">{title}</h3>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-text-primary font-display font-semibold">Tempo di Ascolto</h3>
+        {onRangeChange && (
+          <div className="flex gap-1">
+            {TEMPORAL_RANGES.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => onRangeChange(r.value)}
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                  temporalRange === r.value
+                    ? 'bg-accent text-white'
+                    : 'bg-surface-hover text-text-muted hover:text-text-primary'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <p className="text-text-muted text-xs mb-4">
-        Confronto tra periodi — popolarità, artisti e brani
+        Minuti ascoltati al giorno — {rangeLabel[temporalRange] || 'ultimi 30 giorni'}
       </p>
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+        <AreaChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <defs>
+            <linearGradient id="gradient-listening" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+            </linearGradient>
+          </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
-            dataKey="name"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            dataKey="date"
+            tick={{ fill: '#b3b3b3', fontSize: 11 }}
             axisLine={{ stroke: GRID_COLOR }}
+            interval="preserveStartEnd"
           />
           <YAxis
             tick={{ fill: '#b3b3b3', fontSize: 12 }}
             axisLine={{ stroke: GRID_COLOR }}
+            tickFormatter={(v) => `${Math.round(v)} min`}
           />
           <Tooltip
             {...TOOLTIP_STYLE}
-            formatter={(val, name) => [val, LABELS[name] || name]}
+            formatter={(val, name) => {
+              if (name === 'minuti') return [`${val} min`, 'Tempo']
+              return [val, 'Ascolti']
+            }}
           />
-          <Legend
-            formatter={(val) => LABELS[val] || val}
-            wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }}
+          <Area
+            type="monotone"
+            dataKey="minuti"
+            stroke="#6366f1"
+            fill="url(#gradient-listening)"
+            strokeWidth={2}
+            animationDuration={1500}
           />
-          <Bar dataKey="popularity" fill={COLORS.popularity} radius={[4, 4, 0, 0]} animationDuration={1500} />
-          <Bar dataKey="artists" fill={COLORS.artists} radius={[4, 4, 0, 0]} animationDuration={1500} />
-          <Bar dataKey="tracks" fill={COLORS.tracks} radius={[4, 4, 0, 0]} animationDuration={1500} />
-        </BarChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   )

@@ -137,7 +137,8 @@ Il semaphore globale in `SpotifyClient._request()` limita a 3 richieste Spotify 
 ### Dedup e cap artisti
 
 ```python
-from app.constants import ARTIST_GENRE_CAP  # = 50
+from app.constants import ARTIST_GENRE_CAP_TRENDS  # = 20 (for trends/dashboard)
+# or: from app.constants import ARTIST_GENRE_CAP_PLAYLIST  # = 50 (for playlist compare)
 
 # CORRETTO — dedup globale, fetch una volta sola, cap da costante
 all_artist_ids = set()
@@ -146,7 +147,7 @@ for playlist_tracks in all_tracks:
         for artist in track.get("artists", []):
             all_artist_ids.add(artist["id"])
 
-capped_ids = list(all_artist_ids)[:ARTIST_GENRE_CAP]
+capped_ids = list(all_artist_ids)[:ARTIST_GENRE_CAP_TRENDS]
 artist_data = await gather_in_chunks(
     [fetch_artist(aid) for aid in capped_ids], chunk_size=4
 )

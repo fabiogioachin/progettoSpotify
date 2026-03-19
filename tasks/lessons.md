@@ -3,6 +3,12 @@
 ## Active
 Lessons that affect future tasks. Target: under 15 entries.
 
+### 2026-03-19 — [codebase] Never add background API calls without budget verification
+**Context**: Added `fire_bg_enrich` — a background task that called `GET /tracks/{id}` ×15 after a 35s delay to populate popularity cache.
+**What happened**: The 35s delay wasn't enough. User navigation filled the budget again. The background task triggered a 429 with `retry_after=40445s` (11 hours of cooldown).
+**Root cause**: Added API calls without counting the real budget impact. A rolling 30s window means a fixed delay doesn't guarantee availability — any user action during the delay refills the window.
+**Action**: Never add ANY Spotify API call (even background/deferred) without explicit budget accounting in the `spotify-api-budget` skill. If an endpoint's data isn't available in dev mode, accept it and hide the feature — don't try to work around it with extra API calls.
+
 ### 2026-03-18 — [codebase] NaN from numpy/sklearn crashes JSON serialization
 **Context**: `GET /api/profile` returned 500 — `ValueError: Out of range float values are not JSON compliant: nan`
 **What happened**: PCA, StandardScaler, NetworkX PageRank/betweenness, and cosine similarity can produce NaN/inf when input data has zero variance or edge cases. Python's `json.dumps` rejects non-finite floats.

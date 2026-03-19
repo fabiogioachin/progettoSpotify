@@ -90,8 +90,21 @@ async def lifespan(app: FastAPI):
     logger.info("APScheduler arrestato")
 
 
+def _compute_window_reset() -> float:
+    """Seconds until the oldest in-window call exits the sliding window.
+
+    Returns 0 when no calls are in the window.
+    """
+    now = time.monotonic()
+    window_size = SpotifyClient._WINDOW_SIZE
+    for t in SpotifyClient._call_timestamps:
+        if t > now - window_size:
+            return max(0, round(t + window_size - now, 1))
+    return 0
+
+
 class RateLimitHeaderMiddleware(BaseHTTPMiddleware):
-    """Inject X-RateLimit-Usage header into every /api/ response."""
+    """Inject X-RateLimit-Usage and X-RateLimit-Reset headers into every /api/ response."""
 
     async def dispatch(self, request, call_next):
         response = await call_next(request)
@@ -104,6 +117,7 @@ class RateLimitHeaderMiddleware(BaseHTTPMiddleware):
             )
             max_calls = SpotifyClient._MAX_CALLS_PER_WINDOW
             response.headers["X-RateLimit-Usage"] = f"{current}/{max_calls}"
+            response.headers["X-RateLimit-Reset"] = str(_compute_window_reset())
         return response
 
 
@@ -174,7 +188,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
-    expose_headers=["X-RateLimit-Usage"],
+    expose_headers=["X-RateLimit-Usage", "X-RateLimit-Reset"],
 )
 
 # Rate limit usage header (runs inside CORS — added after CORSMiddleware)
@@ -234,4 +248,5 @@ async def rate_limit_status():
         "window_seconds": SpotifyClient._WINDOW_SIZE,
         "usage_pct": round(current / max_calls * 100, 1) if max_calls else 0,
         "cooldown_remaining": round(cooldown_remaining, 1),
+        "window_reset_seconds": _compute_window_reset(),
     }

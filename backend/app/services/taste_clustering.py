@@ -157,7 +157,17 @@ def name_clusters(labels: dict[str, int], artists: list[dict]) -> dict[int, str]
                     cluster_genres.append(ng)
 
         if not cluster_genres:
-            result[cid] = f"Cerchia {cid + 1}"
+            # Fallback: use the most popular artist's name in this cluster
+            cluster_artists = [
+                artist_map.get(aid) for aid in aids if artist_map.get(aid)
+            ]
+            if cluster_artists:
+                best_artist = max(cluster_artists, key=lambda a: a.get("popularity", 0))
+                result[cid] = (
+                    f"Cerchia di {best_artist.get('name', f'Cerchia {cid + 1}')}"
+                )
+            else:
+                result[cid] = f"Cerchia {cid + 1}"
             continue
 
         total_cluster_genres = len(cluster_genres)

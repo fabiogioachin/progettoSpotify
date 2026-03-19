@@ -15,8 +15,9 @@ api.interceptors.response.use(
     if (usage) {
       const [current, max] = usage.split('/').map(Number)
       if (!isNaN(current) && !isNaN(max)) {
+        const resetHeader = response.headers['x-ratelimit-reset']
         window.dispatchEvent(new CustomEvent('api:usage', {
-          detail: { current, max, pct: Math.round(current / max * 100) }
+          detail: { current, max, pct: Math.round(current / max * 100), reset: parseFloat(resetHeader) || 0 }
         }))
       }
     }

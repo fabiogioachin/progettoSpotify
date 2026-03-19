@@ -7,6 +7,18 @@ import pytest
 from app.services.discovery import discover
 
 
+# Patch globale: popularity cache è testata separatamente
+_noop_cache = patch(
+    "app.services.discovery.read_popularity_cache", new_callable=AsyncMock, return_value=0
+)
+
+
+@pytest.fixture(autouse=True)
+def _patch_popularity():
+    with _noop_cache:
+        yield
+
+
 def _make_track(tid: str, name: str, artist: str, popularity: int = 50) -> dict:
     return {
         "id": tid,

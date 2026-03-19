@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import KPICard from '../components/cards/KPICard'
 import ListeningHeatmap from '../components/charts/ListeningHeatmap'
@@ -7,8 +8,16 @@ import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { Headphones, Calendar, RefreshCw, TrendingUp } from 'lucide-react'
 
+const TEMPORAL_RANGES = [
+  { value: '7d', label: '7gg' },
+  { value: '30d', label: '30gg' },
+  { value: '90d', label: '3M' },
+  { value: 'all', label: 'Tutto' },
+]
+
 export default function TemporalPage() {
-  const { data, loading, error, refetch } = useSpotifyData('/api/temporal')
+  const [range, setRange] = useState('30d')
+  const { data, loading, error, refetch } = useSpotifyData('/api/temporal', { range })
 
   const heatmap = data?.heatmap || {}
   const sessions = data?.sessions || {}
@@ -30,9 +39,26 @@ export default function TemporalPage() {
             <h1 className="text-2xl font-display font-bold text-text-primary">Pattern Temporali</h1>
             <p className="text-text-secondary text-sm mt-1">Quando e come ascolti la tua musica</p>
           </div>
-          <button onClick={() => refetch()} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300" title="Aggiorna">
-            <RefreshCw size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {TEMPORAL_RANGES.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => setRange(r.value)}
+                  className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                    range === r.value
+                      ? 'bg-accent text-white'
+                      : 'bg-surface-hover text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => refetch()} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300" title="Aggiorna">
+              <RefreshCw size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Data source info */}

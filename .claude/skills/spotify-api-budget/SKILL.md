@@ -76,10 +76,10 @@ Count every Spotify API call. Each endpoint must stay under budget.
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
 | `get_top_tracks(short/medium/long)` | 3 | 5 min | 0-3 |
-| `get_artist` × 50 (deduped, cross-user 1h) | 50 | **1 hour** | **0-50** |
-| **Total worst-case** | **53** | | **0-53** |
+| `get_artist` × 20 (deduped, cross-user 1h) | 20 | **1 hour** | **0-20** |
+| **Total worst-case** | **23** | | **0-23** |
 
-Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, deduplicates, caps at `ARTIST_GENRE_CAP` (50) globally, and fetches genres in a single pass. Cross-user artist cache makes subsequent users' calls nearly free.
+Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, deduplicates, caps at `ARTIST_GENRE_CAP_TRENDS` (20) globally, and fetches genres in a single pass. Playlist comparison uses separate `ARTIST_GENRE_CAP_PLAYLIST` (50) for better genre coverage. Cross-user artist cache makes subsequent users' calls nearly free.
 
 ### Discovery (`GET /api/analytics/discovery`)
 
@@ -159,12 +159,12 @@ Frontend sends full track objects in POST body. Backend uses librosa on preview 
 
 All caches empty, first visit of the day:
 1. Auth: `get_me()` — 1 call
-2. Dashboard load: up to 7 calls
-3. Profile navigation: up to 5 calls (some cached from dashboard)
-4. Trends: up to 20 artist calls (cross-user cache makes 2nd user ~0)
+2. Dashboard load: up to 4 calls (library/top + temporal + trends overhead)
+3. Trends: up to 20 artist calls (ARTIST_GENRE_CAP_TRENDS=20, cross-user cache makes 2nd user ~0)
+4. Profile navigation: up to 5 calls (some cached from dashboard)
 5. Background snapshot: 0 calls (cached from dashboard)
 6. Audio analysis: 0 calls (frontend passes track data)
-7. **Total: ~10-33 unique calls** (cachetools deduplicates the rest)
+7. **Total: ~10-25 unique calls** (cachetools deduplicates the rest)
 
 With caches warm (typical navigation): **0-5 calls** per page visit.
 
@@ -208,7 +208,7 @@ Animated countdown on 429 with `throttled: true`. Auto-retries after countdown.
 
 ### 8. Background Job Early Break on RateLimitError
 
-### 9. Dedup + Cap (20 artists per endpoint invocation)
+### 9. Dedup + Cap (ARTIST_GENRE_CAP_TRENDS=20 for trends, ARTIST_GENRE_CAP_PLAYLIST=50 for playlist compare)
 
 ## Rules for Adding New API Calls
 

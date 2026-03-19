@@ -132,7 +132,7 @@ class TestNameClusters:
         artists = [_make_artist("a1", "No Genre", [], 50, 1000)]
         labels = {"a1": 0}
         names = name_clusters(labels, artists)
-        assert names[0] == "Cerchia 1"
+        assert names[0] == "Cerchia di No Genre"
 
     def test_names_are_title_cased(self, sample_artists):
         labels = {"a1": 0, "a4": 0}

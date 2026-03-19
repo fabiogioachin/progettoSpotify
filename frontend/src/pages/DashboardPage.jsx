@@ -21,16 +21,17 @@ export default function DashboardPage() {
   )
 
   const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/analytics/trends')
-  const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/temporal')
-  const { data: featuresData, loading: featuresLoading, error: featuresError } = useSpotifyData(
-    '/api/analytics/features',
-    { time_range: period }
-  )
+  const [temporalRange, setTemporalRange] = useState('30d')
+  const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/temporal', { range: temporalRange })
 
   const tracks = topData?.tracks || []
-  const features = featuresData?.features || {}
-  const genres = featuresData?.genres || {}
   const trends = trendsData?.current || []
+
+  // Extract features/genres from trends for the selected period (avoids a separate API call)
+  const periodProfile = trends.find(t => t.period === period)
+  const features = periodProfile?.features || {}
+  const genres = periodProfile?.genres || {}
+  const featuresLoading = trendsLoading
 
   // Audio analysis: trigger when no cached features but tracks exist
   const hasFeatures = Object.keys(features).length > 0
@@ -40,7 +41,7 @@ export default function DashboardPage() {
     features: analysisFeatures,
     progress: analysisProgress,
     isAnalyzing,
-  } = useAudioAnalysis(tracks, !hasFeatures && tracks.length > 0 && !featuresLoading)
+  } = useAudioAnalysis(tracks, !hasFeatures && tracks.length > 0 && !trendsLoading)
 
   // Compute features to display: cached features OR computed from analysis results
   const displayFeatures = (() => {
@@ -62,7 +63,7 @@ export default function DashboardPage() {
   const streak = temporalData?.streak?.max_streak || 0
 
   // Artisti unici: preferisci backend, fallback dal conteggio tracks
-  let uniqueArtists = featuresData?.unique_artists || 0
+  let uniqueArtists = periodProfile?.unique_artists || 0
   if (uniqueArtists === 0 && tracks.length > 0) {
     const artistNames = new Set()
     tracks.forEach(t => {
@@ -75,7 +76,7 @@ export default function DashboardPage() {
   const topGenre = Object.keys(genres)[0] || null
   const topGenrePct = Object.values(genres)[0] || 0
 
-  const hasError = topError || trendsError || featuresError
+  const hasError = topError || trendsError
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -153,7 +154,12 @@ export default function DashboardPage() {
       {trendsLoading ? (
         <SkeletonCard height="h-48" />
       ) : (
-        <TrendTimeline trends={trends} />
+        <TrendTimeline
+          trends={trends}
+          dailyMinutes={temporalData?.daily_minutes}
+          temporalRange={temporalRange}
+          onTemporalRangeChange={setTemporalRange}
+        />
       )}
 
       {/* Radar + Top Tracks — 2 columns, each independent */}

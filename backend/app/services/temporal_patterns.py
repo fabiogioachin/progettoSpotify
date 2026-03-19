@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.listening_history import RecentPlay
+from app.models.listening_history import DailyListeningStats, RecentPlay
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import retry_with_backoff
 
@@ -21,7 +21,10 @@ DAY_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
 
 
 async def compute_temporal_patterns(
-    client: SpotifyClient, db: AsyncSession = None, user_id: int = None
+    client: SpotifyClient,
+    db: AsyncSession = None,
+    user_id: int = None,
+    days: int = 30,
 ) -> dict:
     """Analizza i pattern temporali dai brani ascoltati di recente.
 
@@ -72,6 +75,20 @@ async def compute_temporal_patterns(
                 len(plays),
                 len(api_plays),
             )
+
+    # Filter plays by time range
+    cutoff = (
+        datetime.now(
+            plays[0]["datetime"].tzinfo
+            if plays and plays[0]["datetime"].tzinfo
+            else None
+        )
+        - timedelta(days=days)
+        if plays
+        else None
+    )
+    if cutoff:
+        plays = [p for p in plays if p["datetime"] >= cutoff]
 
     if not plays:
         return _empty_result()
@@ -150,6 +167,11 @@ async def compute_temporal_patterns(
     top_tracks = sorted(track_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     top_tracks_list = [{"name": name, "count": count} for name, count in top_tracks]
 
+    # Daily listening minutes
+    daily_minutes = []
+    if db and user_id:
+        daily_minutes = await _compute_daily_minutes(db, user_id, plays, days=days)
+
     return {
         "heatmap": {
             "data": heatmap,
@@ -181,6 +203,7 @@ async def compute_temporal_patterns(
         "total_plays": len(plays),
         "accumulated": len(plays) > len(api_plays),
         "new_plays_stored": stored_count,
+        "daily_minutes": daily_minutes,
     }
 
 
@@ -291,4 +314,58 @@ def _empty_result():
         "total_plays": 0,
         "accumulated": False,
         "new_plays_stored": 0,
+        "daily_minutes": [],
     }
+
+
+async def _compute_daily_minutes(
+    db: AsyncSession, user_id: int, plays: list[dict], days: int = 30
+) -> list[dict]:
+    """Calcola i minuti di ascolto giornalieri.
+
+    Priorità: DailyListeningStats (pre-aggregato) > fallback da plays in-memory.
+    """
+    today = datetime.now().date()
+    start_date = today - timedelta(days=days)
+
+    # Prova prima DailyListeningStats (pre-aggregato dal background job)
+    result = await db.execute(
+        select(DailyListeningStats)
+        .where(
+            DailyListeningStats.user_id == user_id,
+            DailyListeningStats.date >= start_date,
+        )
+        .order_by(DailyListeningStats.date.asc())
+    )
+    stats = result.scalars().all()
+
+    if stats:
+        return [
+            {
+                "date": s.date.isoformat(),
+                "minutes": round((s.total_duration_ms or 0) / 60000, 1),
+                "plays": s.total_plays or 0,
+            }
+            for s in stats
+        ]
+
+    # Fallback: aggrega dai plays in-memory (per utenti nuovi senza background job)
+    if not plays:
+        return []
+
+    daily_ms: dict[str, int] = defaultdict(int)
+    daily_count: dict[str, int] = defaultdict(int)
+    for p in plays:
+        day_str = p["datetime"].date().isoformat()
+        daily_ms[day_str] += p.get("duration_ms", 0)
+        daily_count[day_str] += 1
+
+    return [
+        {
+            "date": day,
+            "minutes": round(ms / 60000, 1),
+            "plays": daily_count[day],
+        }
+        for day, ms in sorted(daily_ms.items())
+        if datetime.fromisoformat(day).date() >= start_date
+    ]

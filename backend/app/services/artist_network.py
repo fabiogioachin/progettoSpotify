@@ -105,34 +105,50 @@ async def build_artist_network(
 
     for i, aid_a in enumerate(artist_ids):
         genres_a = nodes[aid_a]["genres"]
-        if not genres_a:
-            continue
         for aid_b in artist_ids[i + 1 :]:
             genres_b = nodes[aid_b]["genres"]
-            if not genres_b:
-                continue
-            similarity = compute_genre_similarity(genres_a, genres_b)
-            if similarity > 0.15:  # threshold for edge creation
-                edge_key = tuple(sorted([aid_a, aid_b]))
-                if edge_key not in seen_edges:
-                    seen_edges.add(edge_key)
-                    # Compute shared genres for tooltip display
-                    shared_genres = []
-                    for ga in genres_a:
-                        norm_a = normalize_genre(ga)
-                        for gb in genres_b:
-                            norm_b = normalize_genre(gb)
-                            if norm_a == norm_b:
-                                shared_genres.append(ga)
-                                break
-                    edges.append(
-                        {
-                            "source": aid_a,
-                            "target": aid_b,
-                            "weight": round(similarity, 3),
-                            "shared_genres": shared_genres[:3],
-                        }
-                    )
+
+            # Genre-based similarity (primary)
+            if genres_a and genres_b:
+                similarity = compute_genre_similarity(genres_a, genres_b)
+                if similarity > 0.15:
+                    edge_key = tuple(sorted([aid_a, aid_b]))
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        shared_genres = []
+                        for ga in genres_a:
+                            norm_a = normalize_genre(ga)
+                            for gb in genres_b:
+                                norm_b = normalize_genre(gb)
+                                if norm_a == norm_b:
+                                    shared_genres.append(ga)
+                                    break
+                        edges.append(
+                            {
+                                "source": aid_a,
+                                "target": aid_b,
+                                "weight": round(similarity, 3),
+                                "shared_genres": shared_genres[:3],
+                            }
+                        )
+            elif not genres_a or not genres_b:
+                # Fallback: popularity proximity (connect artists with similar popularity)
+                pop_a = nodes[aid_a].get("popularity", 0)
+                pop_b = nodes[aid_b].get("popularity", 0)
+                pop_diff = abs(pop_a - pop_b)
+                if pop_diff <= 15 and (pop_a > 0 or pop_b > 0):
+                    edge_key = tuple(sorted([aid_a, aid_b]))
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        weight = round(1.0 - pop_diff / 100, 3)
+                        edges.append(
+                            {
+                                "source": aid_a,
+                                "target": aid_b,
+                                "weight": max(weight, 0.1),
+                                "shared_genres": [],
+                            }
+                        )
 
     # Build NetworkX graph
     G = nx.Graph()
@@ -243,7 +259,16 @@ async def build_artist_network(
                 top_genre = max(genres, key=genres.get)
                 cluster_names[cid] = top_genre.replace("-", " ").title()
             else:
-                cluster_names[cid] = f"Cerchia {cid + 1}"
+                # Fallback: use most popular artist name in cluster
+                cluster_aids = [aid for aid, c in louvain_labels.items() if c == cid]
+                cluster_nodes = [nodes[aid] for aid in cluster_aids if aid in nodes]
+                if cluster_nodes:
+                    best = max(cluster_nodes, key=lambda n: n.get("popularity", 0))
+                    cluster_names[cid] = (
+                        f"Cerchia di {best.get('name', f'Cerchia {cid + 1}')}"
+                    )
+                else:
+                    cluster_names[cid] = f"Cerchia {cid + 1}"
 
     # Genre summary
     genre_counter = defaultdict(int)

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.constants import ARTIST_GENRE_CAP
+from app.constants import ARTIST_GENRE_CAP_TRENDS
 from app.services.audio_analyzer import _extract_genres
 from app.services.spotify_client import _validate_spotify_id
 
@@ -203,8 +203,8 @@ class TestExtractGenres:
 
     @pytest.mark.asyncio
     async def test_genre_cap_matches_constant(self):
-        """With more artists than ARTIST_GENRE_CAP, only the cap is fetched."""
-        n = ARTIST_GENRE_CAP + 10  # more than the cap
+        """With more artists than ARTIST_GENRE_CAP_TRENDS, only the cap is fetched."""
+        n = ARTIST_GENRE_CAP_TRENDS + 10  # more than the cap
         tracks = [
             {
                 "id": f"t{str(i).zfill(14)}",
@@ -228,14 +228,14 @@ class TestExtractGenres:
         ):
             await _extract_genres(client, tracks)
 
-        assert fetch_call_count == ARTIST_GENRE_CAP, (
-            f"Expected exactly {ARTIST_GENRE_CAP} artist fetches, got {fetch_call_count}"
+        assert fetch_call_count == ARTIST_GENRE_CAP_TRENDS, (
+            f"Expected exactly {ARTIST_GENRE_CAP_TRENDS} artist fetches, got {fetch_call_count}"
         )
 
     @pytest.mark.asyncio
     async def test_all_artists_fetched_when_below_cap(self):
-        """With fewer artists than ARTIST_GENRE_CAP, all are fetched."""
-        n = ARTIST_GENRE_CAP - 20  # below the cap
+        """With fewer artists than ARTIST_GENRE_CAP_TRENDS, all are fetched."""
+        n = ARTIST_GENRE_CAP_TRENDS - 5  # below the cap
         tracks = [
             {
                 "id": f"t{str(i).zfill(14)}",
@@ -448,3 +448,86 @@ class TestTrackCountFallback:
             await client.get("/playlists/any")
 
         client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_track_count_fallback_uses_get_playlist_items_total(self):
+        """_fetch_playlist_meta calls get_playlist_items(id, limit=1) and
+        reads the 'total' field to fix track_count=0."""
+
+        async def _passthrough_retry(fn, *args, **kwargs):
+            return await fn(*args, **kwargs)
+
+        async def _passthrough_gather(coros, chunk_size=5):
+            results = []
+            for coro in coros:
+                results.append(await coro)
+            return results
+
+        client = _make_client()
+
+        # get_playlists returns one playlist with track_count=0
+        client.get.return_value = {
+            "items": [
+                {
+                    "id": "pid1111111111111",
+                    "name": "Empty Count",
+                    "description": "",
+                    "images": [],
+                    "tracks": {"total": 0},
+                    "owner": {"id": "owner123", "display_name": "Me"},
+                }
+            ],
+            "total": 1,
+        }
+
+        # get_playlist_items returns total=42
+        client.get_playlist_items = AsyncMock(
+            return_value={"total": 42, "items": [{"track": {"id": "t" * 15}}]}
+        )
+
+        # Mock get_playlists on the client
+        client.get_playlists = AsyncMock(
+            return_value={
+                "items": [
+                    {
+                        "id": "pid1111111111111",
+                        "name": "Empty Count",
+                        "description": "",
+                        "images": [],
+                        "tracks": {"total": 0},
+                        "owner": {"id": "owner123", "display_name": "Me"},
+                    }
+                ],
+                "total": 1,
+            }
+        )
+
+        # Mock the DB query for user
+        mock_result = MagicMock()
+        mock_user = MagicMock()
+        mock_user.spotify_id = "owner123"
+        mock_result.scalar_one_or_none.return_value = mock_user
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with (
+            patch("app.routers.playlists.SpotifyClient", return_value=client),
+            patch("app.routers.playlists.retry_with_backoff", _passthrough_retry),
+            patch("app.routers.playlists.gather_in_chunks", _passthrough_gather),
+        ):
+            from app.routers.playlists import get_playlists
+
+            mock_request = MagicMock()
+            result = await get_playlists(
+                request=mock_request,
+                limit=50,
+                offset=0,
+                user_id=1,
+                db=mock_db,
+            )
+
+        # The playlist should now have track_count=42 from the fallback
+        assert result["playlists"][0]["track_count"] == 42
+        client.get_playlist_items.assert_called_once_with(
+            "pid1111111111111", limit=1, offset=0
+        )
