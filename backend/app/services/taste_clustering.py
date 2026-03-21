@@ -241,6 +241,7 @@ def rank_within_cluster(
                     "id": aid,
                     "name": a.get("name", ""),
                     "image": a.get("image", None),
+                    "genres": a.get("genres", []),
                     "score": round(score, 4),
                     "rank": 0,  # placeholder, set after sort
                 }

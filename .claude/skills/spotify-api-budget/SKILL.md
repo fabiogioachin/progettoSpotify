@@ -141,7 +141,7 @@ Note: Export no longer calls `compute_profile` separately — extracts profile f
 
 | Job | Frequency | Calls/user | Max users |
 |-----|-----------|------------|-----------|
-| `sync_recent_plays` | Every 60 min | 1 (`get_recently_played`) | 5 |
+| `sync_recent_plays` | Every 60 min | 1 (`get_recently_played`) + upsert TrackPopularity (DB only) | 5 |
 | `save_daily_snapshot` | 1x/day (first login) | 2 (`get_top_artists` + `get_top_tracks`) | 5 |
 | `compute_daily_aggregates` | 02:00 daily | 0 (DB only) | 5 |
 

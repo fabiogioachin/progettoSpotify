@@ -144,7 +144,7 @@ export default function TasteEvolutionPage() {
             {/* Historical Yearly Section */}
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
-                <Calendar size={18} className="text-spotify" />
+                <Calendar size={18} className="text-accent" />
                 Il Tuo Viaggio Musicale
                 {years.length > 0 && (
                   <span className="text-text-muted text-xs font-normal ml-auto">{years.length} anni</span>
@@ -173,7 +173,7 @@ export default function TasteEvolutionPage() {
                         onClick={() => setExpandedYear(expandedYear === y.year ? null : y.year)}
                         className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
                           expandedYear === y.year
-                            ? 'bg-spotify text-white'
+                            ? 'bg-accent text-white'
                             : 'bg-surface-hover text-text-secondary hover:text-text-primary'
                         }`}
                       >

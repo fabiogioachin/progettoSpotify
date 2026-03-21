@@ -1,9 +1,11 @@
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import KPICard from '../components/cards/KPICard'
 import ArtistNetwork from '../components/charts/ArtistNetwork'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
-import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music, AlertTriangle } from 'lucide-react'
+import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 
 export default function ArtistNetworkPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/artist-network')
@@ -136,45 +138,130 @@ export default function ArtistNetworkPage() {
               </div>
             )}
 
-            {/* Top per Cerchia */}
+            {/* Le tue Cerchie */}
             {Object.keys(clusterRankings).length > 0 && (
-              <div className="glow-card bg-surface rounded-xl p-5">
-                <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
-                  <Users size={18} className="text-accent" />
-                  Top per Cerchia
-                </h3>
-                <p className="text-text-secondary text-sm mb-4">
-                  L'artista più influente in ciascuna cerchia del tuo ecosistema
-                </p>
-                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {Object.entries(clusterRankings).map(([clusterId, artists]) => {
-                    const topArtist = artists[0]
-                    if (!topArtist) return null
-                    const cName = clusterNames[clusterId] || `Cerchia ${Number(clusterId) + 1}`
-                    return (
-                      <StaggerItem key={clusterId}>
-                        <div className="flex items-start gap-3 p-3 rounded-lg bg-surface-hover">
-                          {topArtist.image ? (
-                            <img src={topArtist.image} alt={topArtist.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
-                          ) : (
-                            <div className="w-12 h-12 rounded-full bg-background flex items-center justify-center flex-shrink-0">
-                              <Users size={18} className="text-text-muted" />
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-text-primary text-sm font-medium truncate">{topArtist.name}</p>
-                            <p className="text-accent text-xs">{cName}</p>
-                            <p className="text-text-muted text-[10px]">Score: {Math.round(topArtist.score * 100)}%</p>
-                          </div>
-                        </div>
-                      </StaggerItem>
-                    )
-                  })}
-                </StaggerContainer>
-              </div>
+              <CerchieSection clusterRankings={clusterRankings} clusterNames={clusterNames} />
             )}
           </>
         )}
       </main>
+  )
+}
+
+const CLUSTER_COLORS = [
+  '#6366f1', '#1DB954', '#f59e0b', '#ec4899', '#06b6d4',
+  '#8b5cf6', '#ef4444', '#10b981', '#f97316', '#14b8a6',
+]
+
+function CerchieSection({ clusterRankings, clusterNames }) {
+  const sortedEntries = Object.entries(clusterRankings)
+    .filter(([, artists]) => artists.length > 0)
+    .sort((a, b) => b[1].length - a[1].length)
+
+  const [expanded, setExpanded] = useState(() => {
+    const initial = {}
+    sortedEntries.slice(0, 3).forEach(([id]) => { initial[id] = true })
+    return initial
+  })
+
+  const toggle = (id) => {
+    setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-text-primary font-display font-semibold text-lg flex items-center gap-2">
+          <Users size={20} className="text-accent" />
+          Le tue Cerchie
+        </h3>
+        <p className="text-text-secondary text-sm mt-1">
+          Tutti gli artisti raggruppati per cerchia musicale
+        </p>
+      </div>
+      <StaggerContainer className="space-y-3">
+        {sortedEntries.map(([clusterId, artists]) => {
+          const cName = clusterNames[clusterId] || `Cerchia ${Number(clusterId) + 1}`
+          const color = CLUSTER_COLORS[Number(clusterId) % CLUSTER_COLORS.length]
+          const isOpen = !!expanded[clusterId]
+
+          return (
+            <StaggerItem key={clusterId}>
+              <div className="glow-card bg-surface rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggle(clusterId)}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-hover transition-colors duration-200"
+                  aria-expanded={isOpen}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    <span className="text-text-primary font-display font-semibold text-sm">{cName}</span>
+                    <span className="text-text-muted text-xs">({artists.length} artisti)</span>
+                  </div>
+                  {isOpen ? (
+                    <ChevronUp size={16} className="text-text-muted" />
+                  ) : (
+                    <ChevronDown size={16} className="text-text-muted" />
+                  )}
+                </button>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-5 pb-4 space-y-2">
+                        {artists.map((artist) => (
+                          <div
+                            key={artist.name}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-colors duration-200"
+                          >
+                            {artist.image ? (
+                              <img
+                                src={artist.image}
+                                alt={artist.name}
+                                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center flex-shrink-0">
+                                <Users size={14} className="text-text-muted" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-text-primary text-sm font-medium truncate">{artist.name}</p>
+                                <span className="text-text-muted text-xs flex-shrink-0">
+                                  {Math.round(artist.score * 100)}%
+                                </span>
+                              </div>
+                              {artist.genres && artist.genres.length > 0 && (
+                                <p className="text-text-muted text-[10px] truncate">{artist.genres.join(', ')}</p>
+                              )}
+                              <div className="w-full h-1 bg-background rounded-full overflow-hidden mt-1">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${Math.round(artist.score * 100)}%`,
+                                    backgroundColor: color,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </StaggerItem>
+          )
+        })}
+      </StaggerContainer>
+    </div>
   )
 }

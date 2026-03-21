@@ -23,6 +23,8 @@ async def init_db():
         # Safe column additions for existing tables (idempotent)
         for stmt in [
             "ALTER TABLE recent_plays ADD COLUMN artist_spotify_id VARCHAR(64)",
+            "ALTER TABLE daily_listening_stats ADD COLUMN peak_hour INTEGER",
+            "ALTER TABLE daily_listening_stats ADD COLUMN top_artist VARCHAR(500)",
         ]:
             try:
                 await conn.execute(text(stmt))

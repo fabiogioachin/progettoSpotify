@@ -5,13 +5,15 @@ Eseguiti da APScheduler nel lifespan di FastAPI.
 
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session
 from app.models.listening_history import RecentPlay, UserSnapshot
+from app.models.track import TrackPopularity
 from app.models.user import SpotifyToken, User
 from app.services.profile_metrics import compute_daily_stats
 from app.services.spotify_client import SpotifyClient
@@ -115,6 +117,40 @@ async def _sync_user_recent_plays(db: AsyncSession, user_id: int):
                 "Background sync: user_id=%d — %d nuovi ascolti salvati",
                 user_id,
                 stored,
+            )
+
+        # Upsert track popularity from recently-played response (zero extra API calls)
+        now_utc = datetime.now(timezone.utc)
+        pop_count = 0
+        for item in items:
+            track = item.get("track", {})
+            track_id = track.get("id", "")
+            popularity = track.get("popularity")
+            if not track_id or popularity is None or popularity == 0:
+                continue
+            stmt = (
+                sqlite_insert(TrackPopularity)
+                .values(
+                    track_spotify_id=track_id,
+                    popularity=popularity,
+                    cached_at=now_utc,
+                )
+                .on_conflict_do_update(
+                    index_elements=["track_spotify_id"],
+                    set_={
+                        "popularity": popularity,
+                        "cached_at": now_utc,
+                    },
+                )
+            )
+            await db.execute(stmt)
+            pop_count += 1
+        if pop_count > 0:
+            await db.commit()
+            logger.info(
+                "Background sync: user_id=%d — %d popularity aggiornate",
+                user_id,
+                pop_count,
             )
     finally:
         await client.close()

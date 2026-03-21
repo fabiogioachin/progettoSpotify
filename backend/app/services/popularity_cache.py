@@ -28,7 +28,7 @@ async def read_popularity_cache(
     needs_pop: dict[str, list[dict]] = {}
     for t in tracks:
         tid = t.get("id")
-        if tid and not t.get("popularity"):
+        if tid and t.get("popularity") is None:
             needs_pop.setdefault(tid, []).append(t)
 
     if not needs_pop:

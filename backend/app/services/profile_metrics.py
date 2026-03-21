@@ -17,6 +17,7 @@ from app.models.listening_history import (
     UserProfileMetrics,
     UserSnapshot,
 )
+from app.models.track import TrackPopularity
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
@@ -253,8 +254,24 @@ async def compute_daily_stats(
     # Top genre: would need artist genre lookup, skip for now
     top_genre = None
 
-    # Average popularity not available from RecentPlay
-    avg_popularity = None
+    # Average popularity from TrackPopularity cache
+    track_ids = list(set(p.track_spotify_id for p in plays))
+    pop_result = await db.execute(
+        select(func.avg(TrackPopularity.popularity)).where(
+            TrackPopularity.track_spotify_id.in_(track_ids),
+            TrackPopularity.popularity > 0,
+        )
+    )
+    avg_pop = pop_result.scalar()
+    avg_popularity = round(avg_pop, 1) if avg_pop is not None else None
+
+    # Peak listening hour
+    hour_counter = Counter(p.played_at.hour for p in plays)
+    peak_hour = hour_counter.most_common(1)[0][0] if hour_counter else None
+
+    # Top artist by play count
+    artist_counter = Counter(p.artist_name for p in plays if p.artist_name)
+    top_artist = artist_counter.most_common(1)[0][0] if artist_counter else None
 
     # New artists/tracks: compare with all previous days
     prev_result = await db.execute(
@@ -292,6 +309,8 @@ async def compute_daily_stats(
         "avg_popularity": avg_popularity,
         "new_artists_count": new_artists_count,
         "new_tracks_count": new_tracks_count,
+        "peak_hour": peak_hour,
+        "top_artist": top_artist,
     }
 
     if existing:
@@ -326,6 +345,45 @@ async def get_recent_daily_stats(
             "total_duration_ms": r.total_duration_ms,
             "new_artists_count": r.new_artists_count,
             "new_tracks_count": r.new_tracks_count,
+            "peak_hour": r.peak_hour,
+            "top_artist": getattr(r, "top_artist", None),
+            "avg_popularity": r.avg_popularity,
+            "top_genre": r.top_genre,
         }
         for r in rows
     ]
+
+
+async def backfill_daily_stats(db: AsyncSession, user_id: int) -> int:
+    """Backfill daily_listening_stats for all dates with RecentPlay data but no stats."""
+    # Get dates with plays
+    play_dates_result = await db.execute(
+        select(func.date(RecentPlay.played_at).label("d"))
+        .where(RecentPlay.user_id == user_id)
+        .group_by(func.date(RecentPlay.played_at))
+    )
+    play_dates = set(str(row[0]) for row in play_dates_result.all())
+
+    # Get dates already computed
+    stats_dates_result = await db.execute(
+        select(DailyListeningStats.date).where(
+            DailyListeningStats.user_id == user_id
+        )
+    )
+    stats_dates = set(str(row[0]) for row in stats_dates_result.all())
+
+    # Compute missing dates
+    missing = play_dates - stats_dates
+    if not missing:
+        return 0
+
+    for d in sorted(missing):
+        target = date.fromisoformat(d) if isinstance(d, str) else d
+        await compute_daily_stats(db, user_id, target)
+
+    logger.info(
+        "Backfill daily stats: user_id=%d — %d date elaborate",
+        user_id,
+        len(missing),
+    )
+    return len(missing)

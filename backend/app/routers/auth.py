@@ -11,14 +11,16 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db
+from app.database import async_session, get_db
 from app.dependencies import get_session_user_id
+from app.models.listening_history import RecentPlay, UserSnapshot
 from app.models.user import SpotifyToken, User
-from app.services.background_tasks import save_daily_snapshot
+from app.services.background_tasks import save_daily_snapshot, _sync_user_recent_plays
+from app.services.profile_metrics import backfill_daily_stats
 from app.services.spotify_client import SCOPES, SPOTIFY_AUTH_URL, SPOTIFY_TOKEN_URL
 from app.utils.token_manager import encrypt_token
 
@@ -245,8 +247,8 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if not user:
         return {"authenticated": False}
 
-    # Snapshot giornaliero (non-blocking, best-effort)
-    asyncio.create_task(_try_daily_snapshot(user.id))
+    # Sync ascolti recenti + snapshot giornaliero (non-blocking, best-effort)
+    asyncio.create_task(_try_sync_and_snapshot(user.id))
 
     return {
         "authenticated": True,
@@ -261,15 +263,55 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     }
 
 
-async def _try_daily_snapshot(user_id: int):
-    """Wrapper non-blocking per save_daily_snapshot. Un solo task attivo per user."""
+async def _try_sync_and_snapshot(user_id: int):
+    """Sync ascolti recenti + snapshot giornaliero al login. Un solo task attivo per user.
+
+    Critico: senza questo sync, se il backend è spento per giorni,
+    gli ascolti cadono dal buffer Spotify (50 item) e sono persi per sempre.
+    """
     if user_id in _snapshot_running:
         return
     _snapshot_running.add(user_id)
     try:
+        # 1. Sync ascolti recenti PRIMA di tutto — recupera dal buffer Spotify
+        #    prima che nuovi ascolti li spingano fuori. Delay per lasciare
+        #    le API call della pagina completarsi prima.
+        await asyncio.sleep(10)
+        try:
+            async with async_session() as db:
+                await _sync_user_recent_plays(db, user_id)
+        except Exception as sync_exc:
+            logger.warning("Login sync fallito per user_id=%d: %s", user_id, sync_exc)
+
+        # 2. Snapshot giornaliero (skip per utenti nuovi senza dati)
+        async with async_session() as db:
+            has_snapshot = await db.execute(
+                select(func.count(UserSnapshot.id)).where(
+                    UserSnapshot.user_id == user_id
+                )
+            )
+            has_plays = await db.execute(
+                select(func.count(RecentPlay.id)).where(RecentPlay.user_id == user_id)
+            )
+            if has_snapshot.scalar() == 0 and has_plays.scalar() == 0:
+                logger.info(
+                    "Snapshot saltato per user_id=%d: utente nuovo, nessun dato esistente",
+                    user_id,
+                )
+                return
+
         await save_daily_snapshot(user_id)
+
+        # 3. Backfill daily stats (colma le lacune nei giorni passati)
+        try:
+            async with async_session() as db:
+                await backfill_daily_stats(db, user_id)
+        except Exception as stats_exc:
+            logger.warning(
+                "Backfill stats fallito per user_id=%d: %s", user_id, stats_exc
+            )
     except Exception as exc:
-        logger.warning("Daily snapshot fallito per user_id=%d: %s", user_id, exc)
+        logger.warning("Snapshot fallito per user_id=%d: %s", user_id, exc)
     finally:
         _snapshot_running.discard(user_id)
 

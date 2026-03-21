@@ -65,10 +65,10 @@ export default function TemporalPage() {
         <div className="bg-accent/5 border border-accent/10 rounded-xl px-4 py-2 text-text-secondary text-xs flex items-center gap-2">
           {accumulated ? (
             <>
-              <TrendingUp size={14} className="text-spotify flex-shrink-0" />
+              <TrendingUp size={14} className="text-accent flex-shrink-0" />
               Basato su {totalPlays} ascolti accumulati
               {newPlaysStored > 0 && (
-                <span className="text-spotify font-medium">
+                <span className="text-accent font-medium">
                   (+{newPlaysStored} nuovi salvati)
                 </span>
               )}

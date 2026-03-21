@@ -94,6 +94,8 @@ class DailyListeningStats(Base):
     avg_popularity = Column(Float, nullable=True)
     new_artists_count = Column(Integer, default=0)
     new_tracks_count = Column(Integer, default=0)
+    peak_hour = Column(Integer, nullable=True)
+    top_artist = Column(String(500), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("user_id", "date", name="uq_daily_stats_user_date"),

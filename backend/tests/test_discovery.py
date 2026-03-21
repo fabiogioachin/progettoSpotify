@@ -7,18 +7,6 @@ import pytest
 from app.services.discovery import discover
 
 
-# Patch globale: popularity cache è testata separatamente
-_noop_cache = patch(
-    "app.services.discovery.read_popularity_cache", new_callable=AsyncMock, return_value=0
-)
-
-
-@pytest.fixture(autouse=True)
-def _patch_popularity():
-    with _noop_cache:
-        yield
-
-
 def _make_track(tid: str, name: str, artist: str, popularity: int = 50) -> dict:
     return {
         "id": tid,
@@ -72,9 +60,7 @@ class TestDiscoverOutlierIsolationForest:
     ):
         """Con >= 5 tracce con features, Isolation Forest deve essere tentato."""
         tracks = [_make_track(f"t{i}", f"Track {i}", f"Artist {i}") for i in range(10)]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)]
         features = {f"t{i}": _make_features(f"t{i}") for i in range(10)}
         # Make one track an outlier with very different features
         features["t9"] = {
@@ -111,9 +97,7 @@ class TestDiscoverOutlierIsolationForest:
         # Isolation Forest detected outliers should have metric_label "outlier"
         outlier_labels = [o["metric_label"] for o in result["outliers"]]
         # Either "outlier" (Isolation Forest) or "distanza audio" (euclidean fallback)
-        assert all(
-            label in ("outlier", "distanza audio") for label in outlier_labels
-        )
+        assert all(label in ("outlier", "distanza audio") for label in outlier_labels)
 
     @pytest.mark.asyncio
     async def test_euclidean_fallback_when_isolation_forest_fails(
@@ -121,9 +105,7 @@ class TestDiscoverOutlierIsolationForest:
     ):
         """Se Isolation Forest fallisce, deve cadere sulla distanza euclidea."""
         tracks = [_make_track(f"t{i}", f"Track {i}", f"Artist {i}") for i in range(10)]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)]
         features = {f"t{i}": _make_features(f"t{i}") for i in range(10)}
 
         mock_client.get_top_tracks = AsyncMock()
@@ -152,22 +134,16 @@ class TestDiscoverOutlierIsolationForest:
         assert "outliers" in result
         assert len(result["outliers"]) > 0
         # Should fall back to euclidean distance
-        assert all(
-            o["metric_label"] == "distanza audio" for o in result["outliers"]
-        )
+        assert all(o["metric_label"] == "distanza audio" for o in result["outliers"])
 
     @pytest.mark.asyncio
-    async def test_popularity_fallback_when_no_features(
-        self, mock_db, mock_client
-    ):
+    async def test_popularity_fallback_when_no_features(self, mock_db, mock_client):
         """Senza features, deve usare il fallback per popolarita'."""
         tracks = [
             _make_track(f"t{i}", f"Track {i}", f"Artist {i}", popularity=i * 10)
             for i in range(10)
         ]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)]
 
         mock_client.get_top_tracks = AsyncMock()
         mock_client.get_top_artists = AsyncMock()
@@ -200,9 +176,7 @@ class TestDiscoverOutlierIsolationForest:
     ):
         """Con < 5 features, salta Isolation Forest e usa euclidea."""
         tracks = [_make_track(f"t{i}", f"Track {i}", f"Artist {i}") for i in range(4)]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(4)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(4)]
         features = {f"t{i}": _make_features(f"t{i}") for i in range(4)}
 
         mock_client.get_top_tracks = AsyncMock()
@@ -279,9 +253,7 @@ class TestDiscoverSimilarityScoring:
             assert isinstance(recs, list)
 
     @pytest.mark.asyncio
-    async def test_similarity_scoring_graceful_on_error(
-        self, mock_db, mock_client
-    ):
+    async def test_similarity_scoring_graceful_on_error(self, mock_db, mock_client):
         """Se il similarity scoring fallisce, le raccomandazioni restano intatte."""
         medium_tracks = [
             _make_track(f"t{i}", f"Track {i}", f"Artist {i}") for i in range(10)
@@ -289,9 +261,7 @@ class TestDiscoverSimilarityScoring:
         short_tracks = [
             _make_track(f"s{i}", f"Short {i}", f"Artist {i}") for i in range(5)
         ]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(10)]
 
         mock_client.get_top_tracks = AsyncMock()
         mock_client.get_top_artists = AsyncMock()
@@ -321,15 +291,11 @@ class TestDiscoverSimilarityScoring:
         assert isinstance(result["recommendations"], list)
 
     @pytest.mark.asyncio
-    async def test_too_few_artists_skips_similarity(
-        self, mock_db, mock_client
-    ):
+    async def test_too_few_artists_skips_similarity(self, mock_db, mock_client):
         """Con < 5 artisti, il similarity scoring viene saltato."""
         tracks = [_make_track(f"t{i}", f"Track {i}", f"Artist {i}") for i in range(3)]
         short_tracks = [_make_track("s0", "New", "New Artist")]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(3)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(3)]
 
         mock_client.get_top_tracks = AsyncMock()
         mock_client.get_top_artists = AsyncMock()
@@ -347,9 +313,7 @@ class TestDiscoverSimilarityScoring:
                 "app.services.discovery.get_or_fetch_features",
                 return_value={},
             ),
-            patch(
-                "app.services.discovery.compute_cosine_similarities"
-            ) as mock_cos,
+            patch("app.services.discovery.compute_cosine_similarities") as mock_cos,
         ):
             await discover(mock_db, mock_client)
 
@@ -381,9 +345,7 @@ class TestDiscoverResponseShape:
     @pytest.mark.asyncio
     async def test_response_has_all_required_keys(self, mock_db, mock_client):
         tracks = [_make_track(f"t{i}", f"Track {i}", f"Artist {i}") for i in range(5)]
-        artists = [
-            _make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(5)
-        ]
+        artists = [_make_artist(f"a{i}", f"Artist {i}", ["pop"]) for i in range(5)]
 
         mock_client.get_top_tracks = AsyncMock()
         mock_client.get_top_artists = AsyncMock()
@@ -411,6 +373,7 @@ class TestDiscoverResponseShape:
             "genre_distribution",
             "popularity_distribution",
             "has_audio_features",
+            "has_popularity_data",
             "recommendations_source",
         }
         assert set(result.keys()) == expected_keys

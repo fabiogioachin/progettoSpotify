@@ -55,11 +55,7 @@ export default function DiscoveryPage() {
     return avgs
   })()
 
-  // Hide popularity chart when all tracks have popularity 0 (all counts in first bucket)
-  const totalPopTracks = popularityDistribution.reduce((s, d) => s + d.count, 0)
-  const hasPopularityData = popularityDistribution.length > 0 &&
-    totalPopTracks > 0 &&
-    !(popularityDistribution[0]?.count === totalPopTracks)
+  const hasPopularityData = discoveryData?.has_popularity_data ?? false
 
   const isLoading = topLoading || discoveryLoading
   const hasError = topError || discoveryError
@@ -108,7 +104,7 @@ export default function DiscoveryPage() {
               </div>
             ) : hasMoodData ? (
               <MoodScatter tracks={enrichedTracks} />
-            ) : hasPopularityData ? (
+            ) : hasPopularityData && popularityDistribution.length > 0 ? (
               <PopularityDistribution data={popularityDistribution} />
             ) : null}
 

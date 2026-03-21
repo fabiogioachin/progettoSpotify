@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import FEATURE_KEYS
 from app.services.audio_analyzer import get_or_fetch_features
-from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_clustering import (
     build_feature_matrix,
@@ -95,9 +94,8 @@ async def discover(
     top_artists = artists_data.get("items", [])
     short_items = short_data.get("items", [])
 
-    # Popularity: leggi dalla cache DB (zero API calls)
-    all_track_items = top_items + short_items
-    await read_popularity_cache(all_track_items, db)
+    # Popularity comes directly from /me/top/tracks response — no need to
+    # enrich from TrackPopularity cache (top_items already have popularity).
 
     if not top_items:
         return {
@@ -286,6 +284,8 @@ async def discover(
         {"range": k, "count": v} for k, v in popularity_buckets.items()
     ]
 
+    has_popularity_data = any(t.get("popularity", 0) > 0 for t in top_items)
+
     return {
         "recommendations": recommendations[:20],
         "outliers": outliers[:10],
@@ -293,5 +293,6 @@ async def discover(
         "genre_distribution": genre_distribution,
         "popularity_distribution": popularity_distribution,
         "has_audio_features": has_features,
+        "has_popularity_data": has_popularity_data,
         "recommendations_source": recommendations_source,
     }

@@ -35,36 +35,6 @@ class TopTracksResponse(BaseModel):
     time_range: str
 
 
-class RecentTrackResponse(BaseModel):
-    id: str | None = None
-    name: str | None = None
-    artist: str = "Sconosciuto"
-    album: str = ""
-    album_image: str | None = None
-    played_at: str | None = None
-
-
-class RecentTracksResponse(BaseModel):
-    tracks: list[RecentTrackResponse]
-
-
-class SavedTrackResponse(BaseModel):
-    id: str
-    name: str | None = None
-    artist: str = "Sconosciuto"
-    artist_id: str | None = None
-    album: str = ""
-    album_image: str | None = None
-    popularity: int = 0
-    added_at: str | None = None
-
-
-class SavedTracksResponse(BaseModel):
-    tracks: list[SavedTrackResponse]
-    total: int
-    offset: int
-
-
 class PlaylistResponse(BaseModel):
     id: str
     name: str = ""

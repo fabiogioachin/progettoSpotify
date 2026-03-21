@@ -38,6 +38,23 @@ Lessons that affect future tasks. Target: under 15 entries.
 **Root cause**: Il workflow di verifica (lint/test/build) non include `git status -u` per individuare file spazzatura.
 **Action**: Dopo ogni wave di agenti, eseguire `git status -u` per individuare file non tracked inattesi. Verificare che i comandi pip usino quoting (`"pkg>=version"`).
 
+### 2026-03-21 — [codebase] TrackPopularity had no writer — dead table for weeks
+**Context**: `popularity_cache.py` comment said "populated by sync_recent_plays" but no write path existed.
+**What happened**: Popularity null everywhere. Discovery chart disappeared (all tracks in 0-20 bucket).
+**Root cause**: Writer was never implemented. Comment was aspirational, not factual.
+**Action**: When creating a DB table + read function, implement the write path in the same PR. Verify the table has rows after the job runs.
+
+### 2026-03-21 — [codebase] Listening data lost when backend is down — sync only on timer
+**Context**: User reported missing listening days (Sun/Mon/Tue). `sync_recent_plays` only ran on 60-min APScheduler timer.
+**What happened**: Backend was not running for days. Spotify's recently-played buffer (50 items max) rolled over. Older plays permanently lost.
+**Root cause**: APScheduler is in-memory only — no persistence, no catch-up for missed fires. No sync triggered on user login.
+**Action**: Always sync recent plays on login (`/auth/me`), not just on the timer. The login sync is the safety net — the timer is optimization. Applied: `_try_sync_and_snapshot` now runs `_sync_user_recent_plays` before the daily snapshot.
+
+### 2026-03-21 — [codebase] Falsy-zero bug: `not t.get("popularity")` treats 0 as missing
+**Context**: `popularity_cache.py` line 31 used truthiness check on a numeric field.
+**Root cause**: Python `not 0` is `True`.
+**Action**: For numeric fields that can be 0, always use `is None` check, never truthiness.
+
 ## Archive
 Resolved or one-off entries. Not read by agents.
 

@@ -115,7 +115,7 @@ export default function SessionStats({
             </div>
             <div className="h-3 bg-background rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-spotify rounded-full"
+                className="h-full bg-accent-hover rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${weekendPct}%` }}
                 transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
