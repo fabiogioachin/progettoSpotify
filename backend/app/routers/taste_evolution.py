@@ -12,7 +12,7 @@ from app.services.taste_evolution import compute_taste_evolution
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/taste-evolution", tags=["taste-evolution"])
+router = APIRouter(prefix="/api/v1/taste-evolution", tags=["taste-evolution"])
 
 
 @router.get("")

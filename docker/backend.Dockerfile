@@ -12,6 +12,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Application
 COPY app/ app/
 
+# Alembic (migrations)
+COPY alembic.ini .
+COPY alembic/ alembic/
+
+# Scripts (backfill, migration utilities)
+COPY scripts/ scripts/
+
 # Data directory
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 

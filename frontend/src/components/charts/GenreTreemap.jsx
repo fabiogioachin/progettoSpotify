@@ -1,5 +1,7 @@
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts'
+import { Tags } from 'lucide-react'
 import { TOOLTIP_STYLE } from '../../lib/chartTheme'
+import EmptyState from '../ui/EmptyState'
 
 const GENRE_COLORS = [
   '#6366f1', '#818cf8', '#a5b4fc',
@@ -20,7 +22,16 @@ export default function GenreTreemap({ genres, title = 'Distribuzione Generi', l
   }
 
   if (!genres || Object.keys(genres).length === 0) {
-    return null
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5">
+        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+        <EmptyState
+          icon={Tags}
+          message="Generi in fase di raccolta"
+          description="Ascolta ancora un po' per scoprire i tuoi generi"
+        />
+      </div>
+    )
   }
 
   const data = Object.entries(genres)

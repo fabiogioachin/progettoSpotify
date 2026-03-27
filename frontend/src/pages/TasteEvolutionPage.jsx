@@ -5,12 +5,13 @@ import TrackCard from '../components/cards/TrackCard'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { Heart, TrendingUp, TrendingDown, Users, Music, RefreshCw, Calendar, ChevronUp } from 'lucide-react'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 export default function TasteEvolutionPage() {
-  const { data, loading, error, refetch } = useSpotifyData('/api/taste-evolution')
-  const { data: historicalData, loading: histLoading } = useSpotifyData('/api/historical-tops')
+  const { data, loading, error, refetch } = useSpotifyData('/api/v1/taste-evolution')
+  const { data: historicalData, loading: histLoading } = useSpotifyData('/api/v1/historical-tops')
   const [expandedYear, setExpandedYear] = useState(null)
 
   const metrics = data?.metrics || {}
@@ -22,12 +23,12 @@ export default function TasteEvolutionPage() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-display font-bold text-text-primary">Evoluzione del Gusto</h1>
             <p className="text-text-secondary text-sm mt-1">Come cambia il tuo gusto musicale nel tempo</p>
           </div>
-          <button onClick={() => refetch()} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300" title="Aggiorna">
+          <button onClick={() => refetch()} className="p-2 min-h-[36px] min-w-[36px] rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300 flex-shrink-0" title="Aggiorna">
             <RefreshCw size={18} />
           </button>
         </div>
@@ -52,45 +53,52 @@ export default function TasteEvolutionPage() {
         ) : (
           <>
             {/* KPI Cards */}
-            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <StaggerItem>
-                <KPICard title="Fedeltà" value={metrics.loyalty_score || 0} suffix="%" icon={Heart} delay={0} tooltip="Quanti dei tuoi artisti dell'ultimo mese ascolti anche a 6 mesi e da sempre. Formula: artisti in comune tra 1M, 6M e All ÷ artisti 1M × 100" link="#loyal-artists" />
-              </StaggerItem>
-              <StaggerItem>
-                <KPICard title="Turnover" value={metrics.turnover_rate || 0} suffix="%" icon={RefreshCw} delay={100} tooltip="Quanti artisti nell'ultimo mese non c'erano nei tuoi 6 mesi. Formula: (artisti solo in 1M, non in 6M) ÷ artisti 1M × 100" link="#rising-artists" />
-              </StaggerItem>
-              <StaggerItem>
-                <KPICard title="Artisti Fedeli" value={(artists.loyal || []).length} icon={Users} delay={200} tooltip="Artisti presenti nei tuoi top 50 in tutti e 3 i periodi Spotify: ultimo mese, 6 mesi e da sempre. Clicca per vederli" link="#loyal-artists" />
-              </StaggerItem>
-              <StaggerItem>
-                <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} tooltip="Brani che compaiono nei tuoi top 50 in tutti e 3 i periodi (1M, 6M, All). Clicca per vederli" link="#persistent-tracks" />
-              </StaggerItem>
-            </StaggerContainer>
+            <SectionErrorBoundary sectionName="KPICards">
+              <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <StaggerItem>
+                  <KPICard title="Fedeltà" value={metrics.loyalty_score || 0} suffix="%" icon={Heart} delay={0} tooltip="Quanti dei tuoi artisti dell'ultimo mese ascolti anche a 6 mesi e da sempre. Formula: artisti in comune tra 1M, 6M e All ÷ artisti 1M × 100" link="#loyal-artists" />
+                </StaggerItem>
+                <StaggerItem>
+                  <KPICard title="Turnover" value={metrics.turnover_rate || 0} suffix="%" icon={RefreshCw} delay={100} tooltip="Quanti artisti nell'ultimo mese non c'erano nei tuoi 6 mesi. Formula: (artisti solo in 1M, non in 6M) ÷ artisti 1M × 100" link="#rising-artists" />
+                </StaggerItem>
+                <StaggerItem>
+                  <KPICard title="Artisti Fedeli" value={(artists.loyal || []).length} icon={Users} delay={200} tooltip="Artisti presenti nei tuoi top 50 in tutti e 3 i periodi Spotify: ultimo mese, 6 mesi e da sempre. Clicca per vederli" link="#loyal-artists" />
+                </StaggerItem>
+                <StaggerItem>
+                  <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} tooltip="Brani che compaiono nei tuoi top 50 in tutti e 3 i periodi (1M, 6M, All). Clicca per vederli" link="#persistent-tracks" />
+                </StaggerItem>
+              </StaggerContainer>
+            </SectionErrorBoundary>
 
             {/* Overlap Distribution */}
-            <TasteOverlapBar data={overlapData} />
+            <SectionErrorBoundary sectionName="TasteOverlapBar">
+              <TasteOverlapBar data={overlapData} />
+            </SectionErrorBoundary>
 
             {/* Artist Sections */}
-            <StaggerContainer className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StaggerItem>
-                <ArtistColumn id="rising-artists" title="In Ascesa" icon={TrendingUp} iconColor="text-emerald-400" artists={artists.rising || []} emptyText="Nessun nuovo artista" tooltip="Artisti che sono entrati di recente nelle tue classifiche e stanno guadagnando ascolti" />
-              </StaggerItem>
-              <StaggerItem>
-                <ArtistColumn id="loyal-artists" title="Sempre Fedeli" icon={Heart} iconColor="text-accent" artists={artists.loyal || []} emptyText="Nessun artista fedele" tooltip="Artisti presenti nelle tue classifiche in tutti e tre i periodi temporali" />
-              </StaggerItem>
-              <StaggerItem>
-                <ArtistColumn title="In Calo" icon={TrendingDown} iconColor="text-red-400" artists={artists.falling || []} emptyText="Nessun artista in calo" tooltip="Artisti che erano nelle tue classifiche ma che stai ascoltando meno di recente" />
-              </StaggerItem>
-            </StaggerContainer>
+            <SectionErrorBoundary sectionName="ArtistColumns">
+              <StaggerContainer className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StaggerItem>
+                  <ArtistColumn id="rising-artists" title="In Ascesa" icon={TrendingUp} iconColor="text-emerald-400" artists={artists.rising || []} emptyText="Nessun nuovo artista" tooltip="Artisti che sono entrati di recente nelle tue classifiche e stanno guadagnando ascolti" />
+                </StaggerItem>
+                <StaggerItem>
+                  <ArtistColumn id="loyal-artists" title="Sempre Fedeli" icon={Heart} iconColor="text-accent" artists={artists.loyal || []} emptyText="Nessun artista fedele" tooltip="Artisti presenti nelle tue classifiche in tutti e tre i periodi temporali" />
+                </StaggerItem>
+                <StaggerItem>
+                  <ArtistColumn title="In Calo" icon={TrendingDown} iconColor="text-red-400" artists={artists.falling || []} emptyText="Nessun artista in calo" tooltip="Artisti che erano nelle tue classifiche ma che stai ascoltando meno di recente" />
+                </StaggerItem>
+              </StaggerContainer>
+            </SectionErrorBoundary>
 
             {/* Persistent Tracks */}
             {(tracks.persistent || []).length > 0 && (
+              <SectionErrorBoundary sectionName="PersistentTracks">
               <div id="persistent-tracks" className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <Music size={18} className="text-accent" />
                   Tracce che ascolti sempre
                 </h3>
-                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   {tracks.persistent.map((track) => (
                     <StaggerItem key={track.id}>
                       <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
@@ -110,16 +118,18 @@ export default function TasteEvolutionPage() {
                   ))}
                 </StaggerContainer>
               </div>
+              </SectionErrorBoundary>
             )}
 
             {/* Rising Tracks */}
             {(tracks.rising || []).length > 0 && (
+              <SectionErrorBoundary sectionName="RisingTracks">
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp size={18} className="text-emerald-400" />
                   Nuove scoperte
                 </h3>
-                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   {tracks.rising.slice(0, 10).map((track) => (
                     <StaggerItem key={track.id}>
                       <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
@@ -139,9 +149,11 @@ export default function TasteEvolutionPage() {
                   ))}
                 </StaggerContainer>
               </div>
+              </SectionErrorBoundary>
             )}
 
             {/* Historical Yearly Section */}
+            <SectionErrorBoundary sectionName="HistoricalYearly">
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Calendar size={18} className="text-accent" />
@@ -229,6 +241,7 @@ export default function TasteEvolutionPage() {
                 </div>
               )}
             </div>
+            </SectionErrorBoundary>
           </>
         )}
       </main>

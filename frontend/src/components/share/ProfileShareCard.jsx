@@ -3,7 +3,7 @@ export default function ProfileShareCard({ personality, metrics, userName }) {
 
   const bars = [
     { label: 'Oscurit\u00e0', value: metrics.obscurity_score ?? 0 },
-    { label: 'Diversit\u00e0', value: metrics.genre_diversity_index ?? 0 },
+    { label: 'Variet\u00e0', value: metrics.genre_diversity_index ?? 0 },
     { label: 'Fedelt\u00e0', value: metrics.artist_loyalty_score ?? 0 },
   ]
 
@@ -71,7 +71,7 @@ export default function ProfileShareCard({ personality, metrics, userName }) {
 
       {/* Branding */}
       <p className="text-center text-[10px] text-white/40 tracking-widest uppercase">
-        Spotify Intelligence
+        Wrap
       </p>
     </div>
   )

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -15,9 +15,18 @@ class User(Base):
     email = Column(String(255))
     avatar_url = Column(Text)
     country = Column(String(10))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    is_admin = Column(Boolean, default=False, server_default="false", nullable=False)
+    onboarding_completed = Column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    tier = Column(
+        String(20), default="free", server_default="free", nullable=False
+    )  # free, premium, admin
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -39,10 +48,10 @@ class SpotifyToken(Base):
     )
     access_token_encrypted = Column(Text, nullable=False)
     refresh_token_encrypted = Column(Text, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
     scope = Column(Text)
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

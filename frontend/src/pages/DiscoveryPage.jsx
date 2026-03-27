@@ -2,16 +2,18 @@ import { Compass, Sparkles, Star, BarChart3, Music } from 'lucide-react'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
 import GenreTreemap from '../components/charts/GenreTreemap'
+import EmptyState from '../components/ui/EmptyState'
 import { SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { useAudioAnalysis } from '../hooks/useAudioAnalysis'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TOOLTIP_STYLE } from '../lib/chartTheme'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function DiscoveryPage() {
-  const { data: topData, loading: topLoading, error: topError } = useSpotifyData('/api/library/top', { limit: 50 })
-  const { data: discoveryData, loading: discoveryLoading, error: discoveryError } = useSpotifyData('/api/analytics/discovery')
+  const { data: topData, loading: topLoading, error: topError } = useSpotifyData('/api/v1/library/top', { limit: 50 })
+  const { data: discoveryData, loading: discoveryLoading, error: discoveryError } = useSpotifyData('/api/v1/analytics/discovery')
 
   const tracks = topData?.tracks || []
   const recommendations = discoveryData?.recommendations || []
@@ -57,6 +59,11 @@ export default function DiscoveryPage() {
 
   const hasPopularityData = discoveryData?.has_popularity_data ?? false
 
+  const curatedPlaylists = discoveryData?.curated_playlists || {}
+  const discoverWeekly = curatedPlaylists.discover_weekly
+  const releaseRadar = curatedPlaylists.release_radar
+  const hasCurated = discoverWeekly?.tracks?.length > 0 || releaseRadar?.tracks?.length > 0
+
   const isLoading = topLoading || discoveryLoading
   const hasError = topError || discoveryError
 
@@ -88,73 +95,101 @@ export default function DiscoveryPage() {
               </div>
             )}
 
-            {/* Mood Scatter OPPURE Distribuzione Popolarita' */}
-            {isAnalyzing ? (
-              <div className="glow-card bg-surface rounded-xl p-5 flex flex-col items-center justify-center h-72">
-                <div className="text-text-primary font-display font-semibold mb-2">Analisi audio in corso...</div>
-                <div className="w-48 h-2 bg-surface-hover rounded-full overflow-hidden mb-2">
-                  <div
-                    className="h-full bg-accent rounded-full transition-all duration-500"
-                    style={{ width: `${analysisProgress.percent}%` }}
-                  />
+            {/* Curated Playlists */}
+            {hasCurated && (
+              <SectionErrorBoundary sectionName="CuratedPlaylists">
+                <div className="space-y-4">
+                  <h3 className="text-text-primary font-display font-semibold flex items-center gap-2">
+                    <Music size={18} className="text-accent" />
+                    Playlist curate da Spotify
+                  </h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {discoverWeekly?.tracks?.length > 0 && (
+                      <CuratedPlaylistCard playlist={discoverWeekly} />
+                    )}
+                    {releaseRadar?.tracks?.length > 0 && (
+                      <CuratedPlaylistCard playlist={releaseRadar} />
+                    )}
+                  </div>
                 </div>
-                <p className="text-text-muted text-xs">
-                  {analysisProgress.completed}/{analysisProgress.total} brani
-                </p>
-              </div>
-            ) : hasMoodData ? (
-              <MoodScatter tracks={enrichedTracks} />
-            ) : hasPopularityData && popularityDistribution.length > 0 ? (
-              <PopularityDistribution data={popularityDistribution} />
-            ) : null}
+              </SectionErrorBoundary>
+            )}
+
+            {/* Mood Scatter OPPURE Distribuzione Popolarita' */}
+            <SectionErrorBoundary sectionName="MoodScatter">
+              {isAnalyzing ? (
+                <div className="glow-card bg-surface rounded-xl p-5 flex flex-col items-center justify-center h-72">
+                  <div className="text-text-primary font-display font-semibold mb-2">Analisi audio in corso...</div>
+                  <div className="w-48 h-2 bg-surface-hover rounded-full overflow-hidden mb-2">
+                    <div
+                      className="h-full bg-accent rounded-full transition-all duration-500"
+                      style={{ width: `${analysisProgress.percent}%` }}
+                    />
+                  </div>
+                  <p className="text-text-muted text-xs">
+                    {analysisProgress.completed}/{analysisProgress.total} brani
+                  </p>
+                </div>
+              ) : hasMoodData ? (
+                <MoodScatter tracks={enrichedTracks} />
+              ) : hasPopularityData && popularityDistribution.length > 0 ? (
+                <PopularityDistribution data={popularityDistribution} />
+              ) : null}
+            </SectionErrorBoundary>
 
             {/* Genre Treemap + Centroid Radar o Outliers */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Se ci sono generi, mostra il treemap; altrimenti il radar se ha features */}
-              {Object.keys(genreDistribution).length > 0 ? (
-                <GenreTreemap genres={genreDistribution} title="Il tuo DNA musicale" />
-              ) : (
-                <AudioRadar features={displayCentroid} title="Il tuo centro musicale" />
-              )}
+              <SectionErrorBoundary sectionName="GenreTreemap">
+                {Object.keys(genreDistribution).length > 0 ? (
+                  <GenreTreemap genres={genreDistribution} title="Il tuo DNA musicale" />
+                ) : (
+                  <AudioRadar features={displayCentroid} title="Il tuo centro musicale" />
+                )}
+              </SectionErrorBoundary>
 
               {outliers.length > 0 && (
-                <div className="glow-card bg-surface rounded-xl p-5">
-                  <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
-                    <Star size={18} className="text-amber-400" />
-                    {hasAudioFeatures ? 'Brani Outlier' : 'Hidden Gems'}
-                  </h3>
-                  <p className="text-text-muted text-xs mb-3">
-                    {hasAudioFeatures
-                      ? 'Brani che si discostano dal tuo profilo medio'
-                      : 'Brani meno conosciuti tra i tuoi preferiti'}
-                  </p>
-                  <StaggerContainer className="space-y-2">
-                    {outliers.slice(0, 8).map((track) => (
-                      <StaggerItem key={track.id}>
-                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
-                          {track.album_image ? (
-                            <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
-                          ) : (
-                            <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
-                              <Music size={16} className="text-text-muted" />
+                <SectionErrorBoundary sectionName="Outliers">
+                  <div className="glow-card bg-surface rounded-xl p-5">
+                    <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                      <Star size={18} className="text-amber-400" />
+                      {hasAudioFeatures ? 'Brani Outlier' : 'Hidden Gems'}
+                    </h3>
+                    <p className="text-text-muted text-xs mb-3">
+                      {hasAudioFeatures
+                        ? 'Brani che si discostano dal tuo profilo medio'
+                        : 'Brani meno conosciuti tra i tuoi preferiti'}
+                    </p>
+                    <StaggerContainer className="space-y-2">
+                      {outliers.slice(0, 8).map((track) => (
+                        <StaggerItem key={track.id}>
+                          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
+                            {track.album_image ? (
+                              <img src={track.album_image} alt={track.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
+                                <Music size={16} className="text-text-muted" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-text-primary text-sm truncate">{track.name}</p>
+                              <p className="text-text-muted text-xs truncate">{track.artist}</p>
                             </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-text-primary text-sm truncate">{track.name}</p>
-                            <p className="text-text-muted text-xs truncate">{track.artist}</p>
+                            <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
+                              {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
+                            </span>
                           </div>
-                          <span className="text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded flex-shrink-0">
-                            {track.metric_label || `${Math.round(track.distance * 100)}% diverso`}
-                          </span>
-                        </div>
-                      </StaggerItem>
-                    ))}
-                  </StaggerContainer>
-                </div>
+                        </StaggerItem>
+                      ))}
+                    </StaggerContainer>
+                  </div>
+                </SectionErrorBoundary>
               )}
             </div>
 
             {/* Recommendations */}
+            {recommendations.length > 0 && (
+            <SectionErrorBoundary sectionName="Recommendations">
             <div className="glow-card bg-surface rounded-xl p-5">
               <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                 <Sparkles size={18} className="text-accent" />
@@ -204,16 +239,54 @@ export default function DiscoveryPage() {
                 ))}
               </StaggerContainer>
             </div>
+            </SectionErrorBoundary>
+            )}
           </>
         )}
     </main>
   )
 }
 
+function CuratedPlaylistCard({ playlist }) {
+  return (
+    <div className="glow-card bg-surface rounded-xl p-5">
+      <div className="flex items-center gap-3 mb-4">
+        {playlist.image && (
+          <img src={playlist.image} alt={playlist.name} className="w-12 h-12 rounded-lg object-cover" />
+        )}
+        <div>
+          <h4 className="text-text-primary font-display font-semibold text-sm">{playlist.name}</h4>
+          <p className="text-text-muted text-xs">{playlist.tracks.length} brani</p>
+        </div>
+      </div>
+      <StaggerContainer className="space-y-1.5">
+        {playlist.tracks.slice(0, 10).map((track) => (
+          <StaggerItem key={track.id}>
+            <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-all duration-300">
+              {track.album_image ? (
+                <img src={track.album_image} alt={track.name} className="w-9 h-9 rounded object-cover flex-shrink-0" />
+              ) : (
+                <div className="w-9 h-9 rounded bg-surface-hover flex items-center justify-center flex-shrink-0">
+                  <Music size={14} className="text-text-muted" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-text-primary text-sm truncate">{track.name}</p>
+                <p className="text-text-muted text-xs truncate">{track.artist}</p>
+              </div>
+              {track.popularity > 0 && (
+                <span className="text-text-muted text-[10px] flex-shrink-0">Pop. {track.popularity}</span>
+              )}
+            </div>
+          </StaggerItem>
+        ))}
+      </StaggerContainer>
+    </div>
+  )
+}
+
 function PopularityDistribution({ data }) {
-  if (!data || data.length === 0) {
-    return null
-  }
+  if (!data || data.length === 0) return null
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">

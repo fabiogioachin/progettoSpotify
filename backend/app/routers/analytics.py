@@ -1,19 +1,12 @@
 """Router per analisi e insight musicali."""
 
 import logging
-from typing import Literal
-
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_auth
-from app.services.audio_analyzer import (
-    compute_profile,
-    compute_trends,
-    get_historical_snapshots,
-    save_snapshot,
-)
+from app.services.audio_analyzer import compute_trends
 from app.services.discovery import discover
 from app.services.spotify_client import SpotifyClient
 from app.utils.json_utils import sanitize_nans
@@ -21,39 +14,7 @@ from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServ
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"])
-
-
-@router.get("/features")
-async def get_audio_features_profile(
-    request: Request,
-    time_range: Literal["short_term", "medium_term", "long_term"] = Query(
-        default="medium_term"
-    ),
-    user_id: int = Depends(require_auth),
-    db: AsyncSession = Depends(get_db),
-):
-    """Profilo audio features dell'utente."""
-    client = SpotifyClient(db, user_id)
-
-    try:
-        profile = await compute_profile(db, client, time_range)
-        # Salva snapshot (non-blocking — non deve impedire la risposta)
-        try:
-            await save_snapshot(db, user_id, time_range, profile)
-        except Exception as snap_exc:
-            logger.warning("Snapshot non salvato: %s", snap_exc)
-    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
-        raise  # Handled by global exception handlers in main.py
-    except Exception as exc:
-        logger.error("Errore compute_profile: %s", exc)
-        raise HTTPException(
-            status_code=500, detail="Errore nel calcolo del profilo audio"
-        )
-    finally:
-        await client.close()
-
-    return sanitize_nans(profile)
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
 @router.get("/trends")
@@ -67,7 +28,6 @@ async def get_trends(
 
     try:
         trends = await compute_trends(db, client, user_id)
-        historical = await get_historical_snapshots(db, user_id)
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py
     except Exception as exc:
@@ -76,7 +36,7 @@ async def get_trends(
     finally:
         await client.close()
 
-    return sanitize_nans({"current": trends, "historical": historical})
+    return sanitize_nans({"current": trends, "historical": []})
 
 
 @router.get("/discovery")

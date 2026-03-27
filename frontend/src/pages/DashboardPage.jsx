@@ -11,18 +11,25 @@ import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { useAudioAnalysis } from '../hooks/useAudioAnalysis'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
+import { useAuth } from '../contexts/AuthContext'
+import OnboardingModal from '../components/onboarding/OnboardingModal'
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+  const [showOnboarding, setShowOnboarding] = useState(
+    localStorage.getItem('wrap_onboarding_dismissed') !== 'true'
+  )
   const [period, setPeriod] = useState('medium_term')
 
   const { data: topData, loading: topLoading, error: topError } = useSpotifyData(
-    '/api/library/top',
+    '/api/v1/library/top',
     { time_range: period, limit: 50 }
   )
 
-  const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/analytics/trends')
+  const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/v1/analytics/trends')
   const [temporalRange, setTemporalRange] = useState('30d')
-  const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/temporal', { range: temporalRange })
+  const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/v1/temporal', { range: temporalRange })
 
   const tracks = topData?.tracks || []
   const trends = trendsData?.current || []
@@ -79,6 +86,10 @@ export default function DashboardPage() {
   const hasError = topError || trendsError
 
   return (
+    <>
+    {showOnboarding && (
+      <OnboardingModal onClose={() => setShowOnboarding(false)} />
+    )}
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header row */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -96,122 +107,135 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Row — each card renders independently with per-section skeleton */}
-      <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StaggerItem>
-          {topLoading ? <SkeletonKPICard /> : (
-            <KPICard
-              title="Brani analizzati"
-              value={trackCount}
-              icon={Music}
-              delay={0}
-              tooltip="Top brani che Spotify ha registrato per te nel periodo selezionato (1M ≈ ultimo mese, 6M ≈ 6 mesi, All ≈ da sempre). Scorri in basso per vederli"
-              link="#top-tracks"
-            />
-          )}
-        </StaggerItem>
-        <StaggerItem>
-          {temporalLoading ? <SkeletonKPICard /> : (
-            <KPICard
-              title="Streak di ascolto"
-              value={streak}
-              suffix=" giorni"
-              icon={Flame}
-              delay={100}
-              tooltip="Giorni consecutivi in cui hai ascoltato musica. Vai ai Pattern Temporali per i dettagli"
-              link="/temporal#streak"
-            />
-          )}
-        </StaggerItem>
-        {(featuresLoading || topGenre) && (
+      <SectionErrorBoundary sectionName="KPICards">
+        <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <StaggerItem>
-            {featuresLoading ? <SkeletonKPICard /> : (
+            {topLoading ? <SkeletonKPICard /> : (
               <KPICard
-                title="Genere top"
-                value={topGenre}
-                suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
-                icon={Disc3}
-                delay={200}
-                tooltip="Il genere musicale più frequente tra i tuoi artisti"
+                title="Brani analizzati"
+                value={trackCount}
+                icon={Music}
+                delay={0}
+                tooltip="Top brani che Spotify ha registrato per te nel periodo selezionato (1M ≈ ultimo mese, 6M ≈ 6 mesi, All ≈ da sempre). Scorri in basso per vederli"
+                link="#top-tracks"
               />
             )}
           </StaggerItem>
-        )}
-        <StaggerItem>
-          {featuresLoading ? <SkeletonKPICard /> : (
-            <KPICard
-              title="Artisti unici"
-              value={uniqueArtists}
-              icon={Users}
-              delay={300}
-              tooltip="Artisti distinti estratti dai tuoi brani più ascoltati nel periodo selezionato"
-              link="/artist-network"
-            />
+          <StaggerItem>
+            {temporalLoading ? <SkeletonKPICard /> : (
+              <KPICard
+                title="Streak di ascolto"
+                value={streak}
+                suffix=" giorni"
+                icon={Flame}
+                delay={100}
+                tooltip="Giorni consecutivi in cui hai ascoltato musica. Vai ai Pattern Temporali per i dettagli"
+                link="/temporal#streak"
+              />
+            )}
+          </StaggerItem>
+          {(featuresLoading || topGenre) && (
+            <StaggerItem>
+              {featuresLoading ? <SkeletonKPICard /> : (
+                <KPICard
+                  title="Genere top"
+                  value={topGenre}
+                  suffix={topGenrePct ? ` (${topGenrePct}%)` : ''}
+                  icon={Disc3}
+                  delay={200}
+                  tooltip="Il genere musicale più frequente tra i tuoi artisti"
+                />
+              )}
+            </StaggerItem>
           )}
-        </StaggerItem>
-      </StaggerContainer>
+          <StaggerItem>
+            {featuresLoading ? <SkeletonKPICard /> : (
+              <KPICard
+                title="Artisti unici"
+                value={uniqueArtists}
+                icon={Users}
+                delay={300}
+                tooltip="Artisti distinti estratti dai tuoi brani più ascoltati nel periodo selezionato"
+                link="/artist-network"
+              />
+            )}
+          </StaggerItem>
+        </StaggerContainer>
+      </SectionErrorBoundary>
 
       {/* Trend Timeline — shows independently */}
-      {trendsLoading ? (
-        <SkeletonCard height="h-48" />
-      ) : (
-        <TrendTimeline
-          trends={trends}
-          dailyMinutes={temporalData?.daily_minutes}
-          temporalRange={temporalRange}
-          onTemporalRangeChange={setTemporalRange}
-        />
-      )}
+      <SectionErrorBoundary sectionName="TrendTimeline">
+        {trendsLoading ? (
+          <SkeletonCard height="h-48" />
+        ) : (
+          <TrendTimeline
+            trends={trends}
+            dailyMinutes={temporalData?.daily_minutes}
+            temporalRange={temporalRange}
+            onTemporalRangeChange={setTemporalRange}
+          />
+        )}
+      </SectionErrorBoundary>
 
       {/* Radar + Top Tracks — 2 columns, each independent */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {featuresLoading ? (
-          <SkeletonCard height="h-72" />
-        ) : isAnalyzing ? (
-          <div className="glow-card bg-surface rounded-xl p-5 flex flex-col items-center justify-center h-72">
-            <div className="text-text-primary font-display font-semibold mb-2">Analisi audio in corso...</div>
-            <div className="w-48 h-2 bg-surface-hover rounded-full overflow-hidden mb-2">
-              <div
-                className="h-full bg-accent rounded-full transition-all duration-500"
-                style={{ width: `${analysisProgress.percent}%` }}
-              />
+        <SectionErrorBoundary sectionName="AudioRadar">
+          {featuresLoading ? (
+            <SkeletonCard height="h-72" />
+          ) : isAnalyzing ? (
+            <div className="glow-card bg-surface rounded-xl p-5 flex flex-col items-center justify-center h-72">
+              <div className="text-text-primary font-display font-semibold mb-2">Analisi audio in corso...</div>
+              <div className="w-48 h-2 bg-surface-hover rounded-full overflow-hidden mb-2">
+                <div
+                  className="h-full bg-accent rounded-full transition-all duration-500"
+                  style={{ width: `${analysisProgress.percent}%` }}
+                />
+              </div>
+              <p className="text-text-muted text-xs">
+                {analysisProgress.completed}/{analysisProgress.total} brani
+              </p>
             </div>
-            <p className="text-text-muted text-xs">
-              {analysisProgress.completed}/{analysisProgress.total} brani
-            </p>
-          </div>
-        ) : (
-          <AudioRadar features={displayFeatures} />
-        )}
+          ) : (
+            <AudioRadar features={displayFeatures} />
+          )}
+        </SectionErrorBoundary>
 
-        {topLoading ? (
-          <SkeletonCard height="h-72" />
-        ) : (
-          <div id="top-tracks" className="glow-card bg-surface rounded-xl p-5">
-            <h3 className="text-text-primary font-display font-semibold mb-4">
-              Top 50 Brani
-            </h3>
-            <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
-              <StaggerContainer className="space-y-1">
-                {tracks.slice(0, 50).map((track, i) => (
-                  <StaggerItem key={track.id}>
-                    <TrackCard track={track} index={i} />
-                  </StaggerItem>
-                ))}
-              </StaggerContainer>
+        <SectionErrorBoundary sectionName="TopTracks">
+          {topLoading ? (
+            <SkeletonCard height="h-72" />
+          ) : (
+            <div id="top-tracks" className="glow-card bg-surface rounded-xl p-5">
+              <h3 className="text-text-primary font-display font-semibold mb-4">
+                Top 50 Brani
+              </h3>
+              <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+                <StaggerContainer className="space-y-1">
+                  {tracks.slice(0, 50).map((track, i) => (
+                    <StaggerItem key={track.id}>
+                      <TrackCard track={track} index={i} />
+                    </StaggerItem>
+                  ))}
+                </StaggerContainer>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </SectionErrorBoundary>
       </div>
 
       {/* Genre Treemap + Export */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {featuresLoading ? (
-          <SkeletonCard height="h-72" />
-        ) : (
-          <GenreTreemap genres={genres} />
-        )}
-        <ClaudeExportPanel />
+        <SectionErrorBoundary sectionName="GenreTreemap">
+          {featuresLoading ? (
+            <SkeletonCard height="h-72" />
+          ) : (
+            <GenreTreemap genres={genres} />
+          )}
+        </SectionErrorBoundary>
+        <SectionErrorBoundary sectionName="ClaudeExportPanel">
+          <ClaudeExportPanel />
+        </SectionErrorBoundary>
       </div>
     </main>
+    </>
   )
 }

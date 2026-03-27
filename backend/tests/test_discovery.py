@@ -375,5 +375,6 @@ class TestDiscoverResponseShape:
             "has_audio_features",
             "has_popularity_data",
             "recommendations_source",
+            "curated_playlists",
         }
         assert set(result.keys()) == expected_keys

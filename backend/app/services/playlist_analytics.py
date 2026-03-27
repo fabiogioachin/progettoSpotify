@@ -23,7 +23,7 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
         data = await retry_with_backoff(client.get_playlists, limit=50, offset=offset)
         items = data.get("items", [])
         all_playlists.extend(items)
-        if len(items) < 50 or len(all_playlists) >= 200:
+        if len(items) < 50:
             break
         offset += 50
 
@@ -69,7 +69,7 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
         key=lambda p: raw_sizes.get(p["id"], 0),
         reverse=True,
     )
-    playlists_to_analyze = playlists_sorted[:20]
+    playlists_to_analyze = playlists_sorted[:50]
 
     playlist_tracks = {}
     playlist_details = []
@@ -107,8 +107,6 @@ async def analyze_playlists(client: SpotifyClient) -> dict:
                 if not data.get("next") or len(items) < 50:
                     break
                 offset += 50
-                if offset >= 200:  # Cap: max 200 tracks per playlist (4 pages)
-                    break
         except SpotifyAuthError:
             raise
         except Exception as exc:

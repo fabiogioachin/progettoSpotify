@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,10 +18,17 @@ from app.config import settings
 from app.database import async_session, get_db
 from app.dependencies import get_session_user_id
 from app.models.listening_history import RecentPlay, UserSnapshot
+from app.models.social import InviteCode
 from app.models.user import SpotifyToken, User
+from app.services.api_budget import Priority
 from app.services.background_tasks import save_daily_snapshot, _sync_user_recent_plays
 from app.services.profile_metrics import backfill_daily_stats
-from app.services.spotify_client import SCOPES, SPOTIFY_AUTH_URL, SPOTIFY_TOKEN_URL
+from app.services.spotify_client import (
+    SCOPES,
+    SPOTIFY_AUTH_URL,
+    SPOTIFY_TOKEN_URL,
+    SpotifyClient,
+)
 from app.utils.token_manager import encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -82,9 +89,11 @@ def set_session_cookie(response: Response, user_id: int):
 
 
 @router.get("/spotify/login")
-async def spotify_login(request: Request):
+async def spotify_login(request: Request, invite: str | None = None):
     """Redirect a Spotify per autorizzazione OAuth."""
     nonce = secrets.token_urlsafe(32)
+    if invite:
+        nonce = f"{nonce}|{invite}"
     state = _sign_state(nonce)
 
     params = {
@@ -115,6 +124,11 @@ async def spotify_callback(
     # Verifica state (HMAC-signed, stateless — niente cookie, niente memory)
     if not state or not _verify_state(state):
         return RedirectResponse(url=f"{settings.frontend_url}?error=state_mismatch")
+
+    # Estrai eventuale invite code dal nonce (formato: nonce|invite_code.signature)
+    nonce = state.rsplit(".", 1)[0]
+    nonce_parts = nonce.split("|", 1)
+    invite_code_value = nonce_parts[1] if len(nonce_parts) > 1 else None
 
     # Scambia code per token
     async with httpx.AsyncClient() as client:
@@ -182,6 +196,38 @@ async def spotify_callback(
     user = result.scalar_one_or_none()
 
     if not user:
+        # Controlla se è il primo utente in assoluto
+        user_count_result = await db.execute(select(func.count(User.id)))
+        total_users = user_count_result.scalar()
+
+        is_first_user = total_users == 0
+
+        if not is_first_user:
+            # Validazione codice invito per nuovi utenti
+            if not invite_code_value:
+                return RedirectResponse(
+                    url=f"{settings.frontend_url}?error=invite_required"
+                )
+
+            invite_result = await db.execute(
+                select(InviteCode).where(
+                    InviteCode.code == invite_code_value,
+                    InviteCode.uses < InviteCode.max_uses,
+                    (
+                        (InviteCode.expires_at.is_(None))
+                        | (InviteCode.expires_at > datetime.now(timezone.utc))
+                    ),
+                )
+            )
+            invite = invite_result.scalar_one_or_none()
+            if not invite:
+                return RedirectResponse(
+                    url=f"{settings.frontend_url}?error=invite_required"
+                )
+
+            # Incrementa utilizzi
+            invite.uses += 1
+
         user = User(
             spotify_id=spotify_id,
             display_name=profile.get("display_name"),
@@ -192,6 +238,7 @@ async def spotify_callback(
                 else None
             ),
             country=profile.get("country"),
+            is_admin=is_first_user,
         )
         db.add(user)
         await db.flush()
@@ -259,8 +306,29 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
             "email": user.email,
             "avatar_url": user.avatar_url,
             "country": user.country,
+            "is_admin": user.is_admin,
+            "onboarding_completed": user.onboarding_completed,
+            "tier": user.tier,
         },
     }
+
+
+@router.post("/onboarding-complete")
+async def complete_onboarding(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Segna l'onboarding come completato."""
+    from app.dependencies import require_auth
+
+    user_id = require_auth(request)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+    user.onboarding_completed = True
+    await db.commit()
+    return {"status": "ok"}
 
 
 async def _try_sync_and_snapshot(user_id: int):
@@ -279,7 +347,13 @@ async def _try_sync_and_snapshot(user_id: int):
         await asyncio.sleep(10)
         try:
             async with async_session() as db:
-                await _sync_user_recent_plays(db, user_id)
+                client = SpotifyClient(
+                    db, user_id, priority=Priority.P1_BACKGROUND_SYNC
+                )
+                try:
+                    await _sync_user_recent_plays(db, user_id, client)
+                finally:
+                    await client.close()
         except Exception as sync_exc:
             logger.warning("Login sync fallito per user_id=%d: %s", user_id, sync_exc)
 
@@ -322,3 +396,4 @@ async def logout(response: Response):
     response = RedirectResponse(url=settings.frontend_url, status_code=302)
     response.delete_cookie("session", path="/")
     return response
+

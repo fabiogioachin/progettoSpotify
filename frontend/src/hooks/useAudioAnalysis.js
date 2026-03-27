@@ -48,7 +48,7 @@ export function useAudioAnalysis(tracks, enabled = true) {
         artist: t.artists?.[0]?.name || t.artist || '',
         preview_url: t.preview_url || null,
       }))
-      const { data } = await api.post('/api/analyze-tracks', {
+      const { data } = await api.post('/api/v1/analyze-tracks', {
         tracks: trackPayload,
       })
 
@@ -60,7 +60,7 @@ export function useAudioAnalysis(tracks, enabled = true) {
       const poll = async () => {
         if (!mountedRef.current) return
         try {
-          const { data: status } = await api.get(`/api/analyze-tracks/${taskIdRef.current}`)
+          const { data: status } = await api.get(`/api/v1/analyze-tracks/${taskIdRef.current}`)
           if (!mountedRef.current) return
 
           const percent = status.total > 0

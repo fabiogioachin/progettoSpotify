@@ -1,4 +1,4 @@
-# Spotify Listening Intelligence — Product Requirements Document
+# Wrap — Product Requirements Document
 
 ## 1. Visione
 Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'utente, visualizzando pattern, evoluzione del gusto e ecosistema musicale con una UI dark-theme ispirata a Spotify.
@@ -7,15 +7,18 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Ascoltatori Spotify curiosi del proprio profilo musicale
 - Music enthusiast che vogliono insight sul proprio gusto
 - Utenti che cercano nuove scoperte basate sui propri pattern
-- **Vincolo**: max 5 utenti in dev mode Spotify (Premium only)
+- **Beta**: 5-20 amici, accesso tramite invite link
+- **Vincolo**: max 5 utenti in dev mode Spotify (Premium only). Extended Quota rimuoverà il limite.
 
 ## 3. Architettura Tecnica
-- **Backend**: FastAPI (async) + SQLAlchemy async + SQLite
-- **Frontend**: React 18 + Vite + Tailwind CSS + Recharts + framer-motion
-- **Auth**: OAuth2 PKCE con state HMAC-signed, session cookie (itsdangerous), token Fernet-encrypted
+- **Backend**: FastAPI (async) + SQLAlchemy async + PostgreSQL 16 + Redis 7
+- **Frontend**: React 18 + Vite + Tailwind CSS + Recharts + framer-motion (PWA installabile)
+- **Auth**: OAuth2 PKCE con state HMAC-signed, session cookie (itsdangerous), token Fernet-encrypted. Invite-gated registration.
 - **ML/Analytics**: scikit-learn (PCA, DBSCAN, Isolation Forest, cosine similarity), NetworkX (Louvain, PageRank, betweenness)
 - **Audio**: librosa per analisi on-demand da preview MP3 (zero chiamate API Spotify)
-- **Deploy**: Docker Compose (backend: uvicorn :8001, frontend: nginx :5173)
+- **Deploy**: Docker Compose (PostgreSQL, Redis, backend: uvicorn :8001, frontend: Vite :5173)
+- **Migrations**: Alembic per schema PostgreSQL
+- **API Versioning**: tutti gli endpoint sotto `/api/v1/`, redirect 308 per backward compat
 
 ## 4. Limitazioni API Spotify (Dev Mode Feb 2026+)
 
@@ -53,7 +56,7 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Snapshot giornalieri**: modello `UserSnapshot` salva top_artists/top_tracks JSON 1x/giorno
 - **Aggregati**: `DailyListeningStats` computati alle 02:00 — minuti e ascolti per giorno
 - **Popularity**: non disponibile in dev mode (non restituita da API). Cache DB `TrackPopularity` per eventuale enrichment futuro. Nessuna chiamata API inline per popolarità — le feature dipendenti sono nascoste quando i dati non sono disponibili
-- **Generi artista**: endpoint individuali `GET /artists/{id}` con cache cross-user 1h, dedup globale, cap 20-50
+- **Generi artista**: `genre_cache.py` — DB `artist_genres` (7d TTL, cross-user) → Redis 1h → Spotify API on miss. Nessun cap artificiale — la cache limita naturalmente le chiamate API
 - **Audio features**: librosa su preview MP3 (CDN, non API Spotify) — analisi on-demand
 
 ## 5. Funzionalità
@@ -101,10 +104,10 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 
 ### 5.6 Confronto Playlist (`/compare`)
 - Confronto side-by-side 2-4 playlist
-- Track count: usa `total` dall'API (include local files), cap 500 tracks per playlist
+- Track count: usa `total` dall'API (include local files), nessun cap (gestito dal budget system)
 - Popularity stats, top tracks, genre distribution
 - Audio features (da cache DB, rendering condizionale)
-- Dedup globale artisti per generi (cap 50, cross-playlist)
+- Dedup globale artisti per generi via `genre_cache` (DB 7d TTL, nessun cap)
 
 ### 5.7 Discovery (`/discovery`)
 - **Distribuzione generi** (treemap) — sempre disponibile
@@ -184,17 +187,18 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 2. **Sliding window throttle**: 25 calls/30s con lock atomico — preventivo, evita di colpire Spotify
 3. **Global cooldown**: attivato su ogni 429 — tutte le richieste pending falliscono immediatamente
 
-### 8.2 Cache Architecture (3 tier cachetools)
+### 8.2 Cache Architecture (4 tier)
 - `_cache_5m` (TTL 300s): user-scoped data (top tracks, playlists, etc.)
 - `_cache_2m` (TTL 120s): recently played
 - `_artist_cache_1h` (TTL 3600s): cross-user artist data (no user_id nella key)
+- `artist_genres` DB table (TTL 7d): generi per artista, cross-user, persistente. Via `genre_cache.py`
 - **Regola**: sempre `limit=50` per top tracks/artists. Slice in-memory se servono meno items
 
 ### 8.3 Popularity
 - Spotify dev mode non restituisce `popularity` in `GET /me/top/tracks`
 - Enrichment via `GET /tracks/{id}` **non è sostenibile** nel budget (50 chiamate per page load esauriscono il window)
 - Approccio: `read_popularity_cache()` legge solo dal DB (zero API calls). Le feature dipendenti da popularity sono nascoste quando i dati non sono disponibili
-- Cache DB: tabella `TrackPopularity` con TTL 24h
+- Cache DB: tabella `TrackPopularity` con TTL 90 giorni (cleanup mensile)
 
 ### 8.4 Resilienza e Degradazione Graduale
 - **SpotifyAuthError propagation**: ogni `except Exception` è preceduto da `except SpotifyAuthError: raise`
@@ -207,9 +211,10 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 ### 8.5 Background Jobs (APScheduler)
 | Job | Frequenza | Calls/user | Descrizione |
 |-----|-----------|------------|-------------|
-| `sync_recent_plays` | Ogni 60 min | 1 | Accumula ascolti oltre il limite API di 50 |
+| `sync_recent_plays` | Ogni 60 min | 1 + 0-N genre cache | Accumula ascolti + popola genre cache per artisti nuovi |
 | `save_daily_snapshot` | 1x/giorno (primo login) | 2 | Snapshot top artists + top tracks |
 | `compute_daily_aggregates` | 02:00 daily | 0 (DB only) | Statistiche giornaliere per charts |
+| `cleanup_expired_data` | 1x/mese (1° del mese) | 0 (DB only) | Prune snapshots >365d, popularity >90d |
 
 ### 8.6 Audio Analysis (On-Demand)
 - `POST /api/analyze-tracks`: frontend invia track objects nel body (no re-fetch API)
@@ -223,3 +228,32 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **UserSnapshot**: top artists/tracks JSON giornaliero → confronti temporali arbitrari
 - **DailyListeningStats**: minuti e ascolti aggregati per giorno → charts "Tempo di Ascolto"
 - Granularità temporale arbitraria filtrando per date nel DB
+
+### 8.8 Privacy / GDPR
+- `DELETE /api/v1/me/data`: cancellazione completa account e dati utente (hard delete)
+- `GET /api/v1/me/data/export`: esportazione dati in JSON
+- Pagina privacy nel frontend con spiegazione raccolta dati, conservazione, diritti
+- **Data retention policy**: plays e stats = forever, snapshots = 1 anno, popularity cache = 90 giorni
+
+### 8.9 Admin Dashboard
+- Pagina `/admin` protetta (solo `is_admin`)
+- Gestione utenti: lista, sospensione (revoca token), force-sync
+- Gestione inviti: generazione codici, monitoraggio utilizzo
+- Monitoraggio: utilizzo API per utente, stato background jobs
+
+### 8.10 Onboarding
+- Modal 3 step al primo login: benvenuto → come funziona → placeholder dati
+- Flag `User.onboarding_completed` server-side — mostrato solo una volta
+- Checkbox "Non mostrare più" salva in `localStorage('wrap_onboarding_dismissed')` — dismissione per-device, indipendente dal flag server-side
+- Dopo onboarding: i dati arrivano gradualmente nelle ore successive
+
+### 8.11 User Tiers
+- `User.tier`: free / premium / admin
+- Rate limit per utente: free = 30 req/min, premium = 60 req/min, admin = illimitato
+- Preparazione per monetizzazione futura (tutti "free" in beta)
+
+### 8.12 Observability
+- Structured JSON logging in produzione (python-json-logger)
+- Request context: `request_id` (UUID) + `user_id` in ogni log line via contextvars
+- Health endpoints: `/health` (load balancer) + `/health/detailed` (admin diagnostics)
+- Per-user rate limit via Redis sorted set (sliding 1-min window)

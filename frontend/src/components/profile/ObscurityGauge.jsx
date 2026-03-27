@@ -7,9 +7,9 @@ const STROKE_WIDTH = 12
 const CIRCUMFERENCE = Math.PI * RADIUS // semicircle
 
 function getColor(score) {
-  if (score < 30) return 'var(--success, #10b981)' // green — mainstream
-  if (score < 60) return 'var(--accent, #6366f1)' // indigo — mid
-  return 'var(--purple, #a855f7)' // purple — obscure
+  if (score < 30) return '#10b981' // green — mainstream
+  if (score < 60) return '#6366f1' // indigo — mid
+  return '#a855f7' // purple — obscure
 }
 
 function getLabel(score) {

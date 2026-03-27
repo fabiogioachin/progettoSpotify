@@ -12,7 +12,7 @@ from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["historical"])
+router = APIRouter(prefix="/api/v1", tags=["historical"])
 
 
 @router.get("/historical-tops")

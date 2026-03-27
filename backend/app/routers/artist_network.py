@@ -13,7 +13,7 @@ from app.utils.json_utils import sanitize_nans
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/artist-network", tags=["artist-network"])
+router = APIRouter(prefix="/api/v1/artist-network", tags=["artist-network"])
 
 
 @router.get("")

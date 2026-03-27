@@ -148,7 +148,8 @@ async def compute_temporal_patterns(
     max_streak = _compute_streak(unique_days)
 
     # Last 7 calendar days activity (Mon→Sun aligned with DAY_LABELS)
-    today = datetime.now().date()
+    _tz = plays[0]["datetime"].tzinfo if plays and plays[0]["datetime"].tzinfo else None
+    today = datetime.now(_tz).date()
     unique_days_set = set(unique_days)
     active_last_7 = []
     for offset in range(6, -1, -1):  # 6 days ago → today
@@ -211,7 +212,7 @@ async def _store_plays(db: AsyncSession, user_id: int, plays: list[dict]) -> int
     """Salva nuovi ascolti nel DB, ignorando duplicati."""
     stored = 0
     for play in plays:
-        dt_naive = play["datetime"].replace(tzinfo=None)
+        dt = play["datetime"]
         track_id = play.get("track_id", "")
         if not track_id:
             continue
@@ -219,7 +220,7 @@ async def _store_plays(db: AsyncSession, user_id: int, plays: list[dict]) -> int
             select(func.count(RecentPlay.id)).where(
                 RecentPlay.user_id == user_id,
                 RecentPlay.track_spotify_id == track_id,
-                RecentPlay.played_at == dt_naive,
+                RecentPlay.played_at == dt,
             )
         )
         if result.scalar() > 0:
@@ -230,7 +231,7 @@ async def _store_plays(db: AsyncSession, user_id: int, plays: list[dict]) -> int
             track_name=play["track_name"],
             artist_name=play["artist_name"],
             duration_ms=play["duration_ms"],
-            played_at=dt_naive,
+            played_at=dt,
         )
         db.add(rp)
         stored += 1
@@ -325,7 +326,8 @@ async def _compute_daily_minutes(
 
     Priorità: DailyListeningStats (pre-aggregato) > fallback da plays in-memory.
     """
-    today = datetime.now().date()
+    _tz = plays[0]["datetime"].tzinfo if plays and plays[0]["datetime"].tzinfo else None
+    today = datetime.now(_tz).date()
     start_date = today - timedelta(days=days)
 
     # Prova prima DailyListeningStats (pre-aggregato dal background job)

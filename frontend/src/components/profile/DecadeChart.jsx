@@ -17,7 +17,7 @@ export default function DecadeChart({ decadeDistribution = {} }) {
           <YAxis
             type="category"
             dataKey="decade"
-            tick={{ fill: 'var(--text-secondary, #b3b3b3)', fontSize: 12 }}
+            tick={{ fill: '#b3b3b3', fontSize: 12 }}
             width={50}
             axisLine={false}
             tickLine={false}

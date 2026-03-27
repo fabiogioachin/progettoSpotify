@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ListMusic, TrendingUp, Music, Tag } from 'lucide-react'
+import { ListMusic, TrendingUp, Music, Tag, Loader2, Clock } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bar,
   BarChart,
@@ -17,12 +18,40 @@ import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { usePlaylistCompare } from '../hooks/usePlaylistCompare'
 import { PLAYLIST_COLORS, TOOLTIP_STYLE } from '../lib/chartTheme'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
+
+/** Map backend phase strings to Italian user-facing labels */
+function phaseLabel(phase, progress) {
+  switch (phase) {
+    case 'fetching':
+    case 'fetching_tracks':
+      return `Caricamento playlist ${progress.completed}/${progress.total}...`
+    case 'fetching_genres':
+      return 'Recupero generi...'
+    case 'computing':
+      return 'Calcolo risultati...'
+    default:
+      if (progress.total > 0 && progress.completed < progress.total) {
+        return `Elaborazione ${progress.completed}/${progress.total}...`
+      }
+      return 'Analisi in corso...'
+  }
+}
 
 export default function PlaylistComparePage() {
-  const { data: playlistsData, loading: playlistsLoading } = useSpotifyData('/api/playlists')
+  const { data: playlistsData, loading: playlistsLoading } = useSpotifyData('/api/v1/playlists')
 
   const [selectedIds, setSelectedIds] = useState([])
-  const { data: comparison, loading: comparing, error: compareError, compare, reset } = usePlaylistCompare()
+  const {
+    data: comparison,
+    loading: comparing,
+    error: compareError,
+    compare,
+    reset,
+    progress,
+    isWaiting,
+    waitSeconds,
+  } = usePlaylistCompare()
 
   // Reset stale comparison when selection changes
   const selectionKey = useMemo(() => JSON.stringify(selectedIds), [selectedIds])
@@ -48,6 +77,11 @@ export default function PlaylistComparePage() {
 
   const playlistNames = {}
   playlists.forEach((p) => { playlistNames[p.id] = p.name })
+
+  // Determine button label based on state
+  const buttonLabel = comparing
+    ? (progress.percent > 0 ? `${progress.percent}%` : 'Avvio...')
+    : `Confronta (${selectedIds.length}/4)`
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -140,11 +174,63 @@ export default function PlaylistComparePage() {
               <button
                 onClick={handleCompare}
                 disabled={selectedIds.length < 2 || comparing}
-                className="px-8 py-3 bg-accent hover:bg-accent-hover disabled:bg-surface disabled:text-text-muted text-white rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-accent/20 disabled:shadow-none"
+                className="px-8 py-3 bg-accent hover:bg-accent-hover disabled:bg-surface disabled:text-text-muted text-white rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-accent/20 disabled:shadow-none flex items-center gap-2"
               >
-                {comparing ? 'Analisi in corso...' : `Confronta (${selectedIds.length}/4)`}
+                {comparing && <Loader2 size={16} className="animate-spin" />}
+                {buttonLabel}
               </button>
             </div>
+
+            {/* Progress indicator */}
+            <AnimatePresence>
+              {comparing && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-3"
+                >
+                  {/* Phase label */}
+                  <div className="flex items-center justify-center gap-2 text-sm text-text-secondary">
+                    {isWaiting ? (
+                      <>
+                        <Clock size={14} className="text-amber-400" />
+                        <span className="text-amber-400">
+                          In attesa rinnovo budget API ({waitSeconds}s)...
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 size={14} className="animate-spin text-accent" />
+                        <span>{phaseLabel(progress.phase, progress)}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Progress bar */}
+                  {progress.total > 0 && (
+                    <div className="max-w-md mx-auto">
+                      <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ backgroundColor: isWaiting ? '#f59e0b' : '#6366f1' }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress.percent}%` }}
+                          transition={{ duration: 0.4, ease: 'easeOut' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Skeleton placeholders for results */}
+                  <div className="space-y-4">
+                    <SkeletonCard height="h-48" />
+                    <SkeletonCard height="h-72" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Results */}
             {compareError && (
@@ -152,15 +238,10 @@ export default function PlaylistComparePage() {
                 {compareError}
               </div>
             )}
-            {comparing && (
-              <div className="space-y-4">
-                <SkeletonCard height="h-48" />
-                <SkeletonCard height="h-72" />
-              </div>
-            )}
 
             {comparison && (() => {
               const comps = comparison.comparisons
+              if (!comps?.length) return null
               const hasFeatures = comps.some(c => c.analyzed_count > 0)
 
               // Popularity chart data
@@ -190,7 +271,13 @@ export default function PlaylistComparePage() {
               )
 
               return (
-                <div className="space-y-6 animate-fade-in">
+                <SectionErrorBoundary sectionName="ComparisonResults">
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="space-y-6"
+                >
                   {/* Summary table */}
                   <div className="glow-card bg-surface rounded-xl p-5 overflow-x-auto">
                     <h3 className="text-text-primary font-display font-semibold mb-4">
@@ -206,8 +293,8 @@ export default function PlaylistComparePage() {
                           {hasFeatures && (
                             <>
                               <th className="text-center text-text-muted py-2 px-3">Energia</th>
-                              <th className="text-center text-text-muted py-2 px-3">Positività</th>
-                              <th className="text-center text-text-muted py-2 px-3">Ballabilità</th>
+                              <th className="text-center text-text-muted py-2 px-3">Positivit&agrave;</th>
+                              <th className="text-center text-text-muted py-2 px-3">Ballabilit&agrave;</th>
                             </>
                           )}
                         </tr>
@@ -217,7 +304,7 @@ export default function PlaylistComparePage() {
                           const genres = Object.entries(comp.genre_distribution || {})
                           const topGenre = genres.length > 0
                             ? genres.sort((a, b) => b[1] - a[1])[0][0]
-                            : '—'
+                            : '\u2014'
                           return (
                             <tr key={comp.playlist_id} className="border-b border-border/50">
                               <td className="py-2 px-3 text-text-primary font-medium">
@@ -262,7 +349,7 @@ export default function PlaylistComparePage() {
                   <div className="glow-card bg-surface rounded-xl p-5">
                     <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                       <TrendingUp size={18} className="text-accent" />
-                      Confronto Popolarità
+                      Confronto Popolarit&agrave;
                     </h3>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={popData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -294,7 +381,7 @@ export default function PlaylistComparePage() {
                         Distribuzione Generi
                       </h3>
                       <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={genreData} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                        <BarChart data={genreData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
                           <XAxis
                             type="number"
@@ -378,7 +465,8 @@ export default function PlaylistComparePage() {
                       </div>
                     </>
                   )}
-                </div>
+                </motion.div>
+                </SectionErrorBoundary>
               )
             })()}
           </>

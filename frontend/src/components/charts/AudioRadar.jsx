@@ -7,7 +7,9 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
+import { Radio } from 'lucide-react'
 import { RADAR_LABELS, TOOLTIP_STYLE } from '../../lib/chartTheme'
+import EmptyState from '../ui/EmptyState'
 
 export default function AudioRadar({ features, title = 'Profilo Audio', loading = false }) {
   if (loading) {
@@ -25,7 +27,12 @@ export default function AudioRadar({ features, title = 'Profilo Audio', loading 
     && Object.entries(features).some(([k, v]) => k !== 'tempo' && v && v > 0)
 
   if (!hasNonZeroFeatures) {
-    return null
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5">
+        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+        <EmptyState icon={Radio} message="Dati audio non disponibili" />
+      </div>
+    )
   }
 
   const data = Object.entries(RADAR_LABELS).map(([key, label]) => ({

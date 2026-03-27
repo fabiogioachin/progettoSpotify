@@ -8,8 +8,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { TrendingUp } from 'lucide-react'
 import { FEATURE_COLORS, TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
 import { FEATURE_LABELS } from '../../lib/constants'
+import EmptyState from '../ui/EmptyState'
 
 const TEMPORAL_RANGES = [
   { value: '7d', label: '7gg' },
@@ -29,7 +31,16 @@ export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Tem
   }
 
   if (!trends || trends.length === 0) {
-    return null
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5">
+        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+        <EmptyState
+          icon={TrendingUp}
+          message="Dati insufficienti per i trend"
+          description="Torna tra qualche giorno"
+        />
+      </div>
+    )
   }
 
   // Controlla se le features audio sono disponibili (non tutte zero)
@@ -96,6 +107,7 @@ function FeatureTrend({ trends, title }) {
               fill={`url(#gradient-${key})`}
               strokeWidth={2}
               animationDuration={1500}
+              connectNulls
             />
           ))}
         </AreaChart>
@@ -106,7 +118,16 @@ function FeatureTrend({ trends, title }) {
 
 function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
   if (!dailyMinutes || dailyMinutes.length === 0) {
-    return null
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5">
+        <h3 className="text-text-primary font-display font-semibold">Tempo di Ascolto</h3>
+        <EmptyState
+          icon={TrendingUp}
+          message="Dati insufficienti per i trend"
+          description="Torna tra qualche giorno"
+        />
+      </div>
+    )
   }
 
   const data = dailyMinutes.map((d) => ({
@@ -127,7 +148,7 @@ function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
               <button
                 key={r.value}
                 onClick={() => onRangeChange(r.value)}
-                className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                className={`px-2.5 py-1.5 min-h-[32px] text-xs rounded transition-colors ${
                   temporalRange === r.value
                     ? 'bg-accent text-white'
                     : 'bg-surface-hover text-text-muted hover:text-text-primary'
@@ -176,6 +197,7 @@ function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
             fill="url(#gradient-listening)"
             strokeWidth={2}
             animationDuration={1500}
+            connectNulls
           />
         </AreaChart>
       </ResponsiveContainer>

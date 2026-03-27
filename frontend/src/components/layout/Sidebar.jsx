@@ -12,9 +12,12 @@ import {
   HeartHandshake,
   Menu,
   X,
+  Shield,
+  Settings,
 } from 'lucide-react'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useAuth } from '../../contexts/AuthContext'
 
 const NAV_SECTIONS = [
   {
@@ -52,6 +55,7 @@ const NAV_SECTIONS = [
 export default function Sidebar() {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { user } = useAuth()
 
   const sidebarContent = (
     <>
@@ -111,6 +115,34 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+      <div className="px-3 py-4 border-t border-border mt-auto space-y-1">
+        {user?.is_admin && (
+          <Link
+            to="/admin"
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200
+              ${location.pathname === '/admin'
+                ? 'text-text-primary bg-surface-hover'
+                : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
+              }`}
+          >
+            <Settings size={14} />
+            Admin
+          </Link>
+        )}
+        <Link
+          to="/privacy"
+          onClick={() => setMobileOpen(false)}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200
+            ${location.pathname === '/privacy'
+              ? 'text-text-primary bg-surface-hover'
+              : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
+            }`}
+        >
+          <Shield size={14} />
+          Privacy e dati
+        </Link>
+      </div>
     </>
   )
 

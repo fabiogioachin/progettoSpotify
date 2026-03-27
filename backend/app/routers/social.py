@@ -23,7 +23,7 @@ from app.utils.rate_limiter import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/social", tags=["social"])
+router = APIRouter(prefix="/api/v1/social", tags=["social"])
 
 
 # ---------------------------------------------------------------------------

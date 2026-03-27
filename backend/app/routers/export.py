@@ -27,7 +27,7 @@ from app.utils.rate_limiter import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/export", tags=["export"])
+router = APIRouter(prefix="/api/v1/export", tags=["export"])
 
 
 @router.get("/claude-prompt")

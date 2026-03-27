@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import time
-from collections import defaultdict
+import uuid
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+
+from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -79,18 +81,21 @@ async def gather_in_chunks(coros, chunk_size=4):
 
 
 class APIRateLimiter(BaseHTTPMiddleware):
-    """Sliding window rate limiter per utente/IP."""
+    """Sliding window rate limiter per utente/IP — backed by Redis sorted sets.
+
+    Graceful degradation: if Redis is down, requests are allowed (fail-open).
+    """
 
     # Paths exempted from rate limiting (lightweight, essential endpoints)
     EXEMPT_PATHS = {"/auth/me", "/health"}
 
-    MAX_TRACKED_IPS = 10_000
+    _REDIS_KEY_PREFIX = "ratelimit:api:"
+    _KEY_TTL = 120  # seconds — auto-cleanup for stale IP keys
 
     def __init__(self, app, requests_per_minute: int = 120):
         super().__init__(app)
         self.rpm = requests_per_minute
-        self._requests: dict[str, list[float]] = defaultdict(list)
-        self._last_cleanup = time.time()
+        self._window = 60.0
 
     async def dispatch(self, request, call_next):
         # Skip rate limiting for lightweight/essential endpoints
@@ -100,39 +105,46 @@ class APIRateLimiter(BaseHTTPMiddleware):
         # Use IP as key — ProxyHeadersMiddleware already rewrites request.client.host
         # when BEHIND_PROXY=true, so we always use request.client.host (no manual
         # X-Forwarded-For parsing, which would allow rate limit bypass via spoofing)
-        key = request.client.host if request.client else "unknown"
-        now = time.time()
-        window = 60.0
+        ip = request.client.host if request.client else "unknown"
 
-        # Periodic cleanup of stale keys (every 5 minutes)
-        if now - self._last_cleanup > 300:
-            stale = [
-                k for k, v in self._requests.items() if not v or now - v[-1] > window
-            ]
-            for k in stale:
-                del self._requests[k]
+        try:
+            r = get_redis()
+            redis_key = f"{self._REDIS_KEY_PREFIX}{ip}"
+            now = time.time()
+            window_start = now - self._window
+            call_id = uuid.uuid4().hex
 
-            # Hard cap: evict oldest entries (only during cleanup, not every request)
-            if len(self._requests) > self.MAX_TRACKED_IPS:
-                sorted_keys = sorted(
-                    self._requests.keys(),
-                    key=lambda k: self._requests[k][-1] if self._requests[k] else 0,
+            pipe = r.pipeline(transaction=True)
+            # Cleanup expired entries
+            pipe.zremrangebyscore(redis_key, 0, window_start)
+            # Get current entries in window
+            pipe.zrangebyscore(redis_key, window_start, "+inf", withscores=True)
+            # Add this request
+            pipe.zadd(redis_key, {call_id: now})
+            # Set TTL for auto-cleanup
+            pipe.expire(redis_key, self._KEY_TTL)
+            results = await pipe.execute()
+
+            # results[1] is list of (member, score) tuples in window before adding
+            entries = results[1]
+            if len(entries) >= self.rpm:
+                # Over limit — remove the entry we just added
+                try:
+                    await r.zrem(redis_key, call_id)
+                except Exception:
+                    pass
+                oldest_score = entries[0][1] if entries else now
+                retry_after = int(self._window - (now - oldest_score)) + 1
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Troppe richieste. Riprova tra poco."},
+                    headers={"Retry-After": str(max(1, retry_after))},
                 )
-                for k in sorted_keys[: len(self._requests) - self.MAX_TRACKED_IPS]:
-                    del self._requests[k]
-
-            self._last_cleanup = now
-
-        # Clean old entries for this key
-        self._requests[key] = [t for t in self._requests[key] if now - t < window]
-
-        if len(self._requests[key]) >= self.rpm:
-            retry_after = int(window - (now - self._requests[key][0])) + 1
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Troppe richieste. Riprova tra poco."},
-                headers={"Retry-After": str(retry_after)},
+        except Exception:
+            # Fail-open: Redis down → allow the request
+            logger.warning(
+                "Redis non disponibile per API rate limiter — fail-open per %s",
+                ip,
             )
 
-        self._requests[key].append(now)
         return await call_next(request)

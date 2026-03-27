@@ -12,6 +12,7 @@ import CompatibilityMeter from '../components/social/CompatibilityMeter'
 import TasteComparison from '../components/social/TasteComparison'
 import Leaderboard from '../components/social/Leaderboard'
 import InviteModal from '../components/social/InviteModal'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function FriendsPage() {
   const { user } = useAuth()
@@ -21,12 +22,12 @@ export default function FriendsPage() {
     data: friendsData,
     loading: friendsLoading,
     refetch: refetchFriends,
-  } = useSpotifyData('/api/social/friends')
+  } = useSpotifyData('/api/v1/social/friends')
 
   const {
     data: leaderboardData,
     loading: leaderboardLoading,
-  } = useSpotifyData('/api/social/leaderboard')
+  } = useSpotifyData('/api/v1/social/leaderboard')
 
   const [selectedFriend, setSelectedFriend] = useState(null)
   const [comparison, setComparison] = useState(null)
@@ -43,7 +44,7 @@ export default function FriendsPage() {
 
     async function acceptInvite() {
       try {
-        await api.post(`/api/social/accept/${code}`)
+        await api.post(`/api/v1/social/accept/${code}`)
         if (!cancelled) {
           setToast({ type: 'success', message: 'Amicizia accettata!' })
           refetchFriends()
@@ -69,7 +70,7 @@ export default function FriendsPage() {
 
   const handleInvite = useCallback(async () => {
     try {
-      const { data } = await api.post('/api/social/invite')
+      const { data } = await api.post('/api/v1/social/invite')
       setInviteCode(data.code)
       setInviteModalOpen(true)
     } catch (err) {
@@ -83,7 +84,7 @@ export default function FriendsPage() {
     setComparison(null)
     setCompareError(null)
     try {
-      const { data } = await api.get(`/api/social/compare/${friend.id}`)
+      const { data } = await api.get(`/api/v1/social/compare/${friend.id}`)
       setComparison(data)
     } catch (err) {
       console.error('Comparison failed:', err)
@@ -96,7 +97,7 @@ export default function FriendsPage() {
 
   const handleRemove = useCallback(async (friendId) => {
     try {
-      await api.delete(`/api/social/friends/${friendId}`)
+      await api.delete(`/api/v1/social/friends/${friendId}`)
       if (selectedFriend?.id === friendId) {
         setSelectedFriend(null)
         setComparison(null)
@@ -130,50 +131,54 @@ export default function FriendsPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-display text-text-primary">Amici</h1>
         <button
           onClick={handleInvite}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+          className="px-4 py-2.5 min-h-[44px] bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 flex-shrink-0"
         >
           <UserPlus size={16} />
-          Invita un amico
+          <span className="hidden sm:inline">Invita un amico</span>
+          <span className="sm:hidden">Invita</span>
         </button>
       </div>
 
       {/* Friends grid */}
-      {friendsLoading ? (
-        <SkeletonGrid count={6} columns="grid-cols-1 md:grid-cols-2 lg:grid-cols-3" cardHeight="h-20" />
-      ) : friends.length === 0 ? (
-        /* Empty state — prominent invite CTA */
-        <div className="bg-surface rounded-xl p-12 flex flex-col items-center gap-4 text-center">
-          <HeartHandshake size={48} className="text-text-muted" />
-          <p className="text-text-secondary text-sm max-w-sm">
-            Non hai ancora amici. Invita qualcuno per confrontare i vostri gusti musicali!
-          </p>
-          <button
-            onClick={handleInvite}
-            className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
-          >
-            <UserPlus size={16} />
-            Invita un amico
-          </button>
-        </div>
-      ) : (
-        <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {friends.map((friend) => (
-            <StaggerItem key={friend.id}>
-              <FriendCard
-                friend={friend}
-                onCompare={handleCompare}
-                onRemove={handleRemove}
-              />
-            </StaggerItem>
-          ))}
-        </StaggerContainer>
-      )}
+      <SectionErrorBoundary sectionName="FriendsGrid">
+        {friendsLoading ? (
+          <SkeletonGrid count={6} columns="grid-cols-1 md:grid-cols-2 lg:grid-cols-3" cardHeight="h-20" />
+        ) : friends.length === 0 ? (
+          /* Empty state — prominent invite CTA */
+          <div className="bg-surface rounded-xl p-12 flex flex-col items-center gap-4 text-center">
+            <HeartHandshake size={48} className="text-text-muted" />
+            <p className="text-text-secondary text-sm max-w-sm">
+              Non hai ancora amici. Invita qualcuno per confrontare i vostri gusti musicali!
+            </p>
+            <button
+              onClick={handleInvite}
+              className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+            >
+              <UserPlus size={16} />
+              Invita un amico
+            </button>
+          </div>
+        ) : (
+          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {friends.map((friend) => (
+              <StaggerItem key={friend.id}>
+                <FriendCard
+                  friend={friend}
+                  onCompare={handleCompare}
+                  onRemove={handleRemove}
+                />
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        )}
+      </SectionErrorBoundary>
 
       {/* Comparison panel */}
+      <SectionErrorBoundary sectionName="FriendComparison">
       <AnimatePresence>
         {selectedFriend && (
           <motion.section
@@ -227,16 +232,19 @@ export default function FriendsPage() {
           </motion.section>
         )}
       </AnimatePresence>
+      </SectionErrorBoundary>
 
       {/* Leaderboard */}
-      {leaderboardLoading ? (
-        <SkeletonCard height="h-64" />
-      ) : (
-        <Leaderboard
-          rankings={leaderboardData}
-          currentUserId={user?.id}
-        />
-      )}
+      <SectionErrorBoundary sectionName="Leaderboard">
+        {leaderboardLoading ? (
+          <SkeletonCard height="h-64" />
+        ) : (
+          <Leaderboard
+            rankings={leaderboardData}
+            currentUserId={user?.id}
+          />
+        )}
+      </SectionErrorBoundary>
 
       {/* Invite modal */}
       <InviteModal

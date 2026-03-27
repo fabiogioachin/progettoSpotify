@@ -6,9 +6,11 @@ import ArtistNetwork from '../components/charts/ArtistNetwork'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function ArtistNetworkPage() {
-  const { data, loading, error, refetch } = useSpotifyData('/api/artist-network')
+  const { data, loading, error, refetch } = useSpotifyData('/api/v1/artist-network')
+  const [viewMode, setViewMode] = useState('rete')
 
   const metrics = data?.metrics || {}
   const nodes = data?.nodes || []
@@ -18,16 +20,20 @@ export default function ArtistNetworkPage() {
   const bridges = data?.bridges || []
   const topGenres = data?.top_genres || []
   const clusterRankings = data?.cluster_rankings || {}
+  const genreNodes = data?.genre_nodes || []
+  const genreEdges = data?.genre_edges || []
+
+  const showToggle = genreNodes.length > 0
 
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-display font-bold text-text-primary">Ecosistema Artisti</h1>
             <p className="text-text-secondary text-sm mt-1">La rete di connessioni tra i tuoi artisti preferiti</p>
           </div>
-          <button onClick={() => refetch()} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300" title="Aggiorna">
+          <button onClick={() => refetch()} className="p-2 min-h-[36px] min-w-[36px] rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300 flex-shrink-0" title="Aggiorna">
             <RefreshCw size={18} />
           </button>
         </div>
@@ -48,20 +54,22 @@ export default function ArtistNetworkPage() {
         ) : (
           <>
             {/* KPI Cards */}
-            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <StaggerItem>
-                <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="I tuoi artisti più ascoltati da 3 periodi, collegati per generi musicali condivisi" />
-              </StaggerItem>
-              <StaggerItem>
-                <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Ogni connessione indica generi musicali condivisi. Più generi in comune, connessione più forte" />
-              </StaggerItem>
-              <StaggerItem>
-                <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti che formano una rete connessa. Il nome della cerchia è il genere dominante tra gli artisti del gruppo" />
-              </StaggerItem>
-              <StaggerItem>
-                <KPICard title="Densità Rete" value={Math.round((metrics.density || 0) * 100)} suffix="%" icon={BarChart3} delay={300} tooltip="Quanto è interconnesso il tuo ecosistema musicale. 100% = tutti gli artisti condividono generi" />
-              </StaggerItem>
-            </StaggerContainer>
+            <SectionErrorBoundary sectionName="KPICards">
+              <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <StaggerItem>
+                  <KPICard title="Artisti nel Grafo" value={metrics.total_nodes || 0} icon={Users} delay={0} tooltip="I tuoi artisti più ascoltati da 3 periodi, collegati per generi musicali condivisi" />
+                </StaggerItem>
+                <StaggerItem>
+                  <KPICard title="Connessioni" value={metrics.total_edges || 0} icon={GitBranch} delay={100} tooltip="Ogni connessione indica generi musicali condivisi. Più generi in comune, connessione più forte" />
+                </StaggerItem>
+                <StaggerItem>
+                  <KPICard title="Cerchie" value={metrics.cluster_count || 0} icon={Waypoints} delay={200} tooltip="Gruppi di artisti che formano una rete connessa. Il nome della cerchia è il genere dominante tra gli artisti del gruppo" />
+                </StaggerItem>
+                <StaggerItem>
+                  <KPICard title="Densità Rete" value={Math.round((metrics.density || 0) * 100)} suffix="%" icon={BarChart3} delay={300} tooltip="Quanto è interconnesso il tuo ecosistema musicale. 100% = tutti gli artisti condividono generi" />
+                </StaggerItem>
+              </StaggerContainer>
+            </SectionErrorBoundary>
 
             {data?.data_quality?.warning && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
@@ -70,38 +78,78 @@ export default function ArtistNetworkPage() {
               </div>
             )}
 
+            {/* View toggle */}
+            {showToggle && (
+              <div className="flex gap-1 mb-4">
+                <button
+                  onClick={() => setViewMode('rete')}
+                  className={`px-3 py-1.5 min-h-[32px] text-xs rounded transition-colors ${
+                    viewMode === 'rete'
+                      ? 'bg-accent text-white'
+                      : 'bg-surface-hover text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  Rete
+                </button>
+                <button
+                  onClick={() => setViewMode('kg')}
+                  className={`px-3 py-1.5 min-h-[32px] text-xs rounded transition-colors ${
+                    viewMode === 'kg'
+                      ? 'bg-accent text-white'
+                      : 'bg-surface-hover text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  Knowledge Graph
+                </button>
+              </div>
+            )}
+
             {/* Network Graph */}
-            <ArtistNetwork nodes={nodes} edges={edges} clusters={clusters} clusterNames={clusterNames} loading={loading} />
+            <SectionErrorBoundary sectionName="ArtistNetwork">
+              <ArtistNetwork
+                nodes={nodes}
+                edges={edges}
+                clusters={clusters}
+                clusterNames={clusterNames}
+                loading={loading}
+                viewMode={showToggle ? viewMode : 'rete'}
+                genreNodes={genreNodes}
+                genreEdges={genreEdges}
+              />
+            </SectionErrorBoundary>
 
             {/* Genre Cloud */}
             {topGenres.length > 0 && (
-              <div className="glow-card bg-surface rounded-xl p-5">
-                <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
-                  <Music size={18} className="text-accent" />
-                  Generi dominanti nel tuo ecosistema
-                </h3>
-                <StaggerContainer className="flex flex-wrap gap-2">
-                  {topGenres.map((g, i) => {
-                    const size = i < 3 ? 'text-sm px-3 py-1.5' : 'text-xs px-2 py-1'
-                    const opacity = Math.max(0.4, 1 - (i * 0.08))
-                    return (
-                      <StaggerItem key={g.genre}>
-                        <span
-                          className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20 inline-block`}
-                          style={{ opacity }}
-                        >
-                          {g.genre}
-                          <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
-                        </span>
-                      </StaggerItem>
-                    )
-                  })}
-                </StaggerContainer>
-              </div>
+              <SectionErrorBoundary sectionName="GenreCloud">
+                <div className="glow-card bg-surface rounded-xl p-5">
+                  <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
+                    <Music size={18} className="text-accent" />
+                    Generi dominanti nel tuo ecosistema
+                  </h3>
+                  <StaggerContainer className="flex flex-wrap gap-2">
+                    {topGenres.map((g, i) => {
+                      const size = i < 3 ? 'text-sm px-3 py-1.5' : 'text-xs px-2 py-1'
+                      const opacity = Math.max(0.4, 1 - (i * 0.08))
+                      return (
+                        <StaggerItem key={g.genre}>
+                          <span
+                            className={`${size} rounded-full bg-accent/10 text-accent font-medium transition-all hover:bg-accent/20 inline-block`}
+                            style={{ opacity }}
+                          >
+                            {g.genre}
+                            <span className="text-text-muted ml-1 text-[10px]">({g.count})</span>
+                          </span>
+                        </StaggerItem>
+                      )
+                    })}
+                  </StaggerContainer>
+                </div>
+              </SectionErrorBoundary>
             )}
 
             {/* Bridge Artists */}
             {bridges.length > 0 && (
+              <SectionErrorBoundary sectionName="BridgeArtists">
               <div className="glow-card bg-surface rounded-xl p-5">
                 <h3 className="text-text-primary font-display font-semibold mb-4 flex items-center gap-2">
                   <Waypoints size={18} className="text-accent" />
@@ -110,7 +158,7 @@ export default function ArtistNetworkPage() {
                 <p className="text-text-secondary text-sm mb-4">
                   Artisti che collegano cerchie di gusto diverse nel tuo ecosistema
                 </p>
-                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   {bridges.map((bridge) => (
                     <StaggerItem key={bridge.id}>
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-surface-hover">
@@ -136,11 +184,14 @@ export default function ArtistNetworkPage() {
                   ))}
                 </StaggerContainer>
               </div>
+              </SectionErrorBoundary>
             )}
 
             {/* Le tue Cerchie */}
             {Object.keys(clusterRankings).length > 0 && (
-              <CerchieSection clusterRankings={clusterRankings} clusterNames={clusterNames} />
+              <SectionErrorBoundary sectionName="CerchieSection">
+                <CerchieSection clusterRankings={clusterRankings} clusterNames={clusterNames} />
+              </SectionErrorBoundary>
             )}
           </>
         )}

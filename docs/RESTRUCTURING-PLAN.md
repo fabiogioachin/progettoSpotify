@@ -1,4 +1,6 @@
-# Piano di Ristrutturazione: Spotify Intelligence → Multi-User Beta
+# Piano di Ristrutturazione: Wrap → Multi-User Beta
+
+> **COMPLETATO** — Tutte le fasi (0-5, 7, 8) sono state implementate nelle sessioni di marzo 2026. Il prossimo step è il deploy (Phase 6, documentato in `docs/LAUNCH-PLAN.md`).
 
 ## Context
 
@@ -217,7 +219,7 @@ Grafici che scompaiono con dati null:
 ## Phase 4: Bug Fixes
 
 ### 4.1 Artist diversity 100%
-- **Root cause**: probabilmente `unique_artists / total_plays` con pochi ascolti → 100%
+- **Root cause**: probabilmente `unique_artists / total_plays` con pochi ascolti → 100% / cap 200 brani (?)
 - **Fix**: usare Shannon entropy (più nuanced), soglia minima 20+ plays, tooltip esplicativo
 - **File**: `services/profile_metrics.py`
 
@@ -225,7 +227,7 @@ Grafici che scompaiono con dati null:
 - Estrarre generi dominanti per cluster (DBSCAN/Louvain già li calcola)
 - Nome: genere dominante ("Cerchia Hip-Hop", "Cerchia Indie Rock")
 - Contenuto: artisti del cluster con connessioni visuali
-- Stile: knowledge graph — nodi genere grandi, nodi artista piccoli connessi
+- Stile: knowledge graph — nodi genere grandi, nodi artista piccoli connessi ai suoi generi musicali
 - **Files**: `services/taste_clustering.py`, `pages/ArtistNetworkPage.jsx`
 
 ### 4.3 Discover Weekly / Release Radar

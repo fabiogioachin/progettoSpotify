@@ -27,12 +27,12 @@ export default function GenreDNA({ topGenres = [] }) {
           <PolarGrid stroke={GRID_COLOR} />
           <PolarAngleAxis
             dataKey="genre"
-            tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+            tick={{ fill: '#b3b3b3', fontSize: 11 }}
           />
           <Radar
             dataKey="value"
-            stroke="var(--accent)"
-            fill="var(--accent)"
+            stroke="#6366f1"
+            fill="#6366f1"
             fillOpacity={0.3}
             strokeWidth={2}
           />

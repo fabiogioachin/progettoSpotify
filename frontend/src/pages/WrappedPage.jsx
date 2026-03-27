@@ -7,7 +7,7 @@ import WrappedStories from '../components/wrapped/WrappedStories'
 export default function WrappedPage() {
   const navigate = useNavigate()
   const [period, setPeriod] = useState('medium_term')
-  const { data, loading, error } = useSpotifyData('/api/wrapped', { time_range: period })
+  const { data, loading, error } = useSpotifyData('/api/v1/wrapped', { time_range: period })
 
   if (loading) {
     return (

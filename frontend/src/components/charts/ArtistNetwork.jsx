@@ -1,4 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { Network } from 'lucide-react'
+import EmptyState from '../ui/EmptyState'
 
 const CLUSTER_COLORS = [
   '#6366f1', '#1DB954', '#f59e0b', '#ec4899', '#06b6d4',
@@ -12,13 +14,19 @@ function formatFollowers(n) {
   return String(n)
 }
 
-export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], clusterNames = {}, title = 'Ecosistema Artisti', loading = false }) {
+export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], clusterNames = {}, title = 'Ecosistema Artisti', loading = false, viewMode = 'rete', genreNodes = [], genreEdges = [] }) {
   const svgRef = useRef(null)
   const animRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
   const [positions, setPositions] = useState([])
   const posRef = useRef([])
   const velRef = useRef([])
+
+  // KG simulation state — separate from rete simulation
+  const [kgPositions, setKgPositions] = useState([])
+  const kgPosRef = useRef([])
+  const kgVelRef = useRef([])
+  const kgAnimRef = useRef(null)
 
   // Build cluster color map and node-to-cluster map
   const clusterColorMap = useMemo(() => {
@@ -49,6 +57,152 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return `${nodeIds}|${edgeIds}`
   }, [nodes, edges])
   const prevDataKeyRef = useRef(null)
+
+  // KG: combined index for artists + genre nodes
+  const kgNodeIndex = useMemo(() => {
+    const map = {}
+    nodes.forEach((n, i) => { map[n.id] = i })
+    genreNodes.forEach((gn, i) => { map[gn.id] = nodes.length + i })
+    return map
+  }, [nodes, genreNodes])
+
+  const kgDataKey = useMemo(() => {
+    const nids = nodes.map(n => n.id).sort().join(',')
+    const gnids = genreNodes.map(g => g.id).sort().join(',')
+    const geids = genreEdges.map(e => `${e.source}-${e.target}`).sort().join(',')
+    return `${nids}|${gnids}|${geids}`
+  }, [nodes, genreNodes, genreEdges])
+  const prevKgDataKeyRef = useRef(null)
+
+  // KG simulation
+  useEffect(() => {
+    // Always cancel any running KG animation first (prevents leak on mode switch)
+    if (kgAnimRef.current) cancelAnimationFrame(kgAnimRef.current)
+    if (viewMode !== 'kg') return
+    if (nodes.length === 0 || genreNodes.length === 0) return
+    if (prevKgDataKeyRef.current === kgDataKey) return
+    prevKgDataKeyRef.current = kgDataKey
+
+    const width = 700
+    const height = 500
+    const cx = width / 2
+    const cy = height / 2
+
+    const totalNodes = nodes.length + genreNodes.length
+
+    // Init: genre nodes start near center, artists scattered
+    const initPos = [
+      ...nodes.map(() => ({
+        x: cx + (Math.random() - 0.5) * 400,
+        y: cy + (Math.random() - 0.5) * 350,
+      })),
+      ...genreNodes.map((_, gi) => {
+        const angle = (gi / genreNodes.length) * Math.PI * 2
+        return {
+          x: cx + Math.cos(angle) * 150,
+          y: cy + Math.sin(angle) * 120,
+        }
+      }),
+    ]
+    const initVel = Array.from({ length: totalNodes }, () => ({ x: 0, y: 0 }))
+
+    kgPosRef.current = initPos
+    kgVelRef.current = initVel
+    setKgPositions([...initPos])
+
+    let frameCount = 0
+    const maxFrames = 400
+    const damping = 0.82
+    const artistRepulsion = 600
+    const genreRepulsion = 3000  // genre nodes repel each other strongly
+    const genreArtistRepulsion = 400
+    const attraction = 0.01      // genre-artist edge attraction
+    const centerForce = 0.015
+
+    const isGenre = (idx) => idx >= nodes.length
+
+    function simulate() {
+      if (frameCount >= maxFrames) return
+
+      const pos = kgPosRef.current
+      const vel = kgVelRef.current
+      const n = pos.length
+      const forces = pos.map(() => ({ x: 0, y: 0 }))
+
+      // Repulsion (all pairs)
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const dx = pos[i].x - pos[j].x
+          const dy = pos[i].y - pos[j].y
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+
+          let repulsion
+          if (isGenre(i) && isGenre(j)) {
+            repulsion = genreRepulsion
+          } else if (isGenre(i) || isGenre(j)) {
+            repulsion = genreArtistRepulsion
+          } else {
+            repulsion = artistRepulsion
+          }
+
+          const force = repulsion / (dist * dist)
+          const fx = (dx / dist) * force
+          const fy = (dy / dist) * force
+          forces[i].x += fx
+          forces[i].y += fy
+          forces[j].x -= fx
+          forces[j].y -= fy
+        }
+      }
+
+      // Attraction: genre edges only
+      for (const edge of genreEdges) {
+        const si = kgNodeIndex[edge.source]
+        const ti = kgNodeIndex[edge.target]
+        if (si === undefined || ti === undefined) continue
+        const dx = pos[ti].x - pos[si].x
+        const dy = pos[ti].y - pos[si].y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const force = dist * attraction
+        const fx = (dx / dist) * force
+        const fy = (dy / dist) * force
+        // Genre node (target) pulls artist, artist barely pulls genre
+        forces[si].x += fx
+        forces[si].y += fy
+        forces[ti].x -= fx * 0.1
+        forces[ti].y -= fy * 0.1
+      }
+
+      // Center gravity
+      for (let i = 0; i < n; i++) {
+        forces[i].x += (cx - pos[i].x) * centerForce
+        forces[i].y += (cy - pos[i].y) * centerForce
+      }
+
+      // Update
+      for (let i = 0; i < n; i++) {
+        vel[i].x = (vel[i].x + forces[i].x) * damping
+        vel[i].y = (vel[i].y + forces[i].y) * damping
+        pos[i].x += vel[i].x
+        pos[i].y += vel[i].y
+        pos[i].x = Math.max(30, Math.min(width - 30, pos[i].x))
+        pos[i].y = Math.max(30, Math.min(height - 30, pos[i].y))
+      }
+
+      frameCount++
+      if (frameCount % 3 === 0) {
+        setKgPositions(pos.map(p => ({ ...p })))
+      }
+
+      kgAnimRef.current = requestAnimationFrame(simulate)
+    }
+
+    kgAnimRef.current = requestAnimationFrame(simulate)
+
+    return () => {
+      if (kgAnimRef.current) cancelAnimationFrame(kgAnimRef.current)
+    }
+  }, [viewMode, kgDataKey, kgNodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize positions
   useEffect(() => {
@@ -158,6 +312,15 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     setTooltip({ ...node, x: pos.x, y: pos.y, clusterLabel })
   }, [nodeClusterMap, clusterNames])
 
+  const handleGenreMouseEnter = useCallback((genreNode, pos) => {
+    setTooltip({
+      ...genreNode,
+      x: pos.x,
+      y: pos.y,
+      isGenreNode: true,
+    })
+  }, [])
+
   const handleMouseLeave = useCallback(() => {
     setTooltip(null)
   }, [])
@@ -174,9 +337,173 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
   }
 
   if (!nodes.length) {
-    return null
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5">
+        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+        <EmptyState icon={Network} message="Ascolta più artisti per creare la rete" />
+      </div>
+    )
   }
 
+  if (viewMode === 'kg') {
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5 relative">
+        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+        <svg viewBox="0 0 700 500" className="w-full h-auto" style={{ maxHeight: '500px' }} role="img" aria-label="Knowledge graph generi e artisti">
+          {/* Genre edges only */}
+          {genreEdges.map((edge, i) => {
+            const si = kgNodeIndex[edge.source]
+            const ti = kgNodeIndex[edge.target]
+            if (si === undefined || ti === undefined || !kgPositions[si] || !kgPositions[ti]) return null
+            return (
+              <line
+                key={`kge-${i}`}
+                x1={kgPositions[si].x}
+                y1={kgPositions[si].y}
+                x2={kgPositions[ti].x}
+                y2={kgPositions[ti].y}
+                stroke="#ffffff"
+                strokeOpacity={0.15}
+                strokeWidth={0.5}
+              />
+            )
+          })}
+          {/* Artist nodes (KG: smaller, capped) */}
+          {nodes.map((node, i) => {
+            if (!kgPositions[i]) return null
+            const color = clusterColorMap[node.id] || '#6366f1'
+            const pr = node.pagerank || 0
+            const r = Math.max(4, Math.min(8, 4 + pr * 100))
+            return (
+              <circle
+                key={node.id}
+                cx={kgPositions[i].x}
+                cy={kgPositions[i].y}
+                r={r}
+                fill={color}
+                fillOpacity={Math.max(0.5, Math.min(0.9, 0.4 + pr * 8))}
+                className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                aria-label={node.name}
+                onMouseEnter={() => handleMouseEnter(node, kgPositions[i])}
+                onMouseLeave={handleMouseLeave}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleMouseEnter(node, kgPositions[i])
+                  }
+                }}
+                onBlur={handleMouseLeave}
+              />
+            )
+          })}
+          {/* Genre nodes — rendered on top of artist nodes */}
+          {genreNodes.map((gn, gi) => {
+            const posIdx = nodes.length + gi
+            if (!kgPositions[posIdx]) return null
+            const clusterIdx = gn.cluster ?? 0
+            const color = CLUSTER_COLORS[clusterIdx % CLUSTER_COLORS.length]
+            const r = Math.max(22, Math.min(28, 18 + (gn.artist_count || 1) * 1.2))
+            const pos = kgPositions[posIdx]
+            return (
+              <g key={gn.id}>
+                {/* Outer glow ring */}
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={r + 4}
+                  fill={color}
+                  fillOpacity={0.08}
+                />
+                {/* Main genre circle */}
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={r}
+                  fill={color}
+                  fillOpacity={0.2}
+                  stroke={color}
+                  strokeWidth={2}
+                  className="cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Genere: ${gn.name}`}
+                  onMouseEnter={() => handleGenreMouseEnter(gn, pos)}
+                  onMouseLeave={handleMouseLeave}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleGenreMouseEnter(gn, pos)
+                    }
+                  }}
+                  onBlur={handleMouseLeave}
+                />
+                {/* Genre label */}
+                <text
+                  x={pos.x}
+                  y={pos.y + 4}
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize={11}
+                  fontFamily="Inter, sans-serif"
+                  fontWeight={600}
+                  pointerEvents="none"
+                >
+                  {gn.name.length > 12 ? gn.name.slice(0, 12) + '\u2026' : gn.name}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+        {/* Tooltip */}
+        {tooltip && (
+          <div
+            className="absolute bg-surface-hover border border-border rounded-lg px-3 py-2 pointer-events-none z-10 shadow-lg min-w-[180px]"
+            style={{ left: `${(tooltip.x / 700) * 100}%`, top: `${(tooltip.y / 500) * 100 - 8}%`, transform: 'translate(-50%, -100%)' }}
+          >
+            {tooltip.isGenreNode ? (
+              <>
+                <p className="text-text-primary text-sm font-semibold">{tooltip.name}</p>
+                <p className="text-accent text-xs font-medium">{tooltip.artist_count} artisti in questa cerchia</p>
+              </>
+            ) : (
+              <>
+                <p className="text-text-primary text-sm font-semibold">{tooltip.name}</p>
+                {tooltip.is_top && <p className="text-accent text-xs font-medium">Top Artist</p>}
+                {tooltip.pagerank > 0 && (
+                  <p className="text-accent text-xs font-medium">
+                    Influenza: {Math.round(tooltip.pagerank * 100)}%
+                  </p>
+                )}
+                {tooltip.clusterLabel && (
+                  <p className="text-text-secondary text-xs mt-0.5">{tooltip.clusterLabel}</p>
+                )}
+                {tooltip.genres && tooltip.genres.length > 0 && (
+                  <p className="text-text-muted text-xs mt-1">{tooltip.genres.join(', ')}</p>
+                )}
+                <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
+                  {tooltip.popularity > 0 && <span>Pop. {tooltip.popularity}</span>}
+                  {tooltip.followers > 0 && <span>{formatFollowers(tooltip.followers)} follower</span>}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {/* Cluster Legend */}
+        <div className="flex flex-wrap gap-3 mt-3">
+          {[...new Set(clusters.map(c => c.cluster))].slice(0, 8).map(clusterId => (
+            <div key={clusterId} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
+              <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cerchia ${clusterId + 1}`}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Default: "rete" view — unchanged
   return (
     <div className="glow-card bg-surface rounded-xl p-5 relative">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
@@ -267,14 +594,14 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
           style={{ left: `${(tooltip.x / 700) * 100}%`, top: `${(tooltip.y / 500) * 100 - 8}%`, transform: 'translate(-50%, -100%)' }}
         >
           <p className="text-text-primary text-sm font-semibold">{tooltip.name}</p>
-          {tooltip.is_top && <p className="text-accent text-xs font-medium">⭐ Top Artist</p>}
+          {tooltip.is_top && <p className="text-accent text-xs font-medium">Top Artist</p>}
           {tooltip.pagerank > 0 && (
             <p className="text-accent text-xs font-medium">
               Influenza: {Math.round(tooltip.pagerank * 100)}%
             </p>
           )}
           {tooltip.clusterLabel && (
-            <p className="text-text-secondary text-xs mt-0.5">🎵 {tooltip.clusterLabel}</p>
+            <p className="text-text-secondary text-xs mt-0.5">{tooltip.clusterLabel}</p>
           )}
           {tooltip.genres && tooltip.genres.length > 0 && (
             <p className="text-text-muted text-xs mt-1">

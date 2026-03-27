@@ -270,6 +270,67 @@ async def build_artist_network(
                 else:
                     cluster_names[cid] = f"Cerchia {cid + 1}"
 
+    # --- Genre nodes and edges for KG visualization ---
+    genre_nodes_list = []
+    genre_edges_list = []
+
+    for cid in sorted(cluster_ids):
+        cluster_aids = [aid for aid, c in louvain_labels.items() if c == cid]
+        cluster_genre_freq = defaultdict(int)
+        for aid in cluster_aids:
+            for g in nodes[aid].get("genres", []):
+                cluster_genre_freq[g] += 1
+
+        # Top 3 genres for this cluster
+        top_cluster_genres = sorted(
+            cluster_genre_freq.items(), key=lambda x: x[1], reverse=True
+        )[:3]
+
+        for genre_name, count in top_cluster_genres:
+            normalized = genre_name.lower().replace(" ", "_").replace("-", "_")
+            genre_id = f"genre_{normalized}"
+
+            existing = next(
+                (gn for gn in genre_nodes_list if gn["id"] == genre_id), None
+            )
+            if existing:
+                # Keep in cluster where it's most frequent
+                if count > existing["artist_count"]:
+                    existing["cluster"] = cid
+                    existing["artist_count"] = count
+            else:
+                genre_nodes_list.append(
+                    {
+                        "id": genre_id,
+                        "name": genre_name.replace("-", " ").title(),
+                        "type": "genre",
+                        "cluster": cid,
+                        "artist_count": count,
+                    }
+                )
+
+    # Genre IDs set for O(1) lookup
+    genre_ids_set = {gn["id"] for gn in genre_nodes_list}
+    seen_genre_edges = set()
+
+    for cid in sorted(cluster_ids):
+        cluster_aids = [aid for aid, c in louvain_labels.items() if c == cid]
+        for aid in cluster_aids:
+            for g in nodes[aid].get("genres", []):
+                normalized = g.lower().replace(" ", "_").replace("-", "_")
+                genre_id = f"genre_{normalized}"
+                if genre_id in genre_ids_set:
+                    edge_key = (aid, genre_id)
+                    if edge_key not in seen_genre_edges:
+                        seen_genre_edges.add(edge_key)
+                        genre_edges_list.append(
+                            {
+                                "source": aid,
+                                "target": genre_id,
+                                "type": "genre_link",
+                            }
+                        )
+
     # Genre summary
     genre_counter = defaultdict(int)
     for n in nodes.values():
@@ -299,6 +360,8 @@ async def build_artist_network(
         "cluster_rankings": {str(k): v for k, v in cluster_rankings.items()},
         "bridges": bridges,
         "top_genres": [{"genre": g, "count": c} for g, c in top_genres],
+        "genre_nodes": genre_nodes_list,
+        "genre_edges": genre_edges_list,
         "data_quality": data_quality,
         "metrics": {
             "total_nodes": len(nodes),
@@ -318,6 +381,8 @@ def _empty_result():
         "cluster_rankings": {},
         "bridges": [],
         "top_genres": [],
+        "genre_nodes": [],
+        "genre_edges": [],
         "data_quality": {"artists_without_genres": 0, "warning": None},
         "metrics": {
             "total_nodes": 0,

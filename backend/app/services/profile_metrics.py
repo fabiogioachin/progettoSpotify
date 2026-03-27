@@ -18,6 +18,7 @@ from app.models.listening_history import (
     UserSnapshot,
 )
 from app.models.track import TrackPopularity
+from app.services.genre_cache import get_artist_genres_cached
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
 
@@ -106,7 +107,7 @@ async def compute_listening_consistency(
     db: AsyncSession, user_id: int, days: int = 30
 ) -> float:
     """Percentage of days with at least one play in the last N days. 0-100."""
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     result = await db.execute(
         select(func.count(distinct(func.date(RecentPlay.played_at)))).where(
             RecentPlay.user_id == user_id, RecentPlay.played_at >= cutoff
@@ -230,8 +231,10 @@ async def compute_daily_stats(
     db: AsyncSession, user_id: int, target_date: date
 ) -> None:
     """Compute and save daily listening stats for a specific date."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date + timedelta(days=1), datetime.min.time())
+    start = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
+    end = datetime.combine(
+        target_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+    )
 
     # Query plays for the day
     result = await db.execute(
@@ -251,8 +254,25 @@ async def compute_daily_stats(
     unique_artists = len(set(p.artist_name for p in plays))
     total_duration_ms = sum(p.duration_ms for p in plays)
 
-    # Top genre: would need artist genre lookup, skip for now
+    # Top genre from DB-cached artist genres (no API calls — client=None)
     top_genre = None
+    try:
+        artist_ids = list(
+            {p.artist_spotify_id for p in plays if p.artist_spotify_id} - {""}
+        )
+        if artist_ids:
+            artist_genres = await get_artist_genres_cached(
+                db, client=None, artist_ids=artist_ids
+            )
+            genre_counter_tg: Counter = Counter()
+            for p in plays:
+                if p.artist_spotify_id and p.artist_spotify_id in artist_genres:
+                    for g in artist_genres[p.artist_spotify_id]:
+                        genre_counter_tg[g] += 1
+            if genre_counter_tg:
+                top_genre = genre_counter_tg.most_common(1)[0][0]
+    except Exception as exc:
+        logger.warning("compute_daily_stats: genre lookup failed: %s", exc)
 
     # Average popularity from TrackPopularity cache
     track_ids = list(set(p.track_spotify_id for p in plays))
@@ -366,9 +386,7 @@ async def backfill_daily_stats(db: AsyncSession, user_id: int) -> int:
 
     # Get dates already computed
     stats_dates_result = await db.execute(
-        select(DailyListeningStats.date).where(
-            DailyListeningStats.user_id == user_id
-        )
+        select(DailyListeningStats.date).where(DailyListeningStats.user_id == user_id)
     )
     stats_dates = set(str(row[0]) for row in stats_dates_result.all())
 

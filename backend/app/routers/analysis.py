@@ -15,7 +15,7 @@ from app.services.audio_feature_extractor import analyze_tracks_batch
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["analysis"])
+router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
 # In-memory store per task di analisi
 _analysis_tasks: dict[str, dict] = {}

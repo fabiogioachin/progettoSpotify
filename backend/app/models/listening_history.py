@@ -14,32 +14,6 @@ from sqlalchemy import (
 from app.database import Base
 
 
-class ListeningSnapshot(Base):
-    """Snapshot periodico delle medie audio features dell'utente."""
-
-    __tablename__ = "listening_snapshots"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False, index=True)
-    period = Column(
-        String(20), nullable=False
-    )  # 'short_term', 'medium_term', 'long_term'
-    snapshot_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    avg_energy = Column(Float)
-    avg_valence = Column(Float)
-    avg_danceability = Column(Float)
-    avg_acousticness = Column(Float)
-    avg_instrumentalness = Column(Float)
-    avg_speechiness = Column(Float)
-    avg_liveness = Column(Float)
-    avg_tempo = Column(Float)
-
-    top_genre = Column(String(255))
-    genre_distribution = Column(Text)  # JSON string
-    track_count = Column(Integer)
-
-
 class RecentPlay(Base):
     """Cronologia ascolti accumulata nel tempo (supera il limite di 50 di Spotify)."""
 
@@ -52,7 +26,7 @@ class RecentPlay(Base):
     artist_name = Column(String(500), nullable=False)
     artist_spotify_id = Column(String(64), nullable=True)
     duration_ms = Column(Integer, default=0)
-    played_at = Column(DateTime, nullable=False, index=True)
+    played_at = Column(DateTime(timezone=True), nullable=False, index=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -118,4 +92,6 @@ class UserProfileMetrics(Base):
     total_tracks_lifetime = Column(Integer, default=0)
     top_genres_json = Column(Text, default="[]")
     decade_distribution_json = Column(Text, default="{}")
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

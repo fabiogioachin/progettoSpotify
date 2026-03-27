@@ -69,3 +69,26 @@ class PlaylistComparisonItem(BaseModel):
 
 class PlaylistComparisonResponse(BaseModel):
     comparisons: list[PlaylistComparisonItem]
+
+
+# --- Progressive playlist loading (POST-start / GET-poll) ---
+
+
+class PlaylistCompareRequest(BaseModel):
+    playlist_ids: list[str]
+
+
+class PlaylistTaskStartResponse(BaseModel):
+    task_id: str
+    total_playlists: int
+
+
+class PlaylistTaskStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    phase: str
+    total_playlists: int
+    completed_playlists: int
+    waiting_seconds: int = 0
+    error_detail: str | None = None
+    results: dict | None = None

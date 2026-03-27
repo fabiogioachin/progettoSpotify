@@ -50,7 +50,7 @@ items = data.get("items", [])[:10]  # slice in-memory
 
 Count every Spotify API call. Each endpoint must stay under budget.
 
-### Profile Page (`GET /api/profile`)
+### Profile Page (`GET /api/v1/profile`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -62,7 +62,7 @@ Count every Spotify API call. Each endpoint must stay under budget.
 | TasteMap computation | 0 | N/A | 0 |
 | **Total worst-case** | **5** | | **0-5** |
 
-### Dashboard (`GET /api/dashboard`)
+### Dashboard (`GET /api/v1/dashboard`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -71,17 +71,18 @@ Count every Spotify API call. Each endpoint must stay under budget.
 | `get_recently_played` | 1 | 2 min | 0-1 |
 | **Total worst-case** | **7** | | **0-7** |
 
-### Trends (`GET /api/analytics/trends`)
+### Trends (`GET /api/v1/analytics/trends`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
 | `get_top_tracks(short/medium/long)` | 3 | 5 min | 0-3 |
-| `get_artist` × 20 (deduped, cross-user 1h) | 20 | **1 hour** | **0-20** |
-| **Total worst-case** | **23** | | **0-23** |
+| `get_artist` × N (via `genre_cache`, no cap) | 0-80 | **DB 7d** + Redis 1h | **0-80** |
+| **Total worst-case (cold cache)** | **~83** | | **0-83** |
+| **Total typical (warm genre cache)** | **~3** | | **0-3** |
 
-Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, deduplicates, caps at `ARTIST_GENRE_CAP_TRENDS` (20) globally, and fetches genres in a single pass. Playlist comparison uses separate `ARTIST_GENRE_CAP_PLAYLIST` (50) for better genre coverage. Cross-user artist cache makes subsequent users' calls nearly free.
+Note: Genre fetching uses `genre_cache.get_artist_genres_cached()` — DB cache (7-day TTL) + Spotify API on miss. No artist cap. First-time cost is high but amortizes across 7 days and all users. Cross-user Redis cache (1h) further reduces API hits.
 
-### Discovery (`GET /api/analytics/discovery`)
+### Discovery (`GET /api/v1/analytics/discovery`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -90,7 +91,7 @@ Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, 
 | `get_top_tracks(short_term)` | 1 | 5 min | 0-1 |
 | **Total worst-case** | **3** | | **0-3** |
 
-### Artist Network (`GET /api/artist-network`)
+### Artist Network (`GET /api/v1/artist-network`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -101,7 +102,7 @@ Note: `compute_trends` now collects ALL unique artist IDs across 3 time ranges, 
 
 Note: Uses default `limit=50`, slices `[:max_seed_artists]` in-memory. Graph edges from fuzzy genre similarity. NetworkX metrics computed locally — zero additional API calls.
 
-### Wrapped (`GET /api/wrapped`)
+### Wrapped (`GET /api/v1/wrapped`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -114,19 +115,20 @@ Note: Uses default `limit=50`, slices `[:max_seed_artists]` in-memory. Graph edg
 
 Note: `get_top_tracks(limit=50)` now used everywhere (was `limit=10`). Items sliced `[:10]` in-memory.
 
-### Playlist Compare (`GET /api/playlists/compare`)
+### Playlist Compare (`GET /api/v1/playlists/compare`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
 | `get(/playlists/{pid})` × N | N (2-4) | none | 2-4 |
-| `get_playlist_items(pid)` × pages | ~4-40 | **5 min** | 0-40 |
+| `get_playlist_items(pid)` × pages (no track cap) | ~4-80+ | **5 min** | 0-80+ |
 | `get_track(tid)` × 100 (popularity enrichment) | ≤100 | **5 min** | 0-100 |
-| `get_artist` × 50 (global dedup) | 50 | **1 hour** | 0-50 |
-| **Total worst-case (4 playlists)** | **~194** | | **~4-194** |
+| `get_artist` × N (via `genre_cache`, no cap) | 0-300+ | **DB 7d** + Redis 1h | **0-300+** |
+| **Total worst-case (4 large playlists, cold cache)** | **~484+** | | **~4-484+** |
+| **Total typical (warm genre cache)** | **~84** | | **~4-84** |
 
-Note: `get_playlist_items()` cached 5min TTL. `get_track()` enriches tracks missing popularity (dev mode), capped at 100 cross-playlist. `get_artist` cap raised to `ARTIST_GENRE_CAP` (50) for better genre coverage.
+Note: No track-per-playlist or artist genre caps. `get_playlist_items()` cached 5min. Genre fetching via `genre_cache.get_artist_genres_cached()` — DB (7d TTL), first-visit cost amortized. Large playlists naturally throttled by sliding window (25 calls/30s). Frontend shows ThrottleBanner during waits.
 
-### Export (`GET /api/export/claude-prompt`)
+### Export (`GET /api/v1/export/claude-prompt`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -141,13 +143,13 @@ Note: Export no longer calls `compute_profile` separately — extracts profile f
 
 | Job | Frequency | Calls/user | Max users |
 |-----|-----------|------------|-----------|
-| `sync_recent_plays` | Every 60 min | 1 (`get_recently_played`) + upsert TrackPopularity (DB only) | 5 |
+| `sync_recent_plays` | Every 60 min | 1 (`get_recently_played`) + upsert TrackPopularity (DB only) + genre cache (0-N `get_artist` for uncached, P2, cross-user 1h cache) | 5 |
 | `save_daily_snapshot` | 1x/day (first login) | 2 (`get_top_artists` + `get_top_tracks`) | 5 |
 | `compute_daily_aggregates` | 02:00 daily | 0 (DB only) | 5 |
 
 **Critical rule**: `sync_recent_plays` MUST `break` on `RateLimitError`. Rate limit is app-wide.
 
-### Audio Analysis (`POST /api/analyze-tracks`)
+### Audio Analysis (`POST /api/v1/analyze-tracks`)
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
@@ -160,15 +162,16 @@ Frontend sends full track objects in POST body. Backend uses librosa on preview 
 All caches empty, first visit of the day:
 1. Auth: `get_me()` — 1 call
 2. Dashboard load: up to 4 calls (library/top + temporal + trends overhead)
-3. Trends: up to 20 artist calls (ARTIST_GENRE_CAP_TRENDS=20, cross-user cache makes 2nd user ~0)
+3. Trends: genre fetching via `genre_cache` — 0 calls if DB cache warm (7d TTL), up to ~80 artist calls if cold
 4. Profile navigation: up to 5 calls (some cached from dashboard)
 5. Background snapshot: 0 calls (cached from dashboard)
 6. Audio analysis: 0 calls (frontend passes track data)
-7. **Total: ~10-25 unique calls** (cachetools deduplicates the rest)
+7. **Total first-ever visit (cold genre cache): ~10-90 calls** — throttled naturally by sliding window
+8. **Total typical visit (warm genre cache): ~10-15 calls** (genre cache eliminates artist fetches)
 
 With caches warm (typical navigation): **0-5 calls** per page visit.
 
-**Multi-user benefit**: With `_artist_cache_1h`, the second user to visit costs ~0 additional artist calls. The 20-artist genre fetch is amortized across all 5 dev users for 1 hour.
+**Multi-user benefit**: `artist_genres` DB cache is shared across all users (7-day TTL). The second user to visit pays zero genre API calls. Redis artist cache (1h) provides hot-path optimization on top.
 
 ## Defensive Patterns
 
@@ -208,7 +211,9 @@ Animated countdown on 429 with `throttled: true`. Auto-retries after countdown.
 
 ### 8. Background Job Early Break on RateLimitError
 
-### 9. Dedup + Cap (ARTIST_GENRE_CAP_TRENDS=20 for trends, ARTIST_GENRE_CAP_PLAYLIST=50 for playlist compare)
+### 9. Genre Cache (DB 7d TTL + Redis 1h + Spotify API)
+
+`genre_cache.get_artist_genres_cached(db, client, artist_ids)` centralizes all genre fetching. DB cache (7-day TTL) eliminates repeat API calls. No artist caps — the cache naturally bounds API usage. Background jobs populate cache opportunistically via `sync_recent_plays`.
 
 ## Rules for Adding New API Calls
 
@@ -218,7 +223,7 @@ Animated countdown on 429 with `throttled: true`. Auto-retries after countdown.
 4. **Global sem handles concurrency**: no local semaphores needed — `_request()` limits to 3
 5. **Always retry_with_backoff**: never call `client.get_*()` directly
 6. **Test with empty cache**: verify the endpoint works within budget
-7. **Cap individual fetches**: if fetching per-item (artists, tracks), cap at 20 and dedup globally
+7. **Genre fetching**: always use `genre_cache.get_artist_genres_cached()` — no artificial caps, DB cache (7d TTL) bounds API calls naturally
 8. **Cross-user data**: if the data is user-independent (artist profiles, album data), use `_artist_cache_1h` pattern (no `user_id` in key)
 9. **Re-raise critical exceptions from gather_in_chunks**: always check for `SpotifyAuthError` and `RateLimitError` in `gather_in_chunks` results before processing
 
@@ -235,4 +240,4 @@ Animated countdown on 429 with `throttled: true`. Auto-retries after countdown.
 | Background job continues after 429 | Cascading rate limits | `break` on RateLimitError |
 | `get_artist` with `user_id` in cache key | Same artist fetched per-user | Use `_artist_cache_1h` with `("artist", id)` key |
 | `compute_profile` + `compute_trends` for same range | Duplicate work | Extract profile from trends result |
-| `_extract_genres` called per-period in loops | 3 × 50 = 150 artist calls | Collect all IDs, dedup, fetch once, cap=ARTIST_GENRE_CAP |
+| `_extract_genres` called per-period in loops | 3 × 50 = 150 artist calls | Use `genre_cache.get_artist_genres_cached()` — DB cache (7d TTL), no caps |

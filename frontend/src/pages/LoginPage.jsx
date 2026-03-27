@@ -50,9 +50,7 @@ export default function LoginPage() {
 
         {/* Title */}
         <h1 className="text-5xl sm:text-6xl font-display font-bold mb-4 leading-tight">
-          <span className="gradient-text">Listening</span>
-          <br />
-          <span className="text-text-primary">Intelligence</span>
+          <span className="gradient-text">Wrap</span>
         </h1>
 
         <p className="text-text-secondary text-lg mb-10 max-w-md mx-auto">

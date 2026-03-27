@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { CalendarDays } from 'lucide-react'
+import EmptyState from '../ui/EmptyState'
 
 /**
  * Interpolates between color stops based on a normalized value [0, 1].
@@ -94,7 +96,12 @@ export default function ListeningHeatmap({ data = [], dayLabels = [], hourLabels
   }
 
   if (!data.length) {
-    return null
+    return (
+      <div className="glow-card bg-surface rounded-xl p-5">
+        <h3 className="text-text-primary font-display font-semibold text-lg mb-4">{title}</h3>
+        <EmptyState icon={CalendarDays} message="Nessun dato di ascolto per questo periodo" />
+      </div>
+    )
   }
 
   return (

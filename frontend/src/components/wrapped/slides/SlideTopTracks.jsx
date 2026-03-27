@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Music } from 'lucide-react'
 import { StaggerContainer, StaggerItem } from '../../ui/StaggerContainer'
 
 export default function SlideTopTracks({ data }) {
@@ -27,11 +28,23 @@ export default function SlideTopTracks({ data }) {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <img
-            src={top.album_image || top.album?.images?.[0]?.url || top.image_url}
-            alt={top.name}
-            className="w-40 h-40 rounded-lg object-cover shadow-lg mb-4"
-          />
+          {(top.album_image || top.album?.images?.[0]?.url || top.image_url) ? (
+            <img
+              src={top.album_image || top.album?.images?.[0]?.url || top.image_url}
+              alt={top.name}
+              className="w-40 h-40 rounded-lg object-cover shadow-lg mb-4"
+              onError={(e) => {
+                e.target.style.display = 'none'
+                e.target.nextElementSibling.style.display = 'flex'
+              }}
+            />
+          ) : null}
+          <div
+            className="w-40 h-40 rounded-lg bg-surface-hover items-center justify-center shadow-lg mb-4"
+            style={{ display: (top.album_image || top.album?.images?.[0]?.url || top.image_url) ? 'none' : 'flex' }}
+          >
+            <Music size={40} className="text-text-muted" />
+          </div>
           <span className="text-2xl font-display font-bold text-text-primary text-center">
             {top.name}
           </span>
@@ -49,11 +62,23 @@ export default function SlideTopTracks({ data }) {
               <span className="text-text-muted font-display font-bold w-6 text-right">
                 {i + 2}
               </span>
-              <img
-                src={track.album_image || track.album?.images?.[0]?.url || track.image_url}
-                alt={track.name}
-                className="w-12 h-12 rounded object-cover flex-shrink-0"
-              />
+              {(track.album_image || track.album?.images?.[0]?.url || track.image_url) ? (
+                <img
+                  src={track.album_image || track.album?.images?.[0]?.url || track.image_url}
+                  alt={track.name}
+                  className="w-12 h-12 rounded object-cover flex-shrink-0"
+                  onError={(e) => {
+                    e.target.style.display = 'none'
+                    e.target.nextElementSibling.style.display = 'flex'
+                  }}
+                />
+              ) : null}
+              <div
+                className="w-12 h-12 rounded bg-surface-hover items-center justify-center flex-shrink-0"
+                style={{ display: (track.album_image || track.album?.images?.[0]?.url || track.image_url) ? 'none' : 'flex' }}
+              >
+                <Music size={18} className="text-text-muted" />
+              </div>
               <div className="min-w-0">
                 <p className="text-text-primary text-sm font-medium truncate">
                   {track.name}

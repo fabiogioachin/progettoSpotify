@@ -12,9 +12,10 @@ import LifetimeStats from '../components/profile/LifetimeStats'
 import TasteMap from '../components/profile/TasteMap'
 import ShareCardRenderer from '../components/share/ShareCardRenderer'
 import ProfileShareCard from '../components/share/ProfileShareCard'
+import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function ProfilePage() {
-  const { data, loading, error } = useSpotifyData('/api/profile')
+  const { data, loading, error } = useSpotifyData('/api/v1/profile')
   const [showShare, setShowShare] = useState(false)
 
   if (loading) {
@@ -69,34 +70,46 @@ export default function ProfilePage() {
       <ProfileHeader user={user} personality={personality} onShare={() => setShowShare(true)} />
 
       {/* Lifetime KPIs */}
-      <LifetimeStats metrics={metrics} />
+      <SectionErrorBoundary sectionName="LifetimeStats">
+        <LifetimeStats metrics={metrics} />
+      </SectionErrorBoundary>
 
       {/* Charts grid */}
       <StaggerContainer className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <StaggerItem>
-          <PersonalityBadge personality={personality} />
+          <SectionErrorBoundary sectionName="PersonalityBadge">
+            <PersonalityBadge personality={personality} />
+          </SectionErrorBoundary>
         </StaggerItem>
         <StaggerItem>
-          <ObscurityGauge score={metrics?.obscurity_score} />
+          <SectionErrorBoundary sectionName="ObscurityGauge">
+            <ObscurityGauge score={metrics?.obscurity_score} />
+          </SectionErrorBoundary>
         </StaggerItem>
         {metrics?.top_genres?.length > 0 && (
           <StaggerItem>
-            <GenreDNA topGenres={metrics.top_genres} />
+            <SectionErrorBoundary sectionName="GenreDNA">
+              <GenreDNA topGenres={metrics.top_genres} />
+            </SectionErrorBoundary>
           </StaggerItem>
         )}
         {metrics?.decade_distribution && Object.keys(metrics.decade_distribution).length > 0 && (
           <StaggerItem>
-            <DecadeChart decadeDistribution={metrics.decade_distribution} />
+            <SectionErrorBoundary sectionName="DecadeChart">
+              <DecadeChart decadeDistribution={metrics.decade_distribution} />
+            </SectionErrorBoundary>
           </StaggerItem>
         )}
         {data.taste_map && data.taste_map.feature_mode !== 'insufficient' && data.taste_map.points?.length >= 3 && (
           <StaggerItem className="lg:col-span-2">
-            <TasteMap
-              points={data.taste_map.points}
-              varianceExplained={data.taste_map.variance_explained}
-              featureMode={data.taste_map.feature_mode}
-              genreGroups={data.taste_map.genre_groups}
-            />
+            <SectionErrorBoundary sectionName="TasteMap">
+              <TasteMap
+                points={data.taste_map.points}
+                varianceExplained={data.taste_map.variance_explained}
+                featureMode={data.taste_map.feature_mode}
+                genreGroups={data.taste_map.genre_groups}
+              />
+            </SectionErrorBoundary>
           </StaggerItem>
         )}
       </StaggerContainer>
@@ -105,7 +118,7 @@ export default function ProfilePage() {
       <AnimatePresence>
         {showShare && (
           <ShareCardRenderer
-            filename="spotify-intelligence-profilo"
+            filename="wrap-profilo"
             onClose={() => setShowShare(false)}
           >
             <ProfileShareCard

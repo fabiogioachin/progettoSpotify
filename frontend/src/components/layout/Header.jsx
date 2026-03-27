@@ -29,7 +29,7 @@ export default function Header() {
               <Music2 size={18} className="text-white" />
             </div>
             <span className="font-display font-bold text-lg hidden sm:block">
-              <span className="gradient-text">Listening Intelligence</span>
+              <span className="gradient-text">Wrap</span>
             </span>
           </Link>
 

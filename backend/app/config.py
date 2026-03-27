@@ -10,7 +10,11 @@ class Settings(BaseSettings):
     frontend_url: str = "http://127.0.0.1:5173"
     backend_url: str = "http://127.0.0.1:8001"
 
-    database_url: str = "sqlite+aiosqlite:///./data/spotify_intelligence.db"
+    database_url: str = (
+        "postgresql+asyncpg://spotify:spotify_dev@localhost:5432/spotify_intelligence"
+    )
+    redis_url: str = "redis://localhost:6379/0"
+    environment: str = "development"
 
     # Set to True in production (HTTPS)
     cookie_secure: bool = False

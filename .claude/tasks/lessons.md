@@ -3,6 +3,24 @@
 ## Active
 Lessons that affect future tasks. Target: under 15 entries.
 
+### 2026-03-26 — [codebase] Docker backend.Dockerfile must include scripts/
+**Context**: `python -m scripts.backfill_artist_genres` inside container failed with `ModuleNotFoundError`
+**What happened**: `docker/backend.Dockerfile` only copied `app/` and `alembic/`, not `scripts/`
+**Root cause**: When `scripts/` directory was created, the Dockerfile wasn't updated to include it
+**Action**: When adding new top-level directories to backend/ that need to run inside Docker, always update `docker/backend.Dockerfile` COPY statements
+
+### 2026-03-26 — [codebase] Backfill scripts must respect API budget with delays
+**Context**: `backfill_artist_genres` with P2_BATCH priority exhausted budget after 3 artists (3 call/window)
+**What happened**: Script used `gather_in_chunks` with no delay between chunks — all 50 artists attempted in <1s, 47 rate-limited
+**Root cause**: P2_BATCH allows only 3 calls/30s. Script assumed `gather_in_chunks` would handle throttling, but budget exhaustion happens before the throttle layer
+**Action**: Backfill scripts must: (1) use P1_LOGIN priority minimum, (2) add explicit `asyncio.sleep(6)` between calls, (3) on rate limit, pause 35s then retry once
+
+### 2026-03-21 — [tool] Local PostgreSQL intercepts Docker-mapped ports
+**Context**: Docker Compose mapped postgres to host port 5432, then 5433 — both intercepted by local PG installation.
+**What happened**: `asyncpg.connect()` hit the local PostgreSQL (which doesn't have the `spotify` user), not the Docker container.
+**Root cause**: Local PostgreSQL listens on 5432 AND 5433. Docker port mapping creates a second listener on the same port, but the OS routes to the local PG first.
+**Action**: Use port 5434 for Docker PostgreSQL on this machine. If port conflicts arise, always check `netstat -ano` before assuming Docker owns the port.
+
 ### 2026-03-19 — [codebase] Never add background API calls without budget verification
 **Context**: Added `fire_bg_enrich` — a background task that called `GET /tracks/{id}` ×15 after a 35s delay to populate popularity cache.
 **What happened**: The 35s delay wasn't enough. User navigation filled the budget again. The background task triggered a 429 with `retry_after=40445s` (11 hours of cooldown).

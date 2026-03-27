@@ -13,7 +13,7 @@ const DATA_BADGES = [
 
 export default function ClaudeExportPanel() {
   const [copied, setCopied] = useState(false)
-  const { data, loading, error, refetch } = useSpotifyData('/api/export/claude-prompt', {}, false)
+  const { data, loading, error, refetch } = useSpotifyData('/api/v1/export/claude-prompt', {}, false)
 
   async function handleGenerate() {
     await refetch()

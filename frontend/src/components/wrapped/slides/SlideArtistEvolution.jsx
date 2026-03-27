@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Music } from 'lucide-react'
 import { StaggerContainer, StaggerItem } from '../../ui/StaggerContainer'
 
 function ArtistGroup({ title, artists, highlight }) {
@@ -10,20 +11,37 @@ function ArtistGroup({ title, artists, highlight }) {
         {title}
       </h3>
       <StaggerContainer className="flex gap-4">
-        {artists.slice(0, 3).map((artist, i) => (
-          <StaggerItem key={artist.name || i} className="flex flex-col items-center">
-            <img
-              src={artist.image || artist.image_url || artist.images?.[0]?.url}
-              alt={artist.name}
-              className={`w-20 h-20 rounded-full object-cover ${
-                highlight ? 'ring-2 ring-accent' : ''
-              }`}
-            />
-            <span className="text-sm text-text-primary mt-2 text-center max-w-[80px] truncate">
-              {artist.name}
-            </span>
-          </StaggerItem>
-        ))}
+        {artists.slice(0, 3).map((artist, i) => {
+          const imgUrl = artist.image || artist.image_url || artist.images?.[0]?.url
+          return (
+            <StaggerItem key={artist.name || i} className="flex flex-col items-center">
+              {imgUrl ? (
+                <img
+                  src={imgUrl}
+                  alt={artist.name}
+                  className={`w-20 h-20 rounded-full object-cover ${
+                    highlight ? 'ring-2 ring-accent' : ''
+                  }`}
+                  onError={(e) => {
+                    e.target.style.display = 'none'
+                    e.target.nextElementSibling.style.display = 'flex'
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-20 h-20 rounded-full bg-surface-hover items-center justify-center ${
+                  highlight ? 'ring-2 ring-accent' : ''
+                }`}
+                style={{ display: imgUrl ? 'none' : 'flex' }}
+              >
+                <Music size={24} className="text-text-muted" />
+              </div>
+              <span className="text-sm text-text-primary mt-2 text-center max-w-[80px] truncate">
+                {artist.name}
+              </span>
+            </StaggerItem>
+          )
+        })}
       </StaggerContainer>
     </div>
   )

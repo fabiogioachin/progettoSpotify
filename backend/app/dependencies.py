@@ -26,3 +26,23 @@ def require_auth(request: Request) -> int:
     if not user_id:
         raise HTTPException(status_code=401, detail="Non autenticato")
     return user_id
+
+
+async def require_admin(request: Request) -> int:
+    """Dependency che richiede admin. Solleva 403 se non admin."""
+    user_id = require_auth(request)
+
+    from sqlalchemy import select
+
+    from app.database import async_session
+    from app.models.user import User
+
+    async with async_session() as session:
+        user = (
+            await session.execute(select(User).where(User.id == user_id))
+        ).scalar_one_or_none()
+        if not user or not user.is_admin:
+            raise HTTPException(
+                status_code=403, detail="Accesso riservato agli amministratori"
+            )
+    return user_id

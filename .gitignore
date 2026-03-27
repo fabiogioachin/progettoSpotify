@@ -1,5 +1,7 @@
 # Environment
 .env
+.env.development
+.env.production
 
 # Python
 __pycache__/
@@ -42,3 +44,5 @@ htmlcov/
 !.claude/settings.json
 !.claude/hooks/
 !.claude/skills/
+!.claude/tasks/
+!.claude/CLAUDE.md

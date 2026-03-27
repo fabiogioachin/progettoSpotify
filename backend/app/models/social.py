@@ -1,10 +1,28 @@
-"""Modelli per il layer social: amicizie e link di invito."""
+"""Modelli per il layer social: amicizie, link di invito e codici di registrazione."""
 
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 
 from app.database import Base
+
+
+class InviteCode(Base):
+    """Codice di invito per la registrazione gated."""
+
+    __tablename__ = "invite_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(32), unique=True, nullable=False, index=True)
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    max_uses = Column(Integer, default=5)
+    uses = Column(Integer, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=True)  # null = never expires
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class Friendship(Base):
@@ -29,7 +47,9 @@ class Friendship(Base):
         nullable=False,
         index=True,
     )
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "friend_id", name="uq_friendship"),)
 
@@ -47,7 +67,11 @@ class FriendInviteLink(Base):
         index=True,
     )
     code = Column(String(32), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    expires_at = Column(DateTime, nullable=False)  # 7 giorni dalla creazione
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at = Column(
+        DateTime(timezone=True), nullable=False
+    )  # 7 giorni dalla creazione
     max_uses = Column(Integer, default=1)
     uses = Column(Integer, default=0)

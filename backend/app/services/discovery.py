@@ -20,11 +20,109 @@ from app.services.taste_clustering import (
     detect_outliers_isolation_forest,
 )
 from app.utils.rate_limiter import (
+    RateLimitError,
     SpotifyAuthError,
     retry_with_backoff,
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_curated_playlists(client: SpotifyClient) -> dict:
+    """Find Discover Weekly and Release Radar from user's playlists."""
+    result = {"discover_weekly": None, "release_radar": None}
+
+    try:
+        playlists_data = await retry_with_backoff(client.get_playlists, limit=50)
+        items = playlists_data.get("items", [])
+
+        # Name patterns for matching (includes Italian localized names)
+        dw_patterns = ["discover weekly", "scopri settimanale"]
+        rr_patterns = ["release radar", "novità radar"]
+
+        dw_playlist = None
+        rr_playlist = None
+
+        for item in items:
+            if not item:
+                continue
+            owner_id = item.get("owner", {}).get("id", "")
+            if owner_id != "spotify":
+                continue
+            name_lower = item.get("name", "").lower()
+
+            if not dw_playlist and any(p in name_lower for p in dw_patterns):
+                dw_playlist = item
+            elif not rr_playlist and any(p in name_lower for p in rr_patterns):
+                rr_playlist = item
+
+            if dw_playlist and rr_playlist:
+                break
+
+        # Fetch tracks for found playlists
+        async def _fetch_playlist_tracks(playlist):
+            if not playlist:
+                return None
+            try:
+                items_data = await retry_with_backoff(
+                    client.get_playlist_items, playlist["id"]
+                )
+                tracks = []
+                for entry in items_data.get("items", []):
+                    t = entry.get("item") or entry.get("track")  # dev mode migration
+                    if t and t.get("id"):
+                        images = t.get("album", {}).get("images", [])
+                        tracks.append(
+                            {
+                                "id": t["id"],
+                                "name": t.get("name", ""),
+                                "artist": t["artists"][0]["name"]
+                                if t.get("artists")
+                                else "",
+                                "album_image": images[0]["url"] if images else None,
+                                "popularity": t.get("popularity", 0),
+                            }
+                        )
+                return {
+                    "name": playlist.get("name", ""),
+                    "image": (
+                        playlist.get("images", [{}])[0].get("url")
+                        if playlist.get("images")
+                        else None
+                    ),
+                    "tracks": tracks,
+                }
+            except SpotifyAuthError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "Failed to fetch curated playlist %s: %s", playlist.get("id"), exc
+                )
+                return None
+
+        dw_data, rr_data = await asyncio.gather(
+            _fetch_playlist_tracks(dw_playlist),
+            _fetch_playlist_tracks(rr_playlist),
+            return_exceptions=True,
+        )
+
+        for r in (dw_data, rr_data):
+            if isinstance(r, (SpotifyAuthError, RateLimitError)):
+                raise r
+
+        result["discover_weekly"] = (
+            dw_data if not isinstance(dw_data, BaseException) else None
+        )
+        result["release_radar"] = (
+            rr_data if not isinstance(rr_data, BaseException) else None
+        )
+
+    except SpotifyAuthError:
+        raise
+    except Exception as exc:
+        logger.warning("Failed to get curated playlists: %s", exc)
+
+    return result
 
 
 def _album_image(track: dict) -> str | None:
@@ -72,23 +170,29 @@ async def discover(
     short_tracks_task = retry_with_backoff(
         client.get_top_tracks, time_range="short_term", limit=50
     )
+    curated_task = _get_curated_playlists(client)
 
-    top_data, artists_data, short_data = await asyncio.gather(
+    top_data, artists_data, short_data, curated_playlists = await asyncio.gather(
         top_tracks_task,
         top_artists_task,
         short_tracks_task,
+        curated_task,
         return_exceptions=True,
     )
-    # Re-raise auth errors; gracefully degrade on other failures
+    # Re-raise auth/rate-limit errors; gracefully degrade on other failures
     for result in (top_data, artists_data, short_data):
-        if isinstance(result, SpotifyAuthError):
+        if isinstance(result, (SpotifyAuthError, RateLimitError)):
             raise result
+    if isinstance(curated_playlists, (SpotifyAuthError, RateLimitError)):
+        raise curated_playlists
     if isinstance(top_data, BaseException):
         top_data = {"items": []}
     if isinstance(artists_data, BaseException):
         artists_data = {"items": []}
     if isinstance(short_data, BaseException):
         short_data = {"items": []}
+    if isinstance(curated_playlists, BaseException):
+        curated_playlists = {"discover_weekly": None, "release_radar": None}
 
     top_items = top_data.get("items", [])
     top_artists = artists_data.get("items", [])
@@ -104,6 +208,7 @@ async def discover(
             "centroid": {},
             "genre_distribution": {},
             "popularity_distribution": [],
+            "curated_playlists": curated_playlists,
         }
 
     top_ids = [t["id"] for t in top_items]
@@ -295,4 +400,5 @@ async def discover(
         "has_audio_features": has_features,
         "has_popularity_data": has_popularity_data,
         "recommendations_source": recommendations_source,
+        "curated_playlists": curated_playlists,
     }

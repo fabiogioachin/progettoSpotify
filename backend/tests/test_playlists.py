@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.constants import ARTIST_GENRE_CAP_TRENDS
 from app.services.audio_analyzer import _extract_genres
 from app.services.spotify_client import _validate_spotify_id
 
@@ -199,12 +198,12 @@ class TestPopularityEnrichmentLogic:
 
 
 class TestExtractGenres:
-    """Tests for _extract_genres in audio_analyzer.py."""
+    """Tests for _extract_genres in audio_analyzer.py (uses genre_cache)."""
 
     @pytest.mark.asyncio
-    async def test_genre_cap_matches_constant(self):
-        """With more artists than ARTIST_GENRE_CAP_TRENDS, only the cap is fetched."""
-        n = ARTIST_GENRE_CAP_TRENDS + 10  # more than the cap
+    async def test_all_artists_fetched_no_cap(self):
+        """All unique artist IDs are passed to genre cache (no artificial cap)."""
+        n = 40
         tracks = [
             {
                 "id": f"t{str(i).zfill(14)}",
@@ -212,69 +211,39 @@ class TestExtractGenres:
             }
             for i in range(n)
         ]
+        expected_ids = {f"a{str(i).zfill(14)}" for i in range(n)}
 
-        fetch_call_count = 0
+        captured_ids = []
 
-        async def _fake_get_artist(aid: str) -> dict:
-            nonlocal fetch_call_count
-            fetch_call_count += 1
-            return {"genres": ["pop"]}
+        async def _mock_cache(db, client, artist_ids):
+            captured_ids.extend(artist_ids)
+            return {aid: ["pop"] for aid in artist_ids}
 
-        client = MagicMock()
-        client.get_artist = AsyncMock(side_effect=_fake_get_artist)
-
-        with patch(
-            "app.services.audio_analyzer.retry_with_backoff", _passthrough_retry
-        ):
-            await _extract_genres(client, tracks)
-
-        assert fetch_call_count == ARTIST_GENRE_CAP_TRENDS, (
-            f"Expected exactly {ARTIST_GENRE_CAP_TRENDS} artist fetches, got {fetch_call_count}"
-        )
-
-    @pytest.mark.asyncio
-    async def test_all_artists_fetched_when_below_cap(self):
-        """With fewer artists than ARTIST_GENRE_CAP_TRENDS, all are fetched."""
-        n = ARTIST_GENRE_CAP_TRENDS - 5  # below the cap
-        tracks = [
-            {
-                "id": f"t{str(i).zfill(14)}",
-                "artists": [{"id": f"a{str(i).zfill(14)}", "name": f"Artist {i}"}],
-            }
-            for i in range(n)
-        ]
-
-        fetch_call_count = 0
-
-        async def _fake_get_artist(aid: str) -> dict:
-            nonlocal fetch_call_count
-            fetch_call_count += 1
-            return {"genres": ["rock"]}
-
-        client = MagicMock()
-        client.get_artist = AsyncMock(side_effect=_fake_get_artist)
-
-        with patch(
-            "app.services.audio_analyzer.retry_with_backoff", _passthrough_retry
-        ):
-            await _extract_genres(client, tracks)
-
-        assert fetch_call_count == n, (
-            f"All {n} artists should be fetched when below cap, got {fetch_call_count}"
-        )
-
-    @pytest.mark.asyncio
-    async def test_extract_genres_empty_tracks_returns_empty(self):
-        """No tracks → empty genre distribution, no API calls."""
+        db = AsyncMock()
         client = _make_client()
 
         with patch(
-            "app.services.audio_analyzer.retry_with_backoff", _passthrough_retry
+            "app.services.audio_analyzer.get_artist_genres_cached", _mock_cache
         ):
-            result = await _extract_genres(client, [])
+            await _extract_genres(db, client, tracks)
+
+        assert set(captured_ids) == expected_ids
+
+    @pytest.mark.asyncio
+    async def test_extract_genres_empty_tracks_returns_empty(self):
+        """No tracks -> empty genre distribution, no cache call."""
+        db = AsyncMock()
+        client = _make_client()
+
+        async def _mock_cache(db, client, artist_ids):
+            return {}
+
+        with patch(
+            "app.services.audio_analyzer.get_artist_genres_cached", _mock_cache
+        ):
+            result = await _extract_genres(db, client, [])
 
         assert result == {}
-        client.get_artist.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_extract_genres_tracks_without_artist_ids(self):
@@ -282,15 +251,18 @@ class TestExtractGenres:
         tracks = [
             {"id": "t111111111111111", "artists": [{"name": "No ID Artist"}]},
         ]
+        db = AsyncMock()
         client = _make_client()
 
+        async def _mock_cache(db, client, artist_ids):
+            return {}
+
         with patch(
-            "app.services.audio_analyzer.retry_with_backoff", _passthrough_retry
+            "app.services.audio_analyzer.get_artist_genres_cached", _mock_cache
         ):
-            result = await _extract_genres(client, tracks)
+            result = await _extract_genres(db, client, tracks)
 
         assert result == {}
-        client.get_artist.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_extract_genres_aggregates_percentages(self):
@@ -306,18 +278,19 @@ class TestExtractGenres:
             },
         ]
 
-        async def _fake_get_artist(aid: str) -> dict:
-            if aid == "a111111111111111":
-                return {"genres": ["rock"]}
-            return {"genres": ["pop"]}
+        async def _mock_cache(db, client, artist_ids):
+            return {
+                "a111111111111111": ["rock"],
+                "a222222222222222": ["pop"],
+            }
 
-        client = MagicMock()
-        client.get_artist = AsyncMock(side_effect=_fake_get_artist)
+        db = AsyncMock()
+        client = _make_client()
 
         with patch(
-            "app.services.audio_analyzer.retry_with_backoff", _passthrough_retry
+            "app.services.audio_analyzer.get_artist_genres_cached", _mock_cache
         ):
-            result = await _extract_genres(client, tracks)
+            result = await _extract_genres(db, client, tracks)
 
         assert result  # non-empty
         total = sum(result.values())
@@ -325,29 +298,28 @@ class TestExtractGenres:
 
     @pytest.mark.asyncio
     async def test_extract_genres_deduplicates_artists(self):
-        """The same artist appearing in multiple tracks must be fetched only once."""
+        """The same artist appearing in multiple tracks must be deduplicated."""
         tracks = [
             {"id": f"t{str(i).zfill(14)}", "artists": [{"id": "shared_artist1234"}]}
             for i in range(5)
         ]
 
-        fetch_call_count = 0
+        captured_ids = []
 
-        async def _fake_get_artist(aid: str) -> dict:
-            nonlocal fetch_call_count
-            fetch_call_count += 1
-            return {"genres": ["pop"]}
+        async def _mock_cache(db, client, artist_ids):
+            captured_ids.extend(artist_ids)
+            return {aid: ["pop"] for aid in artist_ids}
 
-        client = MagicMock()
-        client.get_artist = AsyncMock(side_effect=_fake_get_artist)
+        db = AsyncMock()
+        client = _make_client()
 
         with patch(
-            "app.services.audio_analyzer.retry_with_backoff", _passthrough_retry
+            "app.services.audio_analyzer.get_artist_genres_cached", _mock_cache
         ):
-            await _extract_genres(client, tracks)
+            await _extract_genres(db, client, tracks)
 
-        assert fetch_call_count == 1, (
-            f"Same artist must be deduplicated; expected 1 call, got {fetch_call_count}"
+        assert len(captured_ids) == 1, (
+            f"Same artist must be deduplicated; expected 1 ID, got {len(captured_ids)}"
         )
 
 

@@ -21,7 +21,7 @@ from app.utils.rate_limiter import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/library", tags=["library"])
+router = APIRouter(prefix="/api/v1/library", tags=["library"])
 
 
 @router.get("/top", response_model=TopTracksResponse)

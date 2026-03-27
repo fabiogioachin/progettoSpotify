@@ -13,7 +13,7 @@ from app.services.temporal_patterns import compute_temporal_patterns
 from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServerError
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/temporal", tags=["temporal"])
+router = APIRouter(prefix="/api/v1/temporal", tags=["temporal"])
 
 _DAYS_MAP = {"7d": 7, "30d": 30, "90d": 90, "all": 365}
 

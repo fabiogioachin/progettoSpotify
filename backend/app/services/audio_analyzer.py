@@ -1,21 +1,18 @@
 """Aggregazione e analisi audio features."""
 
-import json
 import logging
 from collections import Counter
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import ARTIST_GENRE_CAP_TRENDS, FEATURE_KEYS
-from app.models.listening_history import ListeningSnapshot
+from app.constants import FEATURE_KEYS
 from app.models.track import AudioFeatures
+from app.services.genre_cache import get_artist_genres_cached
 from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import (
-    RateLimitError,
     SpotifyAuthError,
-    gather_in_chunks,
     retry_with_backoff,
 )
 
@@ -84,7 +81,9 @@ async def compute_profile(
 
     # Distribuzione generi — usa pre_genres se forniti, altrimenti fetch
     genres = (
-        pre_genres if pre_genres is not None else await _extract_genres(client, items)
+        pre_genres
+        if pre_genres is not None
+        else await _extract_genres(db, client, items)
     )
 
     return {
@@ -145,28 +144,8 @@ async def compute_trends(
                 if a.get("id"):
                     all_artist_ids.add(a["id"])
 
-    # Step 3: Fetch genres ONCE for unique artists (cap=50)
-    artist_genres_map: dict[str, list[str]] = {}
-    capped = list(all_artist_ids)[:ARTIST_GENRE_CAP_TRENDS]
-
-    async def _fetch_artist_genres(aid: str) -> tuple[str, list[str]]:
-        try:
-            artist = await retry_with_backoff(client.get_artist, aid)
-            return aid, artist.get("genres", [])
-        except SpotifyAuthError:
-            raise
-        except Exception:
-            return aid, []
-
-    results = await gather_in_chunks(
-        [_fetch_artist_genres(aid) for aid in capped],
-        chunk_size=4,
-    )
-    for r in results:
-        if isinstance(r, (SpotifyAuthError, RateLimitError)):
-            raise r
-        if isinstance(r, tuple):
-            artist_genres_map[r[0]] = r[1]
+    # Step 3: Fetch genres ONCE for unique artists (DB-cached, 7d TTL, no cap)
+    artist_genres_map = await get_artist_genres_cached(db, client, list(all_artist_ids))
 
     # Step 4: Build per-period genre distributions from cached genres
     def _genres_for_period(tracks: list[dict]) -> dict[str, float]:
@@ -194,81 +173,11 @@ async def compute_trends(
     return trends
 
 
-async def save_snapshot(db: AsyncSession, user_id: int, period: str, profile: dict):
-    """Salva uno snapshot delle medie per tracking storico (max 1 per giorno/periodo)."""
-    from datetime import datetime, timezone
-
-    from sqlalchemy import func
-
-    features = profile.get("features", {})
-    genres = profile.get("genres", {})
-    today = datetime.now(timezone.utc).date()
-
-    fields = {
-        "avg_energy": features.get("energy"),
-        "avg_valence": features.get("valence"),
-        "avg_danceability": features.get("danceability"),
-        "avg_acousticness": features.get("acousticness"),
-        "avg_instrumentalness": features.get("instrumentalness"),
-        "avg_speechiness": features.get("speechiness"),
-        "avg_liveness": features.get("liveness"),
-        "avg_tempo": features.get("tempo"),
-        "top_genre": max(genres, key=genres.get) if genres else None,
-        "genre_distribution": json.dumps(genres) if genres else None,
-        "track_count": profile.get("track_count", 0),
-    }
-
-    result = await db.execute(
-        select(ListeningSnapshot).where(
-            ListeningSnapshot.user_id == user_id,
-            ListeningSnapshot.period == period,
-            func.date(ListeningSnapshot.snapshot_date) == today,
-        )
-    )
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        for attr, value in fields.items():
-            setattr(existing, attr, value)
-    else:
-        snapshot = ListeningSnapshot(user_id=user_id, period=period, **fields)
-        db.add(snapshot)
-    await db.commit()
-
-
-async def get_historical_snapshots(db: AsyncSession, user_id: int) -> list[dict]:
-    """Recupera gli snapshot storici dell'utente."""
-    result = await db.execute(
-        select(ListeningSnapshot)
-        .where(ListeningSnapshot.user_id == user_id)
-        .order_by(ListeningSnapshot.snapshot_date.asc())
-    )
-    snapshots = result.scalars().all()
-    return [
-        {
-            "date": s.snapshot_date.isoformat() if s.snapshot_date else None,
-            "period": s.period,
-            "energy": s.avg_energy,
-            "valence": s.avg_valence,
-            "danceability": s.avg_danceability,
-            "acousticness": s.avg_acousticness,
-            "instrumentalness": s.avg_instrumentalness,
-            "speechiness": s.avg_speechiness,
-            "liveness": s.avg_liveness,
-            "tempo": s.avg_tempo,
-            "top_genre": s.top_genre,
-            "genres": json.loads(s.genre_distribution) if s.genre_distribution else {},
-            "track_count": s.track_count,
-        }
-        for s in snapshots
-    ]
-
-
 async def _extract_genres(
-    client: SpotifyClient, tracks: list[dict]
+    db: AsyncSession, client: SpotifyClient, tracks: list[dict]
 ) -> dict[str, float]:
-    """Estrae distribuzione generi dagli artisti dei brani."""
-    artist_ids = set()
+    """Estrae distribuzione generi dagli artisti dei brani (DB-cached, 7d TTL)."""
+    artist_ids: set[str] = set()
     for t in tracks:
         for a in t.get("artists", []):
             if a.get("id"):
@@ -277,28 +186,12 @@ async def _extract_genres(
     if not artist_ids:
         return {}
 
-    # Fetch artists individually (batch GET /artists removed in dev mode Feb 2026)
+    # Fetch genres via DB cache + Spotify API fallback (no cap — cache handles dedup)
+    artist_genres_map = await get_artist_genres_cached(db, client, list(artist_ids))
+
     all_genres: list[str] = []
-    artist_list = list(artist_ids)[:ARTIST_GENRE_CAP_TRENDS]
-
-    async def _fetch_genres(aid: str) -> list[str]:
-        try:
-            artist = await retry_with_backoff(client.get_artist, aid)
-            return artist.get("genres", [])
-        except SpotifyAuthError:
-            raise
-        except Exception:
-            return []
-
-    results = await gather_in_chunks(
-        [_fetch_genres(aid) for aid in artist_list],
-        chunk_size=4,
-    )
-    for r in results:
-        if isinstance(r, SpotifyAuthError):
-            raise r
-        if isinstance(r, list):
-            all_genres.extend(r)
+    for genres in artist_genres_map.values():
+        all_genres.extend(genres)
 
     if not all_genres:
         return {}

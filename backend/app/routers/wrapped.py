@@ -22,7 +22,7 @@ from app.utils.rate_limiter import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/wrapped", tags=["wrapped"])
+router = APIRouter(prefix="/api/v1/wrapped", tags=["wrapped"])
 
 
 async def _safe_fetch(label: str, coro):
