@@ -12,15 +12,14 @@
 
 ### Sync ascolti recenti all'avvio backend
 
-**Problema**: in dev mode il backend non gira 24/7. All'avvio del Docker, gli ultimi 50 brani ascoltati devono essere recuperati da Spotify API immediatamente (non aspettare login o timer hourly).
+**Problema**: in dev mode il backend non gira 24/7. All'avvio del Docker, gli ultimi brani ascoltati, non salvati nel DB, devono essere recuperati da Spotify API immediatamente (non aspettare login o timer hourly) e devono essere inseriti in ascolti recenti nel DB.
 
 **Fix**:
-- [ ] Aggiungere sync all'avvio in `main.py` lifespan (dopo APScheduler): per ogni utente attivo, chiama `_sync_user_recent_plays`
-- [ ] Usare priorita' P1_BACKGROUND_SYNC per non bloccare le prime chiamate interattive
-- [ ] Aggiungere delay staggerato tra utenti (5s) per non esaurire il budget
-- [ ] Spotify API `/me/player/recently-played` restituisce max 50 items (hard limit API). Non e' possibile avere 100/150 in una singola chiamata. L'accumulo nel DB nel tempo e' l'unico modo per superare il limite.
+- [x] Aggiungere sync all'avvio in `main.py` lifespan (dopo APScheduler): per ogni utente attivo, chiama `_sync_user_recent_plays`
+- [x] Usare priorita' P1_BACKGROUND_SYNC per non bloccare le prime chiamate interattive
+- [x] Aggiungere delay staggerato tra utenti (5s) per non esaurire il budget
 
-**File**: `backend/app/main.py` (lifespan), `backend/app/services/background_tasks.py`
+**Verificato in**: `backend/app/main.py` — funzione `_startup_sync_recent_plays()` + `asyncio.create_task` nel lifespan.
 
 ### Vista aggregata ascolti per il frontend
 
@@ -29,17 +28,16 @@
 **Design**: MANTENERE `recent_plays` (event log) + AGGIUNGERE vista aggregata computata.
 
 **Fix**:
-- [ ] Creare endpoint `GET /api/v1/library/recent-summary` che restituisce per ogni brano:
+- [x] Creare endpoint `GET /api/v1/library/recent-summary` che restituisce per ogni brano:
   - `track_spotify_id`, `track_name`, `artist_name`
   - `play_count`: numero totale riproduzioni (= COUNT righe per quel track)
   - `consecutive_days`: giorni consecutivi piu' recenti in cui e' stata ascoltata
   - `last_played_at`: ultima riproduzione
   - `first_played_at`: prima riproduzione registrata nell'app
-- [ ] Il frontend deve mostrare un disclaimer: "Dati raccolti da quando usi Wrap (dal {first_play_date})"
-- [ ] Query: `GROUP BY track_spotify_id` con aggregazioni, ordinato per `last_played_at DESC`
-- [ ] Non creare una nuova tabella — computare on-the-fly dalla tabella eventi (624 righe e' trascurabile, anche 10K lo e')
+- [x] Il frontend mostra il disclaimer: "Dati raccolti dal {first_play_date}" nel banner di TemporalPage (via campo `first_play_date` aggiunto alla risposta del temporal endpoint)
+- [x] Aggregazione on-the-fly in Python dalla tabella eventi (no nuova tabella)
 
-**File**: `backend/app/routers/library.py` (nuovo endpoint), `frontend/src/pages/TemporalPage.jsx` o nuova sezione
+**Implementato in**: `backend/app/routers/library.py` (endpoint), `backend/app/services/temporal_patterns.py` (first_play_date), `frontend/src/pages/TemporalPage.jsx` (disclaimer)
 
 ---
 

@@ -1,13 +1,17 @@
 """Router per dati libreria Spotify dell'utente."""
 
 import logging
+from collections import defaultdict
+from datetime import timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_auth
+from app.models.listening_history import RecentPlay
 from app.schemas import TopTracksResponse
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.popularity_cache import read_popularity_cache
@@ -94,4 +98,87 @@ async def get_top_tracks(
         "tracks": tracks,
         "total": data.get("total", len(tracks)),
         "time_range": time_range,
+    }
+
+
+@router.get("/recent-summary")
+async def get_recent_summary(
+    user_id: int = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Vista aggregata degli ascolti per brano (senza duplicati).
+
+    Aggrega recent_plays per track_spotify_id con play_count,
+    consecutive_days, last_played_at, first_played_at.
+    Restituisce anche first_play_date (data del primo ascolto registrato).
+    """
+    result = await db.execute(
+        select(RecentPlay)
+        .where(RecentPlay.user_id == user_id)
+        .order_by(RecentPlay.played_at.desc())
+    )
+    rows = result.scalars().all()
+
+    if not rows:
+        return {"tracks": [], "first_play_date": None, "total_plays": 0}
+
+    # Raggruppa per brano in Python (dataset piccolo, max ~10K righe)
+    tracks_map: dict[str, list] = defaultdict(list)
+    for row in rows:
+        dt = row.played_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        tracks_map[row.track_spotify_id].append(
+            {
+                "track_name": row.track_name,
+                "artist_name": row.artist_name,
+                "datetime": dt,
+            }
+        )
+
+    tracks_out = []
+    global_first: object = None
+
+    for track_id, plays in tracks_map.items():
+        plays.sort(key=lambda x: x["datetime"], reverse=True)
+        last_played = plays[0]["datetime"]
+        first_played = plays[-1]["datetime"]
+
+        if global_first is None or first_played < global_first:
+            global_first = first_played
+
+        # Giorni consecutivi più recenti in cui il brano è stato ascoltato
+        unique_dates = sorted(
+            set(p["datetime"].date() for p in plays), reverse=True
+        )
+        consecutive = 1 if unique_dates else 0
+        for i in range(1, len(unique_dates)):
+            if (unique_dates[i - 1] - unique_dates[i]).days == 1:
+                consecutive += 1
+            else:
+                break
+
+        tracks_out.append(
+            {
+                "track_spotify_id": track_id,
+                "track_name": plays[0]["track_name"],
+                "artist_name": plays[0]["artist_name"],
+                "play_count": len(plays),
+                "consecutive_days": consecutive,
+                "last_played_at": last_played.isoformat(),
+                "first_played_at": first_played.isoformat(),
+            }
+        )
+
+    # Ordina per ultimo ascolto (più recente prima)
+    tracks_out.sort(key=lambda x: x["last_played_at"], reverse=True)
+
+    first_play_date = (
+        global_first.strftime("%d/%m/%Y") if global_first else None
+    )
+
+    return {
+        "tracks": tracks_out,
+        "first_play_date": first_play_date,
+        "total_plays": len(rows),
     }

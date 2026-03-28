@@ -66,8 +66,13 @@ async def compute_temporal_patterns(
 
     # Read accumulated plays from DB (if available, gives us more than 50)
     plays = api_plays
+    first_play_date = None
     if db and user_id:
         db_plays = await _load_plays(db, user_id)
+        if db_plays:
+            # db_plays è ordinato ascending: il primo è il più vecchio
+            dt0 = db_plays[0]["datetime"]
+            first_play_date = dt0.strftime("%d/%m/%Y")
         if db_plays and len(db_plays) > len(api_plays):
             plays = db_plays
             logger.info(
@@ -205,6 +210,7 @@ async def compute_temporal_patterns(
         "accumulated": len(plays) > len(api_plays),
         "new_plays_stored": stored_count,
         "daily_minutes": daily_minutes,
+        "first_play_date": first_play_date,
     }
 
 

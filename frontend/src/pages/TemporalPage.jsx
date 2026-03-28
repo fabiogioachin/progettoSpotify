@@ -30,6 +30,7 @@ export default function TemporalPage() {
   const topTracks = data?.top_tracks || []
   const accumulated = data?.accumulated || false
   const newPlaysStored = data?.new_plays_stored || 0
+  const firstPlayDate = data?.first_play_date || null
 
   const peakHourLabel = peakHours.length > 0 ? `${String(peakHours[0].hour).padStart(2, '0')}:00` : '--'
 
@@ -72,6 +73,9 @@ export default function TemporalPage() {
                 <span className="text-accent font-medium">
                   (+{newPlaysStored} nuovi salvati)
                 </span>
+              )}
+              {firstPlayDate && (
+                <span className="text-text-muted">· Dati raccolti dal {firstPlayDate}</span>
               )}
               <span className="text-text-muted sm:ml-auto">Lo storico cresce ad ogni visita</span>
             </>
