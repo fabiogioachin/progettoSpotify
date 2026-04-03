@@ -1,7 +1,10 @@
 """Aggregazione e analisi audio features."""
 
+from __future__ import annotations
+
 import logging
 from collections import Counter
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +19,9 @@ from app.utils.rate_limiter import (
     retry_with_backoff,
 )
 
+if TYPE_CHECKING:
+    from app.services.data_bundle import RequestDataBundle
+
 # NOTE: Spotify Audio Features API è deprecata (403 permanente da Feb 2026).
 # get_or_fetch_features() fa solo cache lookup — non chiama mai l'API.
 
@@ -27,15 +33,21 @@ async def compute_profile(
     client: SpotifyClient,
     time_range: str = "medium_term",
     pre_genres: dict[str, float] | None = None,
+    bundle: RequestDataBundle | None = None,
 ) -> dict:
     """Calcola il profilo audio completo dell'utente per un periodo.
 
     Args:
         pre_genres: if provided, skip _extract_genres and use these directly.
+        bundle: if provided, use cached data from the request-scoped bundle
+                instead of making direct Spotify API calls.
     """
-    data = await retry_with_backoff(
-        client.get_top_tracks, time_range=time_range, limit=50
-    )
+    if bundle is not None:
+        data = await bundle.get_top_tracks(time_range=time_range, limit=50)
+    else:
+        data = await retry_with_backoff(
+            client.get_top_tracks, time_range=time_range, limit=50
+        )
     items = data.get("items", [])
 
     if not items:
@@ -108,12 +120,20 @@ async def _safe_compute(coro, time_range: str):
 
 
 async def compute_trends(
-    db: AsyncSession, client: SpotifyClient, user_id: int
+    db: AsyncSession,
+    client: SpotifyClient,
+    user_id: int,
+    bundle: RequestDataBundle | None = None,
 ) -> list[dict]:
     """Calcola i trend confrontando short, medium e long term.
 
     Fetches genres ONCE for all unique artists across the 3 time ranges,
     then passes pre-computed genre distributions to each compute_profile call.
+
+    Args:
+        bundle: if provided, use cached data from the request-scoped bundle
+                instead of making direct Spotify API calls. The bundle is also
+                forwarded to compute_profile so that the same cached data is reused.
     """
     labels = {
         "short_term": "Ultimo mese",
@@ -122,13 +142,16 @@ async def compute_trends(
     }
     time_ranges = ["short_term", "medium_term", "long_term"]
 
-    # Step 1: Fetch top_tracks for all 3 ranges (cached, ~0 API calls)
+    # Step 1: Fetch top_tracks for all 3 ranges (bundle deduplicates API calls)
     all_period_tracks: dict[str, list] = {}
     for tr in time_ranges:
         try:
-            data = await retry_with_backoff(
-                client.get_top_tracks, time_range=tr, limit=50
-            )
+            if bundle is not None:
+                data = await bundle.get_top_tracks(time_range=tr, limit=50)
+            else:
+                data = await retry_with_backoff(
+                    client.get_top_tracks, time_range=tr, limit=50
+                )
             all_period_tracks[tr] = data.get("items", [])
         except SpotifyAuthError:
             raise
@@ -166,7 +189,7 @@ async def compute_trends(
     for tr in time_ranges:
         pre_genres = _genres_for_period(all_period_tracks[tr])
         profile = await _safe_compute(
-            compute_profile(db, client, tr, pre_genres=pre_genres), tr
+            compute_profile(db, client, tr, pre_genres=pre_genres, bundle=bundle), tr
         )
         if profile is not None:
             trends.append({"period": tr, "label": labels[tr], **profile})

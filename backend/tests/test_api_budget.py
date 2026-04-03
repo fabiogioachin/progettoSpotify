@@ -8,13 +8,11 @@ Covers:
 - Integration: _throttle_check_and_register member format includes priority:user_id
 """
 
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.api_budget import (
-    MAX_USER_SHARE,
     TIER_LIMITS,
     Priority,
     check_budget,
@@ -31,7 +29,6 @@ class TestCheckBudget:
         """Budget check passes when tier has room."""
         mock_redis = AsyncMock()
         # 3 P0 calls in window, well under limit of 17
-        now = time.time()
         members = [
             f"aaa:{int(Priority.P0_INTERACTIVE)}:1",
             f"bbb:{int(Priority.P0_INTERACTIVE)}:2",
@@ -64,10 +61,7 @@ class TestCheckBudget:
         mock_redis = AsyncMock()
         # P0 tier limit is 17, 30% of 17 = 5.1 → floor = 5
         # Put 5 calls from user 42 (at user limit)
-        members = [
-            f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42"
-            for i in range(5)
-        ]
+        members = [f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42" for i in range(5)]
         mock_redis.zrangebyscore.return_value = members
 
         with patch("app.services.api_budget.get_redis", return_value=mock_redis):
@@ -79,10 +73,7 @@ class TestCheckBudget:
         """User A at share limit should not block User B."""
         mock_redis = AsyncMock()
         # 5 calls from user 42, but user 99 asking
-        members = [
-            f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42"
-            for i in range(5)
-        ]
+        members = [f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42" for i in range(5)]
         mock_redis.zrangebyscore.return_value = members
 
         with patch("app.services.api_budget.get_redis", return_value=mock_redis):
@@ -110,8 +101,7 @@ class TestCheckBudget:
         mock_redis = AsyncMock()
         # 20 P1 calls — should not affect P0 budget
         members = [
-            f"{i:032x}:{int(Priority.P1_BACKGROUND_SYNC)}:{i}"
-            for i in range(20)
+            f"{i:032x}:{int(Priority.P1_BACKGROUND_SYNC)}:{i}" for i in range(20)
         ]
         mock_redis.zrangebyscore.return_value = members
 
@@ -152,7 +142,10 @@ class TestExtendCacheTtl:
     async def test_doubles_ttl_for_matching_keys(self):
         mock_redis = AsyncMock()
         # scan returns cursor=0 (done) and 2 keys
-        mock_redis.scan.return_value = (0, ["cache:user:1:top_tracks:abc", "cache:user:1:me:def"])
+        mock_redis.scan.return_value = (
+            0,
+            ["cache:user:1:top_tracks:abc", "cache:user:1:me:def"],
+        )
         mock_redis.ttl.side_effect = [120, 300]  # current TTLs
 
         with patch("app.services.api_budget.get_redis", return_value=mock_redis):
@@ -205,55 +198,173 @@ class TestThrottleMemberFormat:
             )
 
         # Check that zadd was called with a member containing ":1:42"
-        zadd_calls = [
-            call for call in mock_pipe.method_calls if call[0] == "zadd"
-        ]
+        zadd_calls = [call for call in mock_pipe.method_calls if call[0] == "zadd"]
         assert len(zadd_calls) == 1
         member_dict = zadd_calls[0][1][1]  # second positional arg is the dict
         member_key = list(member_dict.keys())[0]
         assert ":1:42" in member_key  # priority=1, user_id=42
 
+
+class TestCheckAndRegisterLua:
+    """Tests for _check_and_register (Lua script-based atomic check)."""
+
     @pytest.mark.asyncio
-    async def test_budget_check_triggers_throttle_error(self):
-        """When budget is exhausted, _request raises ThrottleError before throttle check."""
+    async def test_allowed_call_passes_through(self):
+        """When Lua returns allowed=1, no exception is raised."""
         from app.services.spotify_client import SpotifyClient
 
-        mock_db = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="fake_sha")
+        # Lua returns: [allowed=1, reason=0, wait=0, count=1]
+        mock_redis.evalsha = AsyncMock(return_value=[1, 0, 0, 1])
 
-        with (
-            patch.object(SpotifyClient, "_check_cooldown", return_value=None),
-            patch(
-                "app.services.spotify_client.check_budget", return_value=False
-            ),
-            patch(
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            SpotifyClient._lua_sha = None
+            client = SpotifyClient(
+                AsyncMock(), user_id=1, priority=Priority.P0_INTERACTIVE
+            )
+            await client._check_and_register()
+
+    @pytest.mark.asyncio
+    async def test_cooldown_raises_rate_limit_error(self):
+        """When Lua returns reason=1 (cooldown), RateLimitError is raised."""
+        from app.services.spotify_client import SpotifyClient
+        from app.utils.rate_limiter import RateLimitError
+
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="fake_sha")
+        # Lua returns: [allowed=0, reason=1(cooldown), wait=42, count=0]
+        mock_redis.evalsha = AsyncMock(return_value=[0, 1, 42, 0])
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            SpotifyClient._lua_sha = None
+            client = SpotifyClient(
+                AsyncMock(), user_id=1, priority=Priority.P0_INTERACTIVE
+            )
+            with pytest.raises(RateLimitError) as exc_info:
+                await client._check_and_register()
+            assert exc_info.value.retry_after == 42.0
+
+    @pytest.mark.asyncio
+    async def test_tier_budget_exhausted_raises_throttle_error(self):
+        """When Lua returns reason=2 (tier exhausted), ThrottleError is raised."""
+        from app.services.spotify_client import SpotifyClient
+
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="fake_sha")
+        # Lua returns: [allowed=0, reason=2(tier), wait=0, count=17]
+        mock_redis.evalsha = AsyncMock(return_value=[0, 2, 0, 17])
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            with patch(
                 "app.services.spotify_client.extend_cache_ttl",
                 new_callable=AsyncMock,
-            ) as mock_extend,
-        ):
-            client = SpotifyClient(mock_db, user_id=1, priority=Priority.P0_INTERACTIVE)
-            with pytest.raises(ThrottleError):
-                await client._request("GET", "https://api.spotify.com/v1/me")
-
-            # Verify cache TTL was extended
-            mock_extend.assert_awaited_once_with(1)
+            ) as mock_extend:
+                SpotifyClient._lua_sha = None
+                client = SpotifyClient(
+                    AsyncMock(), user_id=1, priority=Priority.P0_INTERACTIVE
+                )
+                with pytest.raises(ThrottleError):
+                    await client._check_and_register()
+                mock_extend.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
-    async def test_budget_ok_proceeds_to_throttle(self):
-        """When budget is OK, request proceeds to throttle check."""
+    async def test_user_budget_exhausted_raises_throttle_error(self):
+        """When Lua returns reason=3 (user exhausted), ThrottleError is raised."""
+        from app.services.spotify_client import SpotifyClient
+
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="fake_sha")
+        # Lua returns: [allowed=0, reason=3(user), wait=0, count=10]
+        mock_redis.evalsha = AsyncMock(return_value=[0, 3, 0, 10])
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            with patch(
+                "app.services.spotify_client.extend_cache_ttl",
+                new_callable=AsyncMock,
+            ) as mock_extend:
+                SpotifyClient._lua_sha = None
+                client = SpotifyClient(
+                    AsyncMock(), user_id=42, priority=Priority.P0_INTERACTIVE
+                )
+                with pytest.raises(ThrottleError):
+                    await client._check_and_register()
+                mock_extend.assert_awaited_once_with(42)
+
+    @pytest.mark.asyncio
+    async def test_window_full_raises_throttle_error(self):
+        """When Lua returns reason=4 (window full), ThrottleError with wait time."""
+        from app.services.spotify_client import SpotifyClient
+
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="fake_sha")
+        # Lua returns: [allowed=0, reason=4(window), wait=10.5, count=25]
+        mock_redis.evalsha = AsyncMock(return_value=[0, 4, 10.5, 25])
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            SpotifyClient._lua_sha = None
+            client = SpotifyClient(
+                AsyncMock(), user_id=1, priority=Priority.P0_INTERACTIVE
+            )
+            with pytest.raises(ThrottleError) as exc_info:
+                await client._check_and_register()
+            assert exc_info.value.retry_after == 10.5
+
+    @pytest.mark.asyncio
+    async def test_failopen_on_redis_error(self):
+        """When Redis is unavailable, call is allowed (fail-open)."""
+        from app.services.spotify_client import SpotifyClient
+
+        with patch(
+            "app.services.spotify_client.get_redis",
+            side_effect=ConnectionError("Redis down"),
+        ):
+            SpotifyClient._lua_sha = None
+            client = SpotifyClient(
+                AsyncMock(), user_id=1, priority=Priority.P0_INTERACTIVE
+            )
+            # Should not raise — fail-open
+            await client._check_and_register()
+
+    @pytest.mark.asyncio
+    async def test_noscript_reloads_and_retries(self):
+        """NOSCRIPT error triggers script reload and successful retry."""
+        from app.services.spotify_client import SpotifyClient
+
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="new_sha")
+        # First call: NOSCRIPT error, second call: success
+        mock_redis.evalsha = AsyncMock(
+            side_effect=[
+                Exception("NOSCRIPT No matching script"),
+                [1, 0, 0, 1],
+            ]
+        )
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            SpotifyClient._lua_sha = "stale_sha"
+            client = SpotifyClient(
+                AsyncMock(), user_id=1, priority=Priority.P0_INTERACTIVE
+            )
+            await client._check_and_register()
+
+            # script_load should have been called to reload
+            mock_redis.script_load.assert_awaited_once()
+            assert mock_redis.evalsha.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_request_uses_lua_check(self):
+        """_request calls _check_and_register (Lua path) instead of 3 separate checks."""
         from app.services.spotify_client import SpotifyClient
 
         mock_db = AsyncMock()
 
         with (
-            patch.object(SpotifyClient, "_check_cooldown", return_value=None),
-            patch(
-                "app.services.spotify_client.check_budget", return_value=True
-            ),
             patch.object(
                 SpotifyClient,
-                "_throttle_check_and_register",
+                "_check_and_register",
                 new_callable=AsyncMock,
-            ) as mock_throttle,
+            ) as mock_lua_check,
             patch.object(
                 SpotifyClient,
                 "_get_valid_token",
@@ -268,13 +379,32 @@ class TestThrottleMemberFormat:
             mock_response.raise_for_status = MagicMock()
             mock_http.return_value = mock_response
 
-            client = SpotifyClient(
-                mock_db, user_id=5, priority=Priority.P2_BATCH
-            )
+            client = SpotifyClient(mock_db, user_id=5, priority=Priority.P2_BATCH)
             result = await client._request("GET", "https://api.spotify.com/v1/me")
 
             assert result == {"ok": True}
-            # Throttle should have been called with priority and user_id
-            mock_throttle.assert_awaited_once_with(
-                priority=Priority.P2_BATCH, user_id=5
-            )
+            mock_lua_check.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_request_lua_tier_exhausted_extends_cache(self):
+        """When Lua returns tier exhausted, _request raises ThrottleError and extends cache."""
+        from app.services.spotify_client import SpotifyClient
+
+        mock_db = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.script_load = AsyncMock(return_value="fake_sha")
+        mock_redis.evalsha = AsyncMock(return_value=[0, 2, 0, 17])
+
+        with (
+            patch("app.services.spotify_client.get_redis", return_value=mock_redis),
+            patch(
+                "app.services.spotify_client.extend_cache_ttl",
+                new_callable=AsyncMock,
+            ) as mock_extend,
+        ):
+            SpotifyClient._lua_sha = None
+            client = SpotifyClient(mock_db, user_id=1, priority=Priority.P0_INTERACTIVE)
+            with pytest.raises(ThrottleError):
+                await client._request("GET", "https://api.spotify.com/v1/me")
+
+            mock_extend.assert_awaited_once_with(1)

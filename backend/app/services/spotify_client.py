@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import re
 import time
 import uuid
@@ -19,7 +20,12 @@ from app.models.user import SpotifyToken
 from app.services.redis_client import get_redis
 from cryptography.fernet import InvalidToken
 
-from app.services.api_budget import Priority, check_budget, extend_cache_ttl
+from app.services.api_budget import (
+    MAX_USER_SHARE,
+    Priority,
+    TIER_LIMITS,
+    extend_cache_ttl,
+)
 from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
@@ -93,6 +99,95 @@ class SpotifyClient:
     # Sliding window constants
     _WINDOW_SIZE: float = 30.0
     _MAX_CALLS_PER_WINDOW: int = 25
+
+    # Lua script for atomic check-and-register (cooldown + budget + throttle)
+    # KEYS[1] = calls sorted set, KEYS[2] = cooldown key
+    # ARGV[1] = now, ARGV[2] = window_start, ARGV[3] = call_id,
+    # ARGV[4] = priority_str, ARGV[5] = user_id_str,
+    # ARGV[6] = max_calls, ARGV[7] = tier_limit, ARGV[8] = user_limit,
+    # ARGV[9] = key_ttl
+    # Returns: {allowed(0/1), reason(0=ok,1=cooldown,2=tier,3=user,4=window), wait_time, count}
+    _LUA_SCRIPT = """\
+local calls_key = KEYS[1]
+local cooldown_key = KEYS[2]
+
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local call_id = ARGV[3]
+local priority_str = ARGV[4]
+local user_id_str = ARGV[5]
+local max_calls = tonumber(ARGV[6])
+local tier_limit = tonumber(ARGV[7])
+local user_limit = tonumber(ARGV[8])
+local key_ttl = tonumber(ARGV[9])
+local window_size = now - window_start
+
+-- 1. Check cooldown
+local cd_ttl = redis.call('TTL', cooldown_key)
+if cd_ttl > 0 then
+    return {0, 1, cd_ttl, 0}
+end
+
+-- 2. Clean expired entries
+redis.call('ZREMRANGEBYSCORE', calls_key, 0, window_start)
+
+-- 3. Get all members in window (needed for both total count and budget parsing)
+local members = redis.call('ZRANGEBYSCORE', calls_key, window_start, '+inf')
+local total = #members
+
+-- 4. Budget check: count per-tier and per-user calls
+local tier_count = 0
+local user_count = 0
+
+for _, member in ipairs(members) do
+    -- member format: {uuid_hex}:{priority}:{user_id}
+    local p1 = string.find(member, ':', 1, true)
+    if p1 then
+        local p2 = string.find(member, ':', p1 + 1, true)
+        if p2 then
+            local m_priority = string.sub(member, p1 + 1, p2 - 1)
+            local m_user_id = string.sub(member, p2 + 1)
+            if m_priority == priority_str then
+                tier_count = tier_count + 1
+                if m_user_id == user_id_str then
+                    user_count = user_count + 1
+                end
+            end
+        end
+    end
+end
+
+-- 5. Check tier budget
+if tier_count >= tier_limit then
+    return {0, 2, 0, total}
+end
+
+-- 6. Check user budget within tier
+if user_count >= user_limit then
+    return {0, 3, 0, total}
+end
+
+-- 7. Check sliding window (total calls)
+if total >= max_calls then
+    -- Calculate wait time: oldest entry score + window_size - now
+    local wait = window_size
+    if total > 0 then
+        local oldest_score = tonumber(redis.call('ZSCORE', calls_key, members[1]))
+        if oldest_score then
+            wait = oldest_score + window_size - now
+            if wait < 0 then wait = 0 end
+        end
+    end
+    return {0, 4, wait, total}
+end
+
+-- 8. ALL checks passed — register the call
+redis.call('ZADD', calls_key, now, call_id)
+redis.call('EXPIRE', calls_key, key_ttl)
+
+return {1, 0, 0, total + 1}
+"""
+    _lua_sha: str | None = None
 
     def __init__(
         self,
@@ -184,6 +279,125 @@ class SpotifyClient:
             logger.warning("Redis non disponibile per set cooldown — ignorato")
 
     @staticmethod
+    async def _load_lua_script(r) -> str:
+        """Load the Lua script into Redis and cache the SHA. Returns the SHA."""
+        if SpotifyClient._lua_sha is not None:
+            return SpotifyClient._lua_sha
+        sha = await r.script_load(SpotifyClient._LUA_SCRIPT)
+        SpotifyClient._lua_sha = sha
+        return sha
+
+    async def _check_and_register(self) -> None:
+        """Atomic cooldown + budget + throttle check via single Lua EVALSHA.
+
+        Consolidates 3 Redis round-trips into 1. Raises:
+        - RateLimitError if global cooldown is active (from a prior Spotify 429)
+        - ThrottleError if tier/user budget or sliding window is exhausted
+
+        Fail-open: if Redis is unavailable, the call is allowed.
+        """
+        try:
+            r = get_redis()
+            sha = await self._load_lua_script(r)
+
+            now = time.time()
+            window_start = now - self._WINDOW_SIZE
+            call_id = f"{uuid.uuid4().hex}:{int(self.priority)}:{self.user_id}"
+
+            tier_limit = TIER_LIMITS[self.priority]
+            user_limit = max(1, math.floor(tier_limit * MAX_USER_SHARE))
+
+            try:
+                result = await r.evalsha(
+                    sha,
+                    2,  # number of keys
+                    self._REDIS_CALLS_KEY,
+                    self._REDIS_COOLDOWN_KEY,
+                    str(now),
+                    str(window_start),
+                    call_id,
+                    str(int(self.priority)),
+                    str(self.user_id),
+                    str(self._MAX_CALLS_PER_WINDOW),
+                    str(tier_limit),
+                    str(user_limit),
+                    str(60),  # key_ttl
+                )
+            except Exception as e:
+                # NOSCRIPT error: SHA not in Redis (server restart). Reload and retry.
+                if "NOSCRIPT" in str(e):
+                    SpotifyClient._lua_sha = None
+                    sha = await self._load_lua_script(r)
+                    result = await r.evalsha(
+                        sha,
+                        2,
+                        self._REDIS_CALLS_KEY,
+                        self._REDIS_COOLDOWN_KEY,
+                        str(now),
+                        str(window_start),
+                        call_id,
+                        str(int(self.priority)),
+                        str(self.user_id),
+                        str(self._MAX_CALLS_PER_WINDOW),
+                        str(tier_limit),
+                        str(user_limit),
+                        str(60),
+                    )
+                else:
+                    raise
+
+            # Parse Lua result: [allowed, reason, wait_time, count]
+            allowed = int(result[0])
+            reason = int(result[1])
+            wait_time = float(result[2])
+
+            if allowed:
+                return  # All checks passed, call registered
+
+            if reason == 1:
+                # Cooldown active
+                logger.warning(
+                    "Global cooldown active (%.0fs remaining) — skipping request",
+                    wait_time,
+                )
+                raise RateLimitError(wait_time)
+
+            if reason == 2:
+                # Tier budget exhausted
+                logger.info(
+                    "Budget esaurito per tier %s — extend cache TTL",
+                    self.priority.name,
+                )
+                await extend_cache_ttl(self.user_id)
+                raise ThrottleError(self._WINDOW_SIZE)
+
+            if reason == 3:
+                # User budget within tier exhausted
+                logger.info(
+                    "Budget utente esaurito per user %s in tier %s — extend cache TTL",
+                    self.user_id,
+                    self.priority.name,
+                )
+                await extend_cache_ttl(self.user_id)
+                raise ThrottleError(self._WINDOW_SIZE)
+
+            if reason == 4:
+                # Sliding window full
+                effective_wait = max(0.1, wait_time)
+                logger.info(
+                    "Throttle preventivo: attesa %.1fs (budget %d/%d in 30s)",
+                    effective_wait,
+                    self._MAX_CALLS_PER_WINDOW,
+                    self._MAX_CALLS_PER_WINDOW,
+                )
+                raise ThrottleError(effective_wait)
+
+        except (RateLimitError, ThrottleError):
+            raise
+        except Exception:
+            logger.warning("Redis non disponibile per check_and_register — fail-open")
+
+    @staticmethod
     async def _throttle_check_and_register(
         priority: Priority = Priority.P0_INTERACTIVE,
         user_id: int = 0,
@@ -245,21 +459,30 @@ class SpotifyClient:
         """Return (current_call_count, window_reset_seconds) from Redis.
 
         Used by RateLimitHeaderMiddleware and rate-limit-status endpoint.
+        Optimized: ZCOUNT for count (O(log N)), ZRANGEBYSCORE LIMIT 0 1 for oldest.
         Returns (0, 0) if Redis is unavailable.
         """
         try:
             r = get_redis()
             now = time.time()
             window_start = now - SpotifyClient._WINDOW_SIZE
-            members = await r.zrangebyscore(
+
+            pipe = r.pipeline(transaction=False)
+            pipe.zcount(SpotifyClient._REDIS_CALLS_KEY, window_start, "+inf")
+            pipe.zrangebyscore(
                 SpotifyClient._REDIS_CALLS_KEY,
                 window_start,
                 "+inf",
                 withscores=True,
+                start=0,
+                num=1,
             )
-            count = len(members)
-            if count > 0 and members:
-                oldest_score = members[0][1]
+            results = await pipe.execute()
+
+            count = results[0]
+            oldest_entries = results[1]
+            if count > 0 and oldest_entries:
+                oldest_score = oldest_entries[0][1]
                 reset = max(
                     0, round(oldest_score + SpotifyClient._WINDOW_SIZE - now, 1)
                 )
@@ -278,29 +501,8 @@ class SpotifyClient:
     async def _request(self, method: str, url: str, **kwargs) -> Any:
         """Esegue una richiesta autenticata alla Spotify API con retry su 401."""
         async with SpotifyClient._global_sem:
-            # Global cooldown check via Redis
-            cooldown_remaining = await self._check_cooldown()
-            if cooldown_remaining is not None:
-                logger.warning(
-                    "Global cooldown active (%.0fs remaining) — skipping request to %s",
-                    cooldown_remaining,
-                    url,
-                )
-                raise RateLimitError(cooldown_remaining)
-
-            # Priority budget check — before consuming a slot in the sliding window
-            budget_ok = await check_budget(self.user_id, self.priority)
-            if not budget_ok:
-                # Extend cache TTLs to reduce future pressure
-                await extend_cache_ttl(self.user_id)
-                # P0: ThrottleError propagates to frontend (shows throttle banner)
-                # P1/P2: caller (background jobs) catches ThrottleError and skips
-                raise ThrottleError(self._WINDOW_SIZE)
-
-            # Sliding window throttle via Redis sorted set
-            await self._throttle_check_and_register(
-                priority=self.priority, user_id=self.user_id
-            )
+            # Atomic cooldown + budget + throttle check via single Lua script
+            await self._check_and_register()
 
             access_token = await self._get_valid_token()
             headers = {"Authorization": f"Bearer {access_token}"}
@@ -391,12 +593,16 @@ class SpotifyClient:
         return result
 
     async def get_recently_played(
-        self, limit: int = 50, before: int | None = None
+        self,
+        limit: int = 50,
+        before: int | None = None,
+        skip_cache: bool = False,
     ) -> dict:
         key = f"cache:user:{self.user_id}:recently_played:{_args_hash(limit, before)}"
-        cached = await _cache_get(key)
-        if cached is not None:
-            return cached
+        if not skip_cache:
+            cached = await _cache_get(key)
+            if cached is not None:
+                return cached
         params: dict = {"limit": limit}
         if before is not None:
             params["before"] = before

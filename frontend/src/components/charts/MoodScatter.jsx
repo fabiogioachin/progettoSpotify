@@ -8,9 +8,7 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts'
-import { Palette } from 'lucide-react'
 import { TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
-import EmptyState from '../ui/EmptyState'
 
 export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività vs Energia', loading = false }) {
   if (loading) {
@@ -23,16 +21,7 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
   }
 
   if (!tracks || tracks.length === 0) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <EmptyState
-          icon={Palette}
-          message="Analisi audio non disponibile"
-          description="I brani necessitano di preview audio per l'analisi"
-        />
-      </div>
-    )
+    return null
   }
 
   const data = tracks
@@ -46,16 +35,7 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
     }))
 
   if (data.length === 0) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <EmptyState
-          icon={Palette}
-          message="Analisi audio non disponibile"
-          description="I brani necessitano di preview audio per l'analisi"
-        />
-      </div>
-    )
+    return null
   }
 
   return (

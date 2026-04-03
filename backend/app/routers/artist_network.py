@@ -25,7 +25,7 @@ async def get_artist_network(
     """Grafo di artisti correlati con cluster e bridge artists."""
     client = SpotifyClient(db, user_id)
     try:
-        result = await build_artist_network(client)
+        result = await build_artist_network(client, db=db)
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py
     except Exception as exc:

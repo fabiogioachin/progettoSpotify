@@ -29,6 +29,7 @@ from app.services.spotify_client import (
     SPOTIFY_TOKEN_URL,
     SpotifyClient,
 )
+from app.utils.rate_limiter import RateLimitError, ThrottleError
 from app.utils.token_manager import encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -336,26 +337,45 @@ async def _try_sync_and_snapshot(user_id: int):
 
     Critico: senza questo sync, se il backend è spento per giorni,
     gli ascolti cadono dal buffer Spotify (50 item) e sono persi per sempre.
+
+    Il sync usa P0_INTERACTIVE perché è UNA chiamata API ed è critico per
+    l'integrità dei dati — trattarlo come background lo espone a throttle
+    quando le pagine consumano il budget.
     """
     if user_id in _snapshot_running:
         return
     _snapshot_running.add(user_id)
     try:
-        # 1. Sync ascolti recenti PRIMA di tutto — recupera dal buffer Spotify
-        #    prima che nuovi ascolti li spingano fuori. Delay per lasciare
-        #    le API call della pagina completarsi prima.
-        await asyncio.sleep(10)
-        try:
-            async with async_session() as db:
-                client = SpotifyClient(
-                    db, user_id, priority=Priority.P1_BACKGROUND_SYNC
+        # 1. Sync ascolti recenti — priorità P0 con retry.
+        #    Delay minimo: solo il tempo di completare la response HTTP.
+        await asyncio.sleep(0.5)
+        sync_ok = False
+        for attempt in range(3):
+            try:
+                async with async_session() as db:
+                    client = SpotifyClient(
+                        db, user_id, priority=Priority.P0_INTERACTIVE
+                    )
+                    try:
+                        await _sync_user_recent_plays(
+                            db, user_id, client, raise_on_throttle=True
+                        )
+                        sync_ok = True
+                    finally:
+                        await client.close()
+                break
+            except (RateLimitError, ThrottleError) as throttle_exc:
+                retry_after = getattr(throttle_exc, "retry_after", 10) or 10
+                wait = min(retry_after, 35)
+                logger.info(
+                    "Login sync user_id=%d throttled (tentativo %d/3), "
+                    "attendo %ds prima di riprovare",
+                    user_id, attempt + 1, wait,
                 )
-                try:
-                    await _sync_user_recent_plays(db, user_id, client)
-                finally:
-                    await client.close()
-        except Exception as sync_exc:
-            logger.warning("Login sync fallito per user_id=%d: %s", user_id, sync_exc)
+                await asyncio.sleep(wait)
+            except Exception as sync_exc:
+                logger.warning("Login sync fallito per user_id=%d: %s", user_id, sync_exc)
+                break
 
         # 2. Snapshot giornaliero (skip per utenti nuovi senza dati)
         async with async_session() as db:

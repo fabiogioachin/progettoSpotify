@@ -422,42 +422,17 @@ class TestTrackCountFallback:
         client.get.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_track_count_fallback_uses_get_playlist_items_total(self):
-        """_fetch_playlist_meta calls get_playlist_items(id, limit=1) and
-        reads the 'total' field to fix track_count=0."""
+    async def test_track_count_fallback_uses_db_cache_then_bg_task(self):
+        """When API returns track_count=0, the new flow checks DB cache
+        first and launches a background task for remaining zeros.
+        No burst API calls happen inline."""
 
         async def _passthrough_retry(fn, *args, **kwargs):
             return await fn(*args, **kwargs)
 
-        async def _passthrough_gather(coros, chunk_size=5):
-            results = []
-            for coro in coros:
-                results.append(await coro)
-            return results
-
         client = _make_client()
 
         # get_playlists returns one playlist with track_count=0
-        client.get.return_value = {
-            "items": [
-                {
-                    "id": "pid1111111111111",
-                    "name": "Empty Count",
-                    "description": "",
-                    "images": [],
-                    "tracks": {"total": 0},
-                    "owner": {"id": "owner123", "display_name": "Me"},
-                }
-            ],
-            "total": 1,
-        }
-
-        # get_playlist_items returns total=42
-        client.get_playlist_items = AsyncMock(
-            return_value={"total": 42, "items": [{"track": {"id": "t" * 15}}]}
-        )
-
-        # Mock get_playlists on the client
         client.get_playlists = AsyncMock(
             return_value={
                 "items": [
@@ -474,19 +449,42 @@ class TestTrackCountFallback:
             }
         )
 
-        # Mock the DB query for user
-        mock_result = MagicMock()
+        # Mock the DB queries: user query + metadata cache query
         mock_user = MagicMock()
         mock_user.spotify_id = "owner123"
-        mock_result.scalar_one_or_none.return_value = mock_user
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = mock_user
+
+        # Fake cached PlaylistMetadata with track_count=42
+        cached_meta = MagicMock()
+        cached_meta.playlist_id = "pid1111111111111"
+        cached_meta.track_count = 42
+
+        cache_result = MagicMock()
+        cache_result.scalars.return_value.all.return_value = [cached_meta]
+
         mock_db = AsyncMock()
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        call_count = 0
+
+        async def _mock_execute(stmt):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return user_result  # User query
+            elif call_count == 2:
+                return cache_result  # Metadata cache query
+            return MagicMock()
+
+        mock_db.execute = AsyncMock(side_effect=_mock_execute)
+        mock_db.commit = AsyncMock()
+        mock_db.rollback = AsyncMock()
 
         with (
             patch("app.routers.playlists.SpotifyClient", return_value=client),
             patch("app.routers.playlists.retry_with_backoff", _passthrough_retry),
-            patch("app.routers.playlists.gather_in_chunks", _passthrough_gather),
+            patch("app.routers.playlists.asyncio") as mock_asyncio,
         ):
+            mock_asyncio.create_task = MagicMock()
             from app.routers.playlists import get_playlists
 
             mock_request = MagicMock()
@@ -498,8 +496,9 @@ class TestTrackCountFallback:
                 db=mock_db,
             )
 
-        # The playlist should now have track_count=42 from the fallback
+        # The playlist should have track_count=42 from the DB cache
         assert result["playlists"][0]["track_count"] == 42
-        client.get_playlist_items.assert_called_once_with(
-            "pid1111111111111", limit=1, offset=0
-        )
+        # No inline API calls for individual playlist counts
+        client.get_playlist_items.assert_not_called()
+        # No BG task needed — DB cache had the answer
+        mock_asyncio.create_task.assert_not_called()

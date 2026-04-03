@@ -58,12 +58,12 @@ export default function ProfileShareCard({ personality, metrics, userName }) {
       {/* Top genres */}
       {topGenres.length > 0 && (
         <div className="flex flex-wrap justify-center gap-2 mb-6">
-          {topGenres.map((genre) => (
+          {topGenres.map((g) => (
             <span
-              key={genre}
+              key={g.genre}
               className="text-xs px-3 py-1 rounded-full bg-white/15 text-white/90"
             >
-              {genre}
+              {g.genre}
             </span>
           ))}
         </div>

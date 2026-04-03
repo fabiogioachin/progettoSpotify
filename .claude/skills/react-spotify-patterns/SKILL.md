@@ -110,8 +110,12 @@ Usa `TIME_PERIODS` da `lib/constants.js`. Labels visibili nella UI: `1M / 6M / A
 
 ### Sezioni vuote
 
-Nascondere, mai mostrare "nessun dato disponibile". Usare conditional rendering:
+Nascondere, mai mostrare "nessun dato disponibile". Due pattern:
 
+**Pattern A — Chart components return null quando vuoti**:
+I chart (`AudioRadar`, `GenreTreemap`, `MoodScatter`, `TrendTimeline`, `ArtistNetwork`, `ListeningHeatmap`) restituiscono `null` quando non hanno dati. Il parent decide la visibilità. Non usare `EmptyState` nei chart — viola la convenzione.
+
+**Pattern B — Conditional rendering nel parent**:
 ```jsx
 {data?.rising?.length > 0 && (
   <section>
@@ -178,6 +182,62 @@ Palette Spotify-dark con accent indigo:
 - `animate-fade-in`: opacity 0→1, 0.5s (non-motion contexts)
 - `animate-pulse-glow`: box-shadow indigo pulsante
 - `animate-float`: translate Y oscillante (6s)
+
+## POST/Poll Pattern
+
+Per endpoint pesanti (wrapped, playlist-analytics), il backend usa POST → poll invece di GET sincrono. Il backend dedup via `RequestDataBundle` riduce la latenza delle chiamate Spotify.
+
+### Hook: useWrappedTask / usePlaylistTask
+
+```jsx
+import { useWrappedTask } from '../hooks/useWrappedTask'
+
+function WrappedPage() {
+  const { data, status, error, restart } = useWrappedTask(timeRange)
+  // status: "waiting" | "completed" | "error"
+
+  if (status === 'waiting') return <LoadingSpinner />
+  if (status === 'error') return <ErrorMessage message={error} />
+  if (!data) return null
+
+  return <div>{/* render data */}</div>
+}
+```
+
+### Comportamento
+
+- **Auto-start on mount**: il POST parte automaticamente al mount del componente
+- **Reset + restart on param change**: quando `timeRange` cambia, il task precedente viene scartato e ne parte uno nuovo
+- **Polling**: GET ogni ~2s fino a `status === "completed"` o `"error"`
+- **Stati**: `waiting` (task in corso), `completed` (risultato disponibile in `data`), `error` (dettaglio in `error`)
+
+### Pattern generico
+
+```jsx
+const [taskId, setTaskId] = useState(null)
+const [result, setResult] = useState(null)
+
+// 1. POST per avviare
+useEffect(() => {
+  api.post('/api/v1/wrapped', { time_range: timeRange })
+    .then(res => setTaskId(res.data.task_id))
+}, [timeRange])
+
+// 2. Poll per risultati
+useEffect(() => {
+  if (!taskId) return
+  const interval = setInterval(async () => {
+    const res = await api.get(`/api/v1/wrapped/${taskId}`)
+    if (res.data.status === 'completed') {
+      setResult(res.data.result)
+      clearInterval(interval)
+    } else if (res.data.status === 'error') {
+      clearInterval(interval)
+    }
+  }, 2000)
+  return () => clearInterval(interval)
+}, [taskId])
+```
 
 ## Testo e Localizzazione
 

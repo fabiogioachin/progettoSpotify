@@ -11,6 +11,8 @@ const MILESTONES = [
 ]
 
 export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays = [] }) {
+  if (streak === 0 && uniqueDays === 0) return null
+
   const progressPct = Math.min((streak / 30) * 100, 100)
 
   // SVG circle math for progress ring

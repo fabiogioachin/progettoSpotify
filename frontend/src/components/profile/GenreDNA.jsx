@@ -10,13 +10,11 @@ export default function GenreDNA({ topGenres = [] }) {
   const genres = topGenres.slice(0, 6)
   if (genres.length === 0) return null
 
-  // Build radar data — genres are ranked by frequency (backend returns them sorted)
-  // but we don't have exact counts, so use rank-based decay (1st = 100, last ≈ 50)
-  const step = genres.length > 1 ? 50 / (genres.length - 1) : 0
-  const data = genres.map((genre, i) => ({
-    genre: truncateGenre(genre),
-    fullName: genre,
-    value: Math.round(100 - i * step),
+  const maxCount = Math.max(...genres.map(g => g.count), 1)
+  const data = genres.map((g) => ({
+    genre: truncateGenre(g.genre),
+    fullName: g.genre,
+    value: Math.round((g.count / maxCount) * 100),
   }))
 
   return (

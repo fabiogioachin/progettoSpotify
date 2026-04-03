@@ -17,6 +17,7 @@ from app.services.playlist_tasks import (
     TASK_TTL_SECONDS,
     _playlist_tasks,
     create_task,
+    find_completed_task,
     get_task,
     _cleanup_expired,
 )
@@ -141,6 +142,28 @@ class TestPlaylistTaskStore:
         task = create_task(user_id=1, task_type="compare", total_playlists=2)
         _cleanup_expired()
         assert get_task(task["task_id"], user_id=1) is not None
+
+    def test_find_completed_task_returns_completed(self):
+        task = create_task(user_id=1, task_type="analytics", total_playlists=5)
+        task["status"] = "completed"
+        found = find_completed_task(user_id=1)
+        assert found is not None
+        assert found["task_id"] == task["task_id"]
+
+    def test_find_completed_task_ignores_pending(self):
+        create_task(user_id=1, task_type="analytics", total_playlists=5)
+        assert find_completed_task(user_id=1) is None
+
+    def test_find_completed_task_ignores_other_users(self):
+        task = create_task(user_id=1, task_type="analytics", total_playlists=5)
+        task["status"] = "completed"
+        assert find_completed_task(user_id=2) is None
+
+    def test_find_completed_task_ignores_expired(self):
+        task = create_task(user_id=1, task_type="analytics", total_playlists=5)
+        task["status"] = "completed"
+        task["created_at"] = time.time() - TASK_TTL_SECONDS - 1
+        assert find_completed_task(user_id=1) is None
 
 
 # ---------------------------------------------------------------------------

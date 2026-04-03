@@ -29,6 +29,7 @@ function UsersTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState({})
+  const [actionError, setActionError] = useState(null)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -50,11 +51,14 @@ function UsersTab() {
   const handleSuspend = async (userId) => {
     if (!window.confirm('Sei sicuro di voler sospendere questo utente?')) return
     setActionLoading((prev) => ({ ...prev, [`suspend-${userId}`]: true }))
+    setActionError(null)
     try {
       await api.post(`/api/v1/admin/users/${userId}/suspend`)
       await fetchUsers()
-    } catch {
-      // interceptor handles 401/429
+    } catch (err) {
+      if (err?.response?.status === 401 || err?.response?.status === 429) throw err
+      setActionError('Errore durante la sospensione dell\'utente. Riprova.')
+      setTimeout(() => setActionError(null), 5000)
     } finally {
       setActionLoading((prev) => ({ ...prev, [`suspend-${userId}`]: false }))
     }
@@ -62,10 +66,13 @@ function UsersTab() {
 
   const handleForceSync = async (userId) => {
     setActionLoading((prev) => ({ ...prev, [`sync-${userId}`]: true }))
+    setActionError(null)
     try {
       await api.post(`/api/v1/admin/users/${userId}/force-sync`)
-    } catch {
-      // interceptor handles 401/429
+    } catch (err) {
+      if (err?.response?.status === 401 || err?.response?.status === 429) throw err
+      setActionError('Errore durante la sincronizzazione forzata. Riprova.')
+      setTimeout(() => setActionError(null), 5000)
     } finally {
       setActionLoading((prev) => ({ ...prev, [`sync-${userId}`]: false }))
     }
@@ -75,6 +82,12 @@ function UsersTab() {
   if (error) return <TabError message={error} onRetry={fetchUsers} />
 
   return (
+    <div className="space-y-3">
+      {actionError && (
+        <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">
+          {actionError}
+        </div>
+      )}
     <div className="bg-surface rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -149,6 +162,7 @@ function UsersTab() {
         </div>
       )}
     </div>
+    </div>
   )
 }
 
@@ -160,6 +174,7 @@ function InvitesTab() {
   const [creating, setCreating] = useState(false)
   const [maxUses, setMaxUses] = useState(1)
   const [copiedCode, setCopiedCode] = useState(null)
+  const [createError, setCreateError] = useState(null)
 
   const fetchInvites = useCallback(async () => {
     setLoading(true)
@@ -180,11 +195,14 @@ function InvitesTab() {
 
   const handleCreate = async () => {
     setCreating(true)
+    setCreateError(null)
     try {
       await api.post('/api/v1/admin/invites', { max_uses: maxUses })
       await fetchInvites()
-    } catch {
-      // interceptor handles 401/429
+    } catch (err) {
+      if (err?.response?.status === 401 || err?.response?.status === 429) throw err
+      setCreateError('Errore durante la creazione dell\'invito. Riprova.')
+      setTimeout(() => setCreateError(null), 5000)
     } finally {
       setCreating(false)
     }
@@ -230,6 +248,12 @@ function InvitesTab() {
           Genera invito
         </button>
       </div>
+
+      {createError && (
+        <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">
+          {createError}
+        </div>
+      )}
 
       {/* Invites table */}
       <div className="bg-surface rounded-xl overflow-hidden">
@@ -478,16 +502,16 @@ function JobsTab() {
                 <td className="px-4 py-3">
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      job.status === 'running' || job.pending !== false
+                      job.status === 'running' || job.pending === true
                         ? 'bg-green-500/10 text-green-400'
                         : 'bg-yellow-500/10 text-yellow-400'
                     }`}
                   >
                     {job.status === 'running'
                       ? 'In esecuzione'
-                      : job.pending === false
-                        ? 'In pausa'
-                        : 'Pianificato'}
+                      : job.pending === true
+                        ? 'Pianificato'
+                        : 'In pausa'}
                   </span>
                 </td>
               </tr>

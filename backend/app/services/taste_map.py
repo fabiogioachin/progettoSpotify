@@ -5,8 +5,11 @@ il fetch iniziale degli artisti, poi delega a taste_clustering per il calcolo
 puro (feature matrix, PCA).
 """
 
+from __future__ import annotations
+
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +21,9 @@ from app.services.genre_utils import normalize_genre
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_clustering import build_feature_matrix, compute_taste_pca
 from app.utils.rate_limiter import retry_with_backoff
+
+if TYPE_CHECKING:
+    from app.services.data_bundle import RequestDataBundle
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +113,10 @@ async def _load_audio_features_by_artist(
 
 
 async def compute_taste_map(
-    db: AsyncSession, client: SpotifyClient, user_id: int
+    db: AsyncSession,
+    client: SpotifyClient,
+    user_id: int,
+    bundle: RequestDataBundle | None = None,
 ) -> dict:
     """Calcola la TasteMap per il profilo utente.
 
@@ -118,9 +127,14 @@ async def compute_taste_map(
     5. Return {points, variance_explained, feature_mode, genre_groups}
     """
     # 1. Fetch top artists
-    artists_data = await retry_with_backoff(
-        client.get_top_artists, time_range="medium_term", limit=50
-    )
+    if bundle:
+        artists_data = await bundle.get_top_artists(
+            time_range="medium_term", limit=50
+        )
+    else:
+        artists_data = await retry_with_backoff(
+            client.get_top_artists, time_range="medium_term", limit=50
+        )
 
     artists = artists_data.get("items", [])
     if len(artists) < 3:

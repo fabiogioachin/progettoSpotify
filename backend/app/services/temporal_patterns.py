@@ -6,7 +6,7 @@ Ogni volta che viene chiamato, salva i nuovi ascolti e analizza l'intero storico
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,21 @@ from app.utils.rate_limiter import retry_with_backoff
 logger = logging.getLogger(__name__)
 
 DAY_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+
+
+async def get_first_play_date(db: AsyncSession, user_id: int) -> str | None:
+    """Returns the earliest play date for the user as dd/mm/yyyy, or None."""
+    result = await db.execute(
+        select(func.min(RecentPlay.played_at)).where(
+            RecentPlay.user_id == user_id
+        )
+    )
+    earliest = result.scalar()
+    if earliest is None:
+        return None
+    if earliest.tzinfo is None:
+        earliest = earliest.replace(tzinfo=timezone.utc)
+    return earliest.strftime("%d/%m/%Y")
 
 
 async def compute_temporal_patterns(
@@ -68,11 +83,8 @@ async def compute_temporal_patterns(
     plays = api_plays
     first_play_date = None
     if db and user_id:
+        first_play_date = await get_first_play_date(db, user_id)
         db_plays = await _load_plays(db, user_id)
-        if db_plays:
-            # db_plays è ordinato ascending: il primo è il più vecchio
-            dt0 = db_plays[0]["datetime"]
-            first_play_date = dt0.strftime("%d/%m/%Y")
         if db_plays and len(db_plays) > len(api_plays):
             plays = db_plays
             logger.info(
@@ -263,8 +275,6 @@ async def _load_plays(db: AsyncSession, user_id: int) -> list[dict]:
     for r in rows:
         dt = r.played_at
         if dt.tzinfo is None:
-            from datetime import timezone
-
             dt = dt.replace(tzinfo=timezone.utc)
         plays.append(
             {

@@ -54,13 +54,14 @@ Count every Spotify API call. Each endpoint must stay under budget.
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
-| `get_top_artists(short_term)` | 1 | 5 min | 0-1 |
-| `get_top_artists(medium_term)` | 1 | 5 min | 0-1 |
-| `get_top_artists(long_term)` | 1 | 5 min | 0-1 |
-| `get_top_tracks(long_term)` | 1 | 5 min | 0-1 |
-| `get_me()` | 1 | 5 min | 0-1 |
+| `get_top_artists(short_term)` via bundle | 1 | 5 min + bundle dedup | 0-1 |
+| `get_top_artists(medium_term)` via bundle | 1 | 5 min + bundle dedup | 0-1 |
+| `get_top_artists(long_term)` via bundle | 1 | 5 min + bundle dedup | 0-1 |
+| `get_top_tracks(long_term)` via bundle | 1 | 5 min + bundle dedup | 0-1 |
 | TasteMap computation | 0 | N/A | 0 |
-| **Total worst-case** | **5** | | **0-5** |
+| **Total worst-case** | **4** | | **0-4** |
+
+Previously 5 calls. `get_me()` no longer needed here — profile data comes from auth context. Bundle dedup prevents re-fetching data already loaded by other endpoints in the same request.
 
 ### Dashboard (`GET /api/v1/dashboard`)
 
@@ -75,10 +76,12 @@ Count every Spotify API call. Each endpoint must stay under budget.
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
-| `get_top_tracks(short/medium/long)` | 3 | 5 min | 0-3 |
+| `get_top_tracks(short/medium/long)` via bundle | 3 | 5 min + bundle dedup | 0-3 |
 | `get_artist` × N (via `genre_cache`, no cap) | 0-80 | **DB 7d** + Redis 1h | **0-80** |
 | **Total worst-case (cold cache)** | **~83** | | **0-83** |
 | **Total typical (warm genre cache)** | **~3** | | **0-3** |
+
+Previously 6 direct API calls (3 top_tracks + 3 top_artists). With `RequestDataBundle`, top_tracks calls are deduplicated across the request — only 3 effective calls for tracks (artists come from genre_cache).
 
 Note: Genre fetching uses `genre_cache.get_artist_genres_cached()` — DB cache (7-day TTL) + Spotify API on miss. No artist cap. First-time cost is high but amortizes across 7 days and all users. Cross-user Redis cache (1h) further reduces API hits.
 
@@ -102,18 +105,18 @@ Note: Genre fetching uses `genre_cache.get_artist_genres_cached()` — DB cache 
 
 Note: Uses default `limit=50`, slices `[:max_seed_artists]` in-memory. Graph edges from fuzzy genre similarity. NetworkX metrics computed locally — zero additional API calls.
 
-### Wrapped (`GET /api/v1/wrapped`)
+### Wrapped (`POST /api/v1/wrapped` + `GET /api/v1/wrapped/{task_id}`)
+
+Uses POST/poll pattern: POST starts a background task, GET polls for results. All 7 API calls happen in the background task (non-blocking).
 
 | Call | Count | TTL Cache | Effective |
 |------|-------|-----------|-----------|
-| `get_top_tracks(time_range)` | 1 | 5 min | 0-1 |
-| compute_profile (via get_top_tracks) | 0 | cached | 0 |
-| compute_taste_evolution | 6 | 5 min | 0-6 |
-| compute_temporal_patterns | 1 | 2 min | 0-1 |
-| build_artist_network | 3 | 5 min | 0-3 |
-| **Total worst-case** | **11** | | **0-11** |
+| `get_top_tracks(short/medium/long)` via bundle | 3 | 5 min + bundle dedup | 0-3 |
+| `get_top_artists(short/medium/long)` via bundle | 3 | 5 min + bundle dedup | 0-3 |
+| `get_recently_played` via bundle | 1 | 2 min + bundle dedup | 0-1 |
+| **Total worst-case** | **7** | | **0-7** |
 
-Note: `get_top_tracks(limit=50)` now used everywhere (was `limit=10`). Items sliced `[:10]` in-memory.
+Previously 13 calls (11 + duplicates). `RequestDataBundle.prefetch()` deduplicates across services — taste_evolution, temporal_patterns, artist_network all read from the same bundle instead of making separate API calls.
 
 ### Playlist Compare (`GET /api/v1/playlists/compare`)
 
@@ -175,12 +178,12 @@ With caches warm (typical navigation): **0-5 calls** per page visit.
 
 ## Defensive Patterns
 
-### 1. Three-tier cachetools TTL (Module-Level)
+### 1. Redis cache per Spotify data
 
 ```python
-_cache_5m = TTLCache(maxsize=256, ttl=300)         # user-specific data
-_cache_2m = TTLCache(maxsize=64, ttl=120)          # recently played
-_artist_cache_1h = TTLCache(maxsize=512, ttl=3600) # cross-user artist data
+# Cache keys in Redis with user-scoped or cross-user patterns:
+# User-scoped: cache:user:{user_id}:{method}:{args_hash} — TTL 300s (5min) or 120s (recently_played)
+# Cross-user: cache:artist:{artist_id} — TTL 3600s (1h), same for all users
 ```
 
 ### 2. Global Semaphore (max 3 concurrent)
@@ -193,27 +196,51 @@ _global_sem = asyncio.Semaphore(3)  # in SpotifyClient._request()
 
 Fail immediately if `retry_after > 30s`. Dev mode sends extreme values.
 
-### 4. Global Cooldown (every 429 activates)
+### 4. Atomic Lua Script — Cooldown + Budget + Throttle in 1 Redis call
 
-Requests pending in the semaphore fail immediately during cooldown.
+`_check_and_register()` consolidates 3 former Redis round-trips into a single `EVALSHA`:
+1. Checks cooldown TTL → `RateLimitError` if active
+2. Cleans expired sorted set entries (ZREMRANGEBYSCORE)
+3. Parses member format `{uuid}:{priority}:{user_id}` for per-tier and per-user budget counting
+4. Checks sliding window capacity (25 calls/30s) → `ThrottleError` if full
+5. If all pass, atomically ZADDs the call
 
-### 5. Sliding Window Throttle (25 calls/30s, atomic lock)
+**Key**: only 1 Redis round-trip per Spotify API call (was 3). The Lua script handles NOSCRIPT errors (Redis restart) via auto-reload. Fail-open on Redis unavailability.
 
-Preventive throttle — raises `ThrottleError` before hitting Spotify. Single `async with _window_lock` block (no TOCTOU gap).
-
-### 6. gather_in_chunks (chunk_size=4)
+### 5. gather_in_chunks (chunk_size=4)
 
 Sequential batch execution for parallel fetches. Reduces burst pressure.
 
-### 7. ThrottleBanner (Frontend)
+### 6. ThrottleBanner (Frontend)
 
 Animated countdown on 429 with `throttled: true`. Auto-retries after countdown.
 
-### 8. Background Job Early Break on RateLimitError
+### 7. Background Job Early Break on RateLimitError
 
-### 9. Genre Cache (DB 7d TTL + Redis 1h + Spotify API)
+### 8. Genre Cache (DB 7d TTL + Redis 1h + Spotify API)
 
 `genre_cache.get_artist_genres_cached(db, client, artist_ids)` centralizes all genre fetching. DB cache (7-day TTL) eliminates repeat API calls. No artist caps — the cache naturally bounds API usage. Background jobs populate cache opportunistically via `sync_recent_plays`.
+
+### 9. Optimized `get_window_usage()` for middleware
+
+Used by `RateLimitHeaderMiddleware` (every `/api/` response, cached 2s). Uses `ZCOUNT` (O(log N) count, no data transfer) + `ZRANGEBYSCORE LIMIT 0 1` (just the oldest entry for reset calculation) in a single pipeline.
+
+## RequestDataBundle — Request-Scoped Deduplication
+
+**Rule**: Always create `RequestDataBundle(client)` at router entry, pass `bundle=bundle` to services.
+
+```python
+bundle = RequestDataBundle(client)
+await bundle.prefetch()  # fetches all 3 time_ranges in parallel
+result = await some_service(client, db, bundle=bundle)
+```
+
+Bundle caches `get_top_tracks`, `get_top_artists`, `get_recently_played`, `get_me` per `(time_range, limit)` key. Services accept `bundle=None` for backward compatibility. When provided, services read from bundle instead of making direct client calls.
+
+**Impact on call counts**:
+- `/wrapped`: 13 → 7 calls (POST/poll, background task)
+- `/profile`: 5 → 4 calls
+- `/trends`: 6 → 3 calls
 
 ## Rules for Adding New API Calls
 

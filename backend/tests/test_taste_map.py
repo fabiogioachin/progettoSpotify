@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.services.data_bundle import RequestDataBundle
 from app.services.taste_map import compute_taste_map
 
 
@@ -160,3 +161,44 @@ class TestComputeTasteMap:
 
         # Should not crash on missing followers
         assert "points" in result
+
+
+class TestComputeTasteMapWithBundle:
+    """Test that compute_taste_map uses bundle when provided."""
+
+    @pytest.mark.asyncio
+    async def test_uses_bundle_instead_of_client(self, mock_db, five_artists):
+        """When bundle is provided, client.get_top_artists should not be called."""
+        mock_client = MagicMock()
+        mock_client.get_top_artists = AsyncMock()
+        mock_client.close = AsyncMock()
+
+        bundle = MagicMock(spec=RequestDataBundle)
+        bundle.get_top_artists = AsyncMock(return_value={"items": five_artists})
+
+        result = await compute_taste_map(mock_db, mock_client, user_id=1, bundle=bundle)
+
+        bundle.get_top_artists.assert_awaited_once_with(time_range="medium_term", limit=50)
+        mock_client.get_top_artists.assert_not_awaited()
+        assert "points" in result
+
+    @pytest.mark.asyncio
+    async def test_without_bundle_uses_client(self, mock_db, mock_client, five_artists):
+        """When bundle is None, falls back to retry_with_backoff(client.get_top_artists)."""
+        mock_client.get_top_artists.return_value = {"items": five_artists}
+        result = await compute_taste_map(mock_db, mock_client, user_id=1, bundle=None)
+
+        assert mock_client.get_top_artists.await_count >= 1
+        assert "points" in result
+
+    @pytest.mark.asyncio
+    async def test_bundle_insufficient_artists(self, mock_db):
+        """Bundle returning <3 artists still returns insufficient."""
+        mock_client = MagicMock()
+        bundle = MagicMock(spec=RequestDataBundle)
+        bundle.get_top_artists = AsyncMock(return_value={"items": [
+            _make_spotify_artist("a1", "Solo", ["rock"], 50, 1000),
+        ]})
+
+        result = await compute_taste_map(mock_db, mock_client, user_id=1, bundle=bundle)
+        assert result["feature_mode"] == "insufficient"

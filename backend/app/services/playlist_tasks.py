@@ -64,6 +64,15 @@ def get_task(task_id: str, user_id: int) -> dict | None:
     return None
 
 
+def find_completed_task(user_id: int) -> dict | None:
+    """Find a completed task for this user that's still within TTL."""
+    _cleanup_expired()
+    for task in _playlist_tasks.values():
+        if task["user_id"] == user_id and task["status"] == "completed":
+            return task
+    return None
+
+
 def _cleanup_expired():
     """Rimuove task scaduti (>30 minuti)."""
     now = time.time()

@@ -32,7 +32,7 @@ export default function TasteComparison({ unisce, distingue, userAName, userBNam
           <StaggerContainer className="space-y-0.5">
             {unisce.map((item, i) => (
               <StaggerItem key={`shared-${i}`}>
-                <ComparisonItem item={item} type={item.type} icon={Users} />
+                <ComparisonItem item={item} icon={Users} />
               </StaggerItem>
             ))}
           </StaggerContainer>
@@ -54,7 +54,6 @@ export default function TasteComparison({ unisce, distingue, userAName, userBNam
                     ...item,
                     owner: item.user === 'a' ? userAName : item.user === 'b' ? userBName : undefined,
                   }}
-                  type={item.type}
                   icon={Shuffle}
                 />
               </StaggerItem>

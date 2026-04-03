@@ -2,11 +2,16 @@
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session
 from app.dependencies import require_auth
+from app.models.playlist_metadata import PlaylistMetadata
 from app.schemas import PlaylistTaskStartResponse, PlaylistTaskStatusResponse
 from app.services.playlist_analytics import (
     _compute_overlap_matrix,
@@ -15,7 +20,7 @@ from app.services.playlist_analytics import (
     _compute_staleness,
     _empty_result,
 )
-from app.services.playlist_tasks import create_task, get_task
+from app.services.playlist_tasks import create_task, find_completed_task, get_task
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import (
     RateLimitError,
@@ -36,6 +41,17 @@ async def start_playlist_analytics(
     user_id: int = Depends(require_auth),
 ):
     """Avvia analisi playlist in background. Restituisce task_id per polling."""
+    # Reuse a completed task still within TTL
+    existing = find_completed_task(user_id)
+    if existing:
+        logger.info(
+            "Riuso task esistente %s per user_id=%d", existing["task_id"], user_id
+        )
+        return {
+            "task_id": existing["task_id"],
+            "total_playlists": existing["total_playlists"],
+        }
+
     try:
         task = create_task(
             user_id=user_id,
@@ -70,6 +86,36 @@ async def get_analytics_status(
         "error_detail": task["error_detail"],
         "results": task["results"],
     }
+
+
+async def _upsert_playlist_count(
+    db: AsyncSession,
+    user_id: int,
+    playlist_id: str,
+    track_count: int,
+) -> None:
+    """Upsert a single playlist's track count to the DB cache."""
+    try:
+        stmt = pg_insert(PlaylistMetadata).values(
+            user_id=user_id,
+            playlist_id=playlist_id,
+            track_count=track_count,
+            updated_at=datetime.now(timezone.utc),
+        ).on_conflict_do_update(
+            constraint="uq_playlist_metadata_user_pid",
+            set_={
+                "track_count": track_count,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+        await db.execute(stmt)
+        await db.commit()
+    except Exception as exc:
+        logger.warning("Playlist count upsert failed for %s: %s", playlist_id, exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 
 async def _run_analytics_task(task_id: str, user_id: int) -> None:
@@ -130,51 +176,96 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
                 task["results"] = _empty_result()
                 return
 
+            # Filter to user's own playlists (skip followed playlists by others)
+            try:
+                me = await client.get_me()
+                my_spotify_id = me.get("id", "")
+                my_playlists = [
+                    p
+                    for p in all_playlists
+                    if p.get("owner", {}).get("id") == my_spotify_id
+                ]
+                logger.info(
+                    "Playlist analytics: %d playlist totali, %d dell'utente (filtrate %d seguite)",
+                    len(all_playlists),
+                    len(my_playlists),
+                    len(all_playlists) - len(my_playlists),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Impossibile ottenere profilo utente per filtraggio playlist, uso tutte: %s",
+                    exc,
+                )
+                my_playlists = all_playlists
+
+            if not my_playlists:
+                task["status"] = "completed"
+                task["results"] = _empty_result()
+                return
+
             # Summary stats
-            public_count = sum(1 for p in all_playlists if p.get("public"))
-            private_count = len(all_playlists) - public_count
+            public_count = sum(1 for p in my_playlists if p.get("public"))
+            private_count = len(my_playlists) - public_count
             collaborative_count = sum(
-                1 for p in all_playlists if p.get("collaborative")
+                1 for p in my_playlists if p.get("collaborative")
             )
 
-            # Dev mode fix: fetch real counts for playlists with total=0
+            # Dev mode fix: use DB cache for track counts, fetch remaining sequentially
             raw_sizes = {
-                p["id"]: p.get("tracks", {}).get("total", 0) for p in all_playlists
+                p["id"]: p.get("tracks", {}).get("total", 0) for p in my_playlists
             }
             zero_count_pids = [pid for pid, sz in raw_sizes.items() if sz == 0]
+
             if zero_count_pids:
+                # Check DB cache first
+                try:
+                    result = await db.execute(
+                        select(PlaylistMetadata.playlist_id, PlaylistMetadata.track_count)
+                        .where(
+                            PlaylistMetadata.user_id == user_id,
+                            PlaylistMetadata.playlist_id.in_(zero_count_pids),
+                        )
+                    )
+                    for row in result.fetchall():
+                        if row.track_count and row.track_count > 0:
+                            raw_sizes[row.playlist_id] = row.track_count
+                except Exception as exc:
+                    logger.warning("DB cache read for track counts failed: %s", exc)
+
+                # Remaining zeros: fetch sequentially with delay (not in burst)
+                still_zero = [pid for pid in zero_count_pids if raw_sizes.get(pid, 0) == 0]
                 count_throttle = 0
-                for pid in zero_count_pids[:50]:
+                for pid in still_zero[:20]:  # cap at 20
                     try:
                         count_data = await retry_with_backoff(
                             client.get_playlist_items, pid, limit=1, offset=0
                         )
-                        raw_sizes[pid] = count_data.get("total", 0)
+                        total = count_data.get("total", 0)
+                        if total > 0:
+                            raw_sizes[pid] = total
+                            # Upsert to DB cache
+                            await _upsert_playlist_count(db, user_id, pid, total)
                     except SpotifyAuthError:
                         task["status"] = "error"
                         task["error_detail"] = "Sessione scaduta"
                         return
-                    except (ThrottleError, RateLimitError) as exc:
+                    except (ThrottleError, RateLimitError):
                         count_throttle += 1
                         if count_throttle > _MAX_THROTTLE_RETRIES:
-                            break  # accept 0 counts for remaining
-                        wait_secs = min(getattr(exc, "retry_after", 10) or 10, 35)
-                        task["status"] = "waiting"
-                        task["waiting_seconds"] = int(wait_secs)
-                        await asyncio.sleep(wait_secs)
-                        task["status"] = "processing"
-                        task["waiting_seconds"] = 0
+                            break  # stop trying, use what we have
+                        break  # stop on first rate limit, use what we have
                     except Exception:
                         pass  # keep raw_sizes[pid] = 0
+                    await asyncio.sleep(1)  # sequential with delay
 
-            sizes = [raw_sizes.get(p["id"], 0) for p in all_playlists]
+            sizes = [raw_sizes.get(p["id"], 0) for p in my_playlists]
 
             # Set partial results after listing (summary + size_distribution)
             size_distribution = _compute_size_histogram(sizes)
-            task["total_playlists"] = len(all_playlists)
+            task["total_playlists"] = len(my_playlists)
             task["results"] = {
                 "summary": {
-                    "total_playlists": len(all_playlists),
+                    "total_playlists": len(my_playlists),
                     "public_count": public_count,
                     "private_count": private_count,
                     "collaborative_count": collaborative_count,
@@ -190,7 +281,7 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
             task["phase"] = "analyzing"
 
             playlists_sorted = sorted(
-                all_playlists,
+                my_playlists,
                 key=lambda p: raw_sizes.get(p["id"], 0),
                 reverse=True,
             )
@@ -290,6 +381,8 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
                     }
                 )
                 task["completed_playlists"] = idx + 1
+                # Aggressive partial results: append each playlist as it completes
+                task["results"]["playlists"] = list(playlist_details)
 
             # --- Phase 3: computing (pure compute) ---
             task["phase"] = "computing"
@@ -298,7 +391,7 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
             actual_counts = {d["id"]: d["track_count"] for d in playlist_details}
             sizes = [
                 actual_counts.get(p["id"], p.get("tracks", {}).get("total", 0))
-                for p in all_playlists
+                for p in my_playlists
             ]
 
             overlap_matrix = _compute_overlap_matrix(playlist_details, playlist_tracks)
@@ -307,7 +400,7 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
             task["status"] = "completed"
             task["results"] = {
                 "summary": {
-                    "total_playlists": len(all_playlists),
+                    "total_playlists": len(my_playlists),
                     "public_count": public_count,
                     "private_count": private_count,
                     "collaborative_count": collaborative_count,

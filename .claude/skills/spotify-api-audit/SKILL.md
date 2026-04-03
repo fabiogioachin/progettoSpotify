@@ -42,6 +42,12 @@ Targeted audit of Spotify Web API usage. Checks for deprecated endpoints, proper
 - [ ] Global artist fetch cap ≤ 20 per endpoint invocation
 - [ ] Rate limiter on auth endpoints uses IP (not full cookie) as key
 - [ ] Stale rate limiter keys cleaned periodically (not per-request — O(n log n) eviction amortized on timer)
+### RequestDataBundle & Async Tasks
+- [ ] `RequestDataBundle` created at router entry and passed to all services via `bundle=bundle` parameter
+- [ ] Routers call `bundle.prefetch()` before invoking services (parallel fetch of all 3 time_ranges)
+- [ ] Services accept `bundle=None` (backward compatible) and use bundle when provided instead of direct client calls
+- [ ] Background tasks (wrapped, playlist-analytics) use `async_session()` for DB, not request-scoped `get_db()`
+- [ ] Background tasks create their own `SpotifyClient` and `RequestDataBundle` (not passed from router)
 ### Background Tasks
 - [ ] Background tasks (`asyncio.create_task`) use dedicated DB session via `async_session()`, NOT request-scoped `get_db()`
 - [ ] Background task calls wrapped in `retry_with_backoff`

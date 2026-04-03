@@ -1,11 +1,14 @@
 """Servizio per il calcolo delle metriche profilo utente."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import math
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +24,9 @@ from app.models.track import TrackPopularity
 from app.services.genre_cache import get_artist_genres_cached
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+
+if TYPE_CHECKING:
+    from app.services.data_bundle import RequestDataBundle
 
 logger = logging.getLogger(__name__)
 
@@ -118,28 +124,49 @@ async def compute_listening_consistency(
 
 
 async def compute_profile_metrics(
-    db: AsyncSession, client: SpotifyClient, user_id: int
+    db: AsyncSession,
+    client: SpotifyClient,
+    user_id: int,
+    bundle: RequestDataBundle | None = None,
 ) -> dict:
     """Compute all profile metrics. Returns dict with all fields."""
     # Parallel fetch from Spotify (global semaphore in SpotifyClient._request)
-    artists_short, artists_long, tracks_long = await asyncio.gather(
-        _safe_fetch(
-            "artists_short",
-            retry_with_backoff(
-                client.get_top_artists, time_range="short_term", limit=50
+    if bundle:
+        artists_short, artists_long, tracks_long = await asyncio.gather(
+            _safe_fetch(
+                "artists_short",
+                bundle.get_top_artists(time_range="short_term", limit=50),
             ),
-        ),
-        _safe_fetch(
-            "artists_long",
-            retry_with_backoff(
-                client.get_top_artists, time_range="long_term", limit=50
+            _safe_fetch(
+                "artists_long",
+                bundle.get_top_artists(time_range="long_term", limit=50),
             ),
-        ),
-        _safe_fetch(
-            "tracks_long",
-            retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50),
-        ),
-    )
+            _safe_fetch(
+                "tracks_long",
+                bundle.get_top_tracks(time_range="long_term", limit=50),
+            ),
+        )
+    else:
+        artists_short, artists_long, tracks_long = await asyncio.gather(
+            _safe_fetch(
+                "artists_short",
+                retry_with_backoff(
+                    client.get_top_artists, time_range="short_term", limit=50
+                ),
+            ),
+            _safe_fetch(
+                "artists_long",
+                retry_with_backoff(
+                    client.get_top_artists, time_range="long_term", limit=50
+                ),
+            ),
+            _safe_fetch(
+                "tracks_long",
+                retry_with_backoff(
+                    client.get_top_tracks, time_range="long_term", limit=50
+                ),
+            ),
+        )
 
     all_artists = artists_long.get("items", []) or artists_short.get("items", [])
     all_tracks = tracks_long.get("items", [])
@@ -156,7 +183,7 @@ async def compute_profile_metrics(
     for a in all_artists:
         for g in a.get("genres", []):
             genre_counter[g] += 1
-    top_genres = [g for g, _ in genre_counter.most_common(10)]
+    top_genres = [{"genre": g, "count": c} for g, c in genre_counter.most_common(10)]
 
     # Lifetime stats from DB
     total_plays = (

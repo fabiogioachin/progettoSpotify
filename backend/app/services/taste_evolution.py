@@ -1,10 +1,16 @@
 """Analisi dell'evoluzione del gusto musicale attraverso i periodi temporali."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+
+if TYPE_CHECKING:
+    from app.services.data_bundle import RequestDataBundle
 
 logger = logging.getLogger(__name__)
 
@@ -20,36 +26,56 @@ async def _safe_fetch(coro):
         return {"items": []}
 
 
-async def compute_taste_evolution(client: SpotifyClient) -> dict:
+async def compute_taste_evolution(
+    client: SpotifyClient, bundle: RequestDataBundle | None = None
+) -> dict:
     """Confronta artisti e brani tra short, medium e long term."""
 
     # Fetch top artists + tracks for all 3 time ranges in parallel
-    results = await asyncio.gather(
-        _safe_fetch(
-            retry_with_backoff(
-                client.get_top_artists, time_range="short_term", limit=50
-            )
-        ),
-        _safe_fetch(
-            retry_with_backoff(
-                client.get_top_artists, time_range="medium_term", limit=50
-            )
-        ),
-        _safe_fetch(
-            retry_with_backoff(client.get_top_artists, time_range="long_term", limit=50)
-        ),
-        _safe_fetch(
-            retry_with_backoff(client.get_top_tracks, time_range="short_term", limit=50)
-        ),
-        _safe_fetch(
-            retry_with_backoff(
-                client.get_top_tracks, time_range="medium_term", limit=50
-            )
-        ),
-        _safe_fetch(
-            retry_with_backoff(client.get_top_tracks, time_range="long_term", limit=50)
-        ),
-    )
+    if bundle:
+        # Bundle already has data prefetched — just retrieve it
+        results = await asyncio.gather(
+            _safe_fetch(bundle.get_top_artists(time_range="short_term")),
+            _safe_fetch(bundle.get_top_artists(time_range="medium_term")),
+            _safe_fetch(bundle.get_top_artists(time_range="long_term")),
+            _safe_fetch(bundle.get_top_tracks(time_range="short_term")),
+            _safe_fetch(bundle.get_top_tracks(time_range="medium_term")),
+            _safe_fetch(bundle.get_top_tracks(time_range="long_term")),
+        )
+    else:
+        # Original path — direct client calls
+        results = await asyncio.gather(
+            _safe_fetch(
+                retry_with_backoff(
+                    client.get_top_artists, time_range="short_term", limit=50
+                )
+            ),
+            _safe_fetch(
+                retry_with_backoff(
+                    client.get_top_artists, time_range="medium_term", limit=50
+                )
+            ),
+            _safe_fetch(
+                retry_with_backoff(
+                    client.get_top_artists, time_range="long_term", limit=50
+                )
+            ),
+            _safe_fetch(
+                retry_with_backoff(
+                    client.get_top_tracks, time_range="short_term", limit=50
+                )
+            ),
+            _safe_fetch(
+                retry_with_backoff(
+                    client.get_top_tracks, time_range="medium_term", limit=50
+                )
+            ),
+            _safe_fetch(
+                retry_with_backoff(
+                    client.get_top_tracks, time_range="long_term", limit=50
+                )
+            ),
+        )
 
     short_artists_raw, medium_artists_raw, long_artists_raw = (
         results[0],

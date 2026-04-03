@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_auth
 from app.services.audio_analyzer import compute_trends
+from app.services.data_bundle import RequestDataBundle
 from app.services.discovery import discover
 from app.services.spotify_client import SpotifyClient
 from app.utils.json_utils import sanitize_nans
@@ -25,9 +26,11 @@ async def get_trends(
 ):
     """Trend audio features per tutti i periodi."""
     client = SpotifyClient(db, user_id)
+    bundle = RequestDataBundle(client)
 
     try:
-        trends = await compute_trends(db, client, user_id)
+        await bundle.prefetch(artists=False, tracks=True)
+        trends = await compute_trends(db, client, user_id, bundle=bundle)
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py
     except Exception as exc:
@@ -36,7 +39,7 @@ async def get_trends(
     finally:
         await client.close()
 
-    return sanitize_nans({"current": trends, "historical": []})
+    return sanitize_nans({"current": trends})
 
 
 @router.get("/discovery")

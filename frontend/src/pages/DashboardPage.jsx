@@ -18,6 +18,7 @@ import OnboardingModal from '../components/onboarding/OnboardingModal'
 export default function DashboardPage() {
   const { user } = useAuth()
   const [showOnboarding, setShowOnboarding] = useState(
+    user?.onboarding_completed === false &&
     localStorage.getItem('wrap_onboarding_dismissed') !== 'true'
   )
   const [period, setPeriod] = useState('medium_term')

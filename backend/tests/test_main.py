@@ -1,8 +1,9 @@
-"""Tests for rate limit status endpoint and RateLimitHeaderMiddleware in main.py.
+"""Tests for rate limit status endpoint, RateLimitHeaderMiddleware, and warmup helpers in main.py.
 
 Covers:
 - /api/v1/rate-limit-status includes window_reset_seconds field
 - RateLimitHeaderMiddleware injects X-RateLimit-Reset header on /api/ responses
+- _needs_musicbrainz_lookup correctly identifies artists needing MusicBrainz data
 
 All rate limit state is now backed by Redis — tests mock SpotifyClient static methods.
 """
@@ -70,3 +71,110 @@ class TestRateLimitHeaderMiddleware:
 
         # /health is not an /api/ path, so no X-RateLimit-Reset
         assert "x-ratelimit-reset" not in response.headers
+
+
+class TestNeedsMusicbrainzLookup:
+    """Tests for _needs_musicbrainz_lookup helper in main.py."""
+
+    def test_none_needs_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup(None) is True
+
+    def test_empty_string_needs_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup("") is True
+
+    def test_empty_json_list_needs_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup("[]") is True
+
+    def test_null_string_needs_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup("null") is True
+
+    def test_none_string_needs_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup("None") is True
+
+    def test_only_non_genre_tags_needs_lookup(self):
+        """Genres like ['italian'] that are all in the blocklist need re-lookup."""
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup('["italian"]') is True
+        assert _needs_musicbrainz_lookup('["italian", "composer"]') is True
+        assert _needs_musicbrainz_lookup('["2010s", "seen live"]') is True
+
+    def test_valid_genres_do_not_need_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup('["rock", "pop"]') is False
+        assert _needs_musicbrainz_lookup('["classical", "piano"]') is False
+
+    def test_mixed_valid_and_bad_tags_do_not_need_lookup(self):
+        """If at least one valid genre remains after filtering, no re-lookup needed."""
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup('["rock", "italian"]') is False
+        assert _needs_musicbrainz_lookup('["trap", "2020s", "seen live"]') is False
+
+    def test_malformed_json_needs_lookup(self):
+        from app.main import _needs_musicbrainz_lookup
+
+        assert _needs_musicbrainz_lookup("not json") is True
+        assert _needs_musicbrainz_lookup("{bad}") is True
+
+
+class TestPlaylistNameToGenre:
+    """Tests for _playlist_name_to_genre helper in main.py."""
+
+    def test_exact_match(self):
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("phonk") == "phonk"
+        assert _playlist_name_to_genre("Phonk") == "phonk"
+        assert _playlist_name_to_genre("DRILL") == "drill"
+        assert _playlist_name_to_genre("techno") == "techno"
+
+    def test_partial_match_short_name(self):
+        from app.main import _playlist_name_to_genre
+
+        # "Chill house" contains "chill" and "house", both keywords, and len < 30
+        result = _playlist_name_to_genre("Chill house")
+        assert result == "chill house"
+
+    def test_non_genre_returns_none(self):
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("GOLD TIMES") is None
+        assert _playlist_name_to_genre("USA") is None
+        assert _playlist_name_to_genre("My Favorites 2025") is None
+
+    def test_long_name_no_partial_match(self):
+        from app.main import _playlist_name_to_genre
+
+        # Name > 30 chars should not match even if it contains a keyword
+        long_name = "My very long playlist name with some chill vibes"
+        assert _playlist_name_to_genre(long_name) is None
+
+    def test_whitespace_handling(self):
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("  phonk  ") == "phonk"
+        assert _playlist_name_to_genre("  Trap  ") == "trap"
+
+    def test_italian_specific_keywords(self):
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("cassa dritta") == "cassa dritta"
+        assert _playlist_name_to_genre("Hi Tech") == "hi tech"
+        assert _playlist_name_to_genre("DRIP") == "drip"
+
+    def test_empty_string_returns_none(self):
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("") is None

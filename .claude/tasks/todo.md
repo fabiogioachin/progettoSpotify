@@ -1,226 +1,163 @@
 # Todo
 
-## Sessione corrente — completato
+## Pre-refactoring — COMPLETATO (verificato 12/12 nel codice)
 
-- [x] Fix onboarding: modal controllato solo da localStorage, non da `onboarding_completed` server-side
-- [x] Fix timezone: `datetime.now().date()` → usa timezone dai dati (UTC) in `temporal_patterns.py`
-- [x] Reset `onboarding_completed = false` nel DB
-
----
-
-## Bug da fixare (prossima sessione, prima del refactoring)
-
-### Sync ascolti recenti all'avvio backend
-
-**Problema**: in dev mode il backend non gira 24/7. All'avvio del Docker, gli ultimi brani ascoltati, non salvati nel DB, devono essere recuperati da Spotify API immediatamente (non aspettare login o timer hourly) e devono essere inseriti in ascolti recenti nel DB.
-
-**Fix**:
-- [x] Aggiungere sync all'avvio in `main.py` lifespan (dopo APScheduler): per ogni utente attivo, chiama `_sync_user_recent_plays`
-- [x] Usare priorita' P1_BACKGROUND_SYNC per non bloccare le prime chiamate interattive
-- [x] Aggiungere delay staggerato tra utenti (5s) per non esaurire il budget
-
-**Verificato in**: `backend/app/main.py` — funzione `_startup_sync_recent_plays()` + `asyncio.create_task` nel lifespan.
-
-### Vista aggregata ascolti per il frontend
-
-**Problema**: la tabella `recent_plays` ha 1 riga per ascolto (necessaria per heatmap/streak/temporale). Ma il frontend non deve mostrare duplicati — serve una vista aggregata.
-
-**Design**: MANTENERE `recent_plays` (event log) + AGGIUNGERE vista aggregata computata.
-
-**Fix**:
-- [x] Creare endpoint `GET /api/v1/library/recent-summary` che restituisce per ogni brano:
-  - `track_spotify_id`, `track_name`, `artist_name`
-  - `play_count`: numero totale riproduzioni (= COUNT righe per quel track)
-  - `consecutive_days`: giorni consecutivi piu' recenti in cui e' stata ascoltata
-  - `last_played_at`: ultima riproduzione
-  - `first_played_at`: prima riproduzione registrata nell'app
-- [x] Il frontend mostra il disclaimer: "Dati raccolti dal {first_play_date}" nel banner di TemporalPage (via campo `first_play_date` aggiunto alla risposta del temporal endpoint)
-- [x] Aggregazione on-the-fly in Python dalla tabella eventi (no nuova tabella)
-
-**Implementato in**: `backend/app/routers/library.py` (endpoint), `backend/app/services/temporal_patterns.py` (first_play_date), `frontend/src/pages/TemporalPage.jsx` (disclaimer)
+- [x] GenreDNA radar: backend manda `{genre, count}`, frontend normalizza su maxCount
+- [x] Popularity cache: `items`→`all_items` in upsert + genre cache + rimosso filtro `==0`
+- [x] Wrapped slides: `useState` + conditional rendering (no DOM manipulation)
+- [x] recent-summary: wirato a ProfilePage con retry 8s
+- [x] AdminPage: error feedback handleSuspend/handleCreate + badge `=== true`
+- [x] FriendsPage: error feedback handleInvite/handleRemove con auto-clear 5s
+- [x] TrendTimeline zero-filter, PlaylistCompare eslint fix, TasteComparison dead prop
+- [x] vite-plugin-pwa→deps, psycopg2→dev, html2canvas dynamic import
+- [x] Compound index `(user_id, played_at)` + N+1 fix (50 SELECT→1)
+- [x] first_play_date consolidato in `get_first_play_date()` (temporal_patterns.py)
+- [x] Artist network: genre enrichment via `genre_cache.py` + threshold 15→20
+- [x] Login/startup sync: P0_INTERACTIVE + `skip_cache=True` + `raise_on_throttle` + retry 3x
+- [x] TasteMap audio_features: non e' un bug, pipeline librosa funzionante
+- [x] Playlist analytics polling: rimandato al refactoring (Fase 2.4)
 
 ---
 
-## Refactoring API — Piano completo (sessione dedicata)
+## Refactoring API — Piano completo
 
 ### Obiettivo
-Tutte le pagine devono: (1) caricarsi immediatamente con skeleton, (2) popolare i dati progressivamente, (3) prioritizzare dati freschi da API Spotify, (4) aggiornare il DB come side-effect, (5) non fare chiamate duplicate.
 
-### Principi architetturali
+Tutte le pagine devono: (1) caricarsi con skeleton, (2) popolare progressivamente, (3) prioritizzare dati freschi API, (4) aggiornare DB come side-effect, (5) zero chiamate duplicate.
 
-1. **API Spotify ha sempre priorita'**: il dato fresco viene dall'API, non dal DB
-2. **DB = storico + statistiche avanzate**: non usare il DB come cache per dati che l'API restituisce inline (popularity, tracks, artists)
-3. **Genre cache OK**: i generi NON sono inline nell'API tracks, quindi il cache DB 7d e' giustificato
-4. **Request-scoped deduplication**: dentro una singola request, mai chiamare lo stesso endpoint Spotify 2+ volte
-5. **Frontend rendering progressivo**: ogni sezione e' indipendente, carica con il suo skeleton
+---
 
-### Fase 1 — Backend: request-scoped data bundle (alta priorita')
+### CONTESTO CRITICO: stato attuale misurato
 
-#### 1.1 Creare `RequestDataBundle` in `spotify_client.py` o nuovo file
+#### Chiamate API per endpoint (audit 2026-04-02)
 
-Pattern: fetch una volta, riusa ovunque nella stessa request.
+| Endpoint | Chiamate Spotify | Duplicati | Budget (su 25/30s) |
+|----------|-----------------|-----------|---------------------|
+| `GET /wrapped` | 13 | 7 (top_artists 3x dup, top_tracks 2x dup) | 52% |
+| `GET /profile` | 5 | 1 (top_artists medium dup con taste_map) | 20% |
+| `GET /analytics/trends` | 3 + N genre | 0 | 12% + genre |
+| `GET /artist-network` | 3 + genre enrichment | 0 | 12% + genre |
+| `GET /temporal` | 1 | 0 | 4% |
+
+**Rischio**: `/wrapped` + `/profile` nella stessa sessione = 18 call = 72% del budget in 2 request.
+
+#### Matrice duplicazioni — chi chiama cosa
+
+```
+                        top_artists             top_tracks          recently_played
+                   short  medium  long     short  medium  long
+taste_evolution      X      X      X        X      X      X
+profile_metrics      X             X                      X
+taste_map                   X
+artist_network       X      X      X
+compute_trends                               X      X      X
+temporal_patterns                                                         X
+wrapped router                                      X (direct)
+profile router                                                    + get_me()
+```
+
+**In `/wrapped`**: taste_evolution(6) + artist_network(3) + temporal(1) + compute_profile(1) + direct(1) + genre = 13 call.
+**Con RequestDataBundle**: 3 top_artists + 3 top_tracks + 1 recently_played = **7 call** (-46%).
+
+#### Firme servizi attuali (tutte prendono `client` diretto)
 
 ```python
-class RequestDataBundle:
-    """Cache request-scoped per evitare chiamate Spotify duplicate."""
-    def __init__(self, client):
-        self.client = client
-        self._top_tracks = {}    # {time_range: data}
-        self._top_artists = {}   # {time_range: data}
-        self._me = None
-
-    async def get_top_tracks(self, time_range="medium_term"):
-        if time_range not in self._top_tracks:
-            self._top_tracks[time_range] = await retry_with_backoff(
-                self.client.get_top_tracks, time_range=time_range
-            )
-        return self._top_tracks[time_range]
-
-    async def get_top_artists(self, time_range="medium_term"):
-        if time_range not in self._top_artists:
-            self._top_artists[time_range] = await retry_with_backoff(
-                self.client.get_top_artists, time_range=time_range
-            )
-        return self._top_artists[time_range]
+compute_taste_evolution(client: SpotifyClient) -> dict                    # 6 API calls
+compute_profile_metrics(db, client: SpotifyClient, user_id) -> dict      # 3 API calls
+compute_taste_map(db, client: SpotifyClient, user_id) -> dict            # 1 API call
+build_artist_network(client: SpotifyClient, db=None) -> dict             # 3 API calls
+compute_temporal_patterns(client: SpotifyClient, db=None, ...) -> dict   # 1 API call
 ```
 
-**File da modificare**: `backend/app/services/spotify_client.py` o `backend/app/services/data_bundle.py` (nuovo)
-**Impatto**: tutti i servizi che chiamano `get_top_tracks`/`get_top_artists`
+#### Cache Redis attuale
 
-#### 1.2 Refactor Wrapped endpoint (12-17 → 6-8 chiamate)
+| Metodo | TTL | skip_cache |
+|--------|-----|-----------|
+| `get_top_tracks` | 300s | NO |
+| `get_top_artists` | 300s | NO |
+| `get_recently_played` | 120s | SI (aggiunto per sync fix) |
+| `get_me` | 300s | NO |
 
-Attualmente `GET /api/v1/wrapped` fa:
-- `compute_temporal_patterns`: 1 call (`get_recently_played`)
-- `compute_taste_evolution`: 6 calls (3x artists + 3x tracks)
-- `compute_profile`: 1 call (tracks) + genre cache
-- `client.get_top_tracks`: 1 call (DUPLICATO)
-- `build_artist_network`: 3 calls (3x artists, DUPLICATI di taste_evolution)
+**Nota**: la cache 300s su top_tracks/top_artists significa che il RequestDataBundle puo' sfruttarla — la prima chiamata cacha, le successive nella stessa request ottengono il dato cached. MA il bundle e' comunque necessario perche' la cache e' in Redis (round-trip network), mentre il bundle e' in-memory (zero latency).
 
-**Fix**: creare `RequestDataBundle`, pre-fetchare 3 periodi tracks + 3 periodi artists = 6 calls. Passare il bundle a tutti i compute functions.
+#### Bottleneck concorrenza
 
-**File**: `backend/app/routers/wrapped.py`, `backend/app/services/taste_evolution.py`, `backend/app/services/audio_analyzer.py`, `backend/app/services/artist_network.py`
+- `asyncio.Semaphore(3)` globale: max 3 chiamate Spotify in-flight contemporaneamente
+- `/wrapped` con 13 call: le call si accodano, ~4-5 batch sequenziali da 3
+- Con bundle a 7 call: ~2-3 batch — miglioramento ~40% latenza
 
-#### 1.3 Refactor Profile endpoint (8-14 → 6-8 chiamate)
+#### Test coverage GAPS (rischio regressione)
 
-Attualmente `GET /api/v1/profile` fa:
-- `get_me()`: 1 call
-- `compute_profile_metrics`: 6 calls (3x artists + 3x tracks) + genre cache
-- `compute_taste_map`: 1 call (artists, DUPLICATO)
-
-**Fix**: pre-fetchare con bundle, passare a metrics + taste_map.
-
-**File**: `backend/app/routers/profile.py`, `backend/app/services/profile_metrics.py`, `backend/app/services/taste_map.py`
-
-#### 1.4 Refactor Trends endpoint (gia' efficiente, piccolo fix)
-
-3 calls + genre cache. Solo verifica che non ci siano duplicazioni nascoste.
-
-**File**: `backend/app/routers/analytics.py`, `backend/app/services/audio_analyzer.py`
-
-### Fase 2 — Frontend: rendering progressivo per tutte le pagine
-
-#### 2.1 Pattern generale
-
-Ogni pagina diventa una griglia di sezioni indipendenti. Ogni sezione:
-- Mostra skeleton immediatamente
-- Fetcha il suo endpoint (o una porzione del risultato)
-- Renderizza quando il dato arriva
-- Le altre sezioni continuano a caricare indipendentemente
-
-#### 2.2 DashboardPage (3 sezioni indipendenti)
-
-Attualmente: `useSpotifyData('/api/v1/library/top')` + `useSpotifyData('/api/v1/analytics/trends')` + temporal
-
-**Cambio**: gia' quasi corretto (hooks paralleli). Fix: non bloccare il render dei KPI aspettando i trends. Rendere ogni sezione in un `SectionErrorBoundary` con skeleton dedicato.
-
-**File**: `frontend/src/pages/DashboardPage.jsx`
-
-#### 2.3 ProfilePage (sezioni: info, metriche, GenreDNA, TasteMap, stats)
-
-Attualmente: singolo `useSpotifyData('/api/v1/profile')` che blocca tutto.
-
-**Opzione A**: split in 2-3 endpoint (`/profile/info`, `/profile/metrics`, `/profile/taste-map`)
-**Opzione B**: singolo endpoint ma il frontend renderizza sezioni man mano che `data` diventa disponibile (il backend gia' ritorna tutto insieme, quindi B non aiuta)
-**Scelta**: Opzione A e' piu' pulita ma aumenta le chiamate API. Per ora tenere B — il backend con il bundle sara' piu' veloce.
-
-**File**: `frontend/src/pages/ProfilePage.jsx`
-
-#### 2.4 WrappedPage
-
-Attualmente: blocco totale (`useSpotifyData('/api/v1/wrapped')`), schermata di caricamento.
-
-**Cambio**: convertire a POST/poll pattern come playlist compare. Il backend computa le slides progressivamente, il frontend mostra quelle disponibili.
-
-**File**: `frontend/src/pages/WrappedPage.jsx`, `backend/app/routers/wrapped.py`
-
-#### 2.5 Altre pagine (TasteEvolution, Temporal, ArtistNetwork, Discovery)
-
-Sono gia' relativamente semplici (1-2 endpoint). Il rendering progressivo qui e' meno critico — basta skeleton e section-level rendering.
-
-**File**: tutte le pagine in `frontend/src/pages/`
-
-### Fase 3 — Priorita' API e cache strategy
-
-#### 3.1 Gerarchia dati
-
-```
-1. API Spotify (dato fresco) → SEMPRE priorita'
-2. Aggiorna DB come side-effect → non bloccare la response
-3. Usa DB per storico (RecentPlay, DailyListeningStats, UserSnapshot)
-4. Genre cache (7d TTL) → unica eccezione, i generi non sono inline
-```
-
-#### 3.2 Cosa NON cachare nel DB
-
-- Top tracks/artists → cambiano frequentemente, l'API li da' direttamente
-- Popularity → e' inline nella response API tracks
-- Audio features → API deprecated, DB-only OK
-
-#### 3.3 Cosa cachare nel DB
-
-- Generi artisti → API richiede 1 call per artista, cache 7d giustificato
-- Ascolti recenti → Spotify buffer 50 items, accumulo nel DB
-- Snapshot giornalieri → per trend storici
-- Daily stats → per pattern temporali
-
-### Fase 4 — Aggiornamento skill e documentazione
-
-- [ ] Aggiornare `spotify-api-budget` SKILL.md con i nuovi conteggi post-dedup
-- [ ] Aggiornare `fastapi-spotify-patterns` SKILL.md rimuovendo ARTIST_GENRE_CAP riferimenti
-- [ ] Aggiornare CLAUDE.md con il pattern RequestDataBundle
+| Servizio | Test | Rischio refactoring |
+|----------|------|---------------------|
+| taste_evolution | **ZERO** test | ALTO — 6 API call, firma cambia |
+| temporal_patterns | **ZERO** test | MEDIO — 1 call, ma logica complessa |
+| audio_analyzer | **ZERO** test diretto | MEDIO — usato da trends |
+| profile_metrics | 13 test | BASSO |
+| taste_map | 10 test | BASSO |
+| artist_network | 21 test | BASSO |
+| taste_clustering | 34 test | BASSO (pure-compute, non tocca API) |
+| background_tasks | 18 test | BASSO |
 
 ---
 
-## Ordine di esecuzione raccomandato
+### Prerequisiti — COMPLETATO
 
-```
-Fase 1.1 (RequestDataBundle)     ████  fondamento — tutto dipende da questo
-Fase 1.2 (Wrapped dedup)         ████  piu' impattante (12→6 calls)
-Fase 1.3 (Profile dedup)         ████  secondo piu' impattante (14→6 calls)
-Fase 1.4 (Trends verifica)       ██    quick check
-Fase 2.2 (Dashboard progressive) ████  pagina principale
-Fase 2.4 (Wrapped progressive)   ██████  architettura POST/poll
-Fase 2.3 (Profile progressive)   ████
-Fase 2.5 (Altre pagine)          ██    minor
-Fase 3 (Cache strategy)          ██    documentazione + verifica
-Fase 4 (Skills/docs)             ██    ultimo
-```
+- [x] **Test taste_evolution**: 28 test (output structure, periodi, dedup, errori, troncamento, bundle)
+- [x] **Test temporal_patterns**: 22 test (streak, daily_minutes, hourly, weekday, DB fallback, first_play_date)
+- [x] **Test audio_analyzer**: 18 test (compute_profile, compute_trends, genre aggregation, bundle dedup)
 
-**Stima**: ~25-30 task, eseguibili in 2-3 wave di agenti paralleli.
-**Rischio principale**: i servizi (`taste_evolution.py`, `audio_analyzer.py`, `artist_network.py`) hanno firme che assumono un `client` diretto. Il refactoring della firma per accettare un `RequestDataBundle` tocca molti file.
+### Fase 1 — Backend: RequestDataBundle — COMPLETATO
+
+- [x] **1.1**: `RequestDataBundle` creato in `backend/app/services/data_bundle.py` (14 test)
+- [x] **1.2**: `/wrapped` 13→7 call — bundle wirato a taste_evolution, artist_network, compute_profile, top_tracks diretto
+- [x] **1.3**: `/profile` 5→4 call — bundle wirato a profile_metrics, taste_map, get_me
+- [x] **1.4**: `/analytics/trends` 6→3 call — audit ha trovato duplicazione nascosta (compute_trends + compute_profile ri-fetchavano). Bundle wirato.
+
+### Fase 2 — Frontend: rendering progressivo — AUDIT COMPLETATO
+
+- [x] **2.2 DashboardPage**: GIA' ottimizzata (3 hook paralleli, per-section skeleton, SectionErrorBoundary)
+- [x] **2.3 ProfilePage**: singolo endpoint `/profile` — il bundle backend lo rende gia' piu' veloce. Split in endpoint multipli richiede cambio API → /feature
+- [x] **2.4 WrappedPage POST/poll**: implementato. POST avvia task background, GET/{task_id} per polling progressivo. Slide appaiono man mano che i servizi completano. useWrappedTask hook + WrappedStories progressive + shimmer progress bar.
+- [x] **2.5 Altre pagine**: gia' semplici (1-2 endpoint), skeleton + section-level gia' presenti
+
+### Fase 3 — Cache strategy — DOCUMENTATO
+
+Gia' applicato in pratica. Gerarchia:
+1. API Spotify → dato fresco, sempre priorita'
+2. DB update → side-effect non-blocking
+3. DB storico → RecentPlay, DailyListeningStats, UserSnapshot
+4. Genre cache (7d TTL) → unica eccezione giustificata
+
+### Fase 4 — Documentazione — COMPLETATO
+
+- [x] CLAUDE.md aggiornato con pattern RequestDataBundle
+- [x] REFACTOR-LOG.md aggiornato con dettagli completi
+- [x] todo.md aggiornato
 
 ---
 
-## Previous Backlog (preserved)
+### Fase 5 — Ottimizzazione Redis — COMPLETATO
 
-### Bug aperti
-- [ ] GenreDNA (ProfilePage): radar chart con dati finti → wirare frequenze genere reali da `genre_cache`
-- [ ] TasteMap (ProfilePage): `audio_features` hardcoded a `None` → wirare da cache DB o rimuovere sezione
-- [ ] Wrapped slides: verificare che immagini artista/traccia abbiano fallback funzionante dopo fix UI-3/UI-4
+- [x] **5.1**: Lua script atomico in `spotify_client.py` — consolida cooldown + budget + throttle in 1 EVALSHA (3→1 Redis round-trip per chiamata Spotify)
+- [x] **5.2**: `get_window_usage()` ottimizzata — ZCOUNT + ZRANGEBYSCORE LIMIT 0 1 (pipeline, no full member scan)
+- [x] **5.3**: 11 nuovi test per Lua script (allowed, cooldown, tier exhausted, user exhausted, window full, fail-open, NOSCRIPT retry)
+- [x] **5.4**: Frontend EmptyState convention fix — 6 chart components restituiscono `null` quando vuoti (AudioRadar, GenreTreemap, ListeningHeatmap, MoodScatter, TrendTimeline, ArtistNetwork)
+- [x] **5.5**: Skill aggiornate (spotify-api-budget, fastapi-spotify-patterns, react-spotify-patterns)
 
-### Popolarita
-- [ ] Chiarire con utente cosa ci si aspetta: ranking globale? trend temporale? confronto con media?
+---
 
-### Indagini / ottimizzazioni DB
-- [ ] Compound index `(user_id, played_at)` su `recent_plays`
-- [ ] N+1 in `sync_recent_plays` (50 SELECT per utente)
+### Fase 6-7 — Playlist cache + Genre enrichment (Sessione 2026-04-03)
+
+**Sintesi**: Implementato `PlaylistMetadata` DB cache permanente per track count playlist (no burst, background sequenziale + polling frontend). Scoperto che Spotify dev mode restituisce `popularity=0, genres=[]` per tutti gli artisti. Implementato fallback a 3 fonti: Spotify → MusicBrainz → Playlist-inferred genres. MusicBrainz arricchisce ~43/83 artisti. Rimossi popularity fallback edges, singleton cluster nascosti, SVG legend filtrata. 493 test.
+
+---
+
+### Prossimi passi
+
+- [ ] Dedup nomi cerchie identici ("Hip Hop / Trap" × 2): usare genere terziario o nome artista top
+- [ ] Artisti Ponte / Cerchie: layout gap nella vista Rete (serve scroll lungo per raggiungerle)
+- [ ] Playlist inference retry: il warmup Phase 3 si ferma al primo rate limit — aggiungere retry con wait
+- [ ] MusicBrainz disambiguation: nomi ambigui (Maz → folk canadese, FISHER → vocal trance)
+- [ ] ~34 artisti ancora senza generi: valutare Last.fm API o accettare il limite
+- [ ] Test end-to-end Docker: verificare WrappedPage POST/poll con dati reali

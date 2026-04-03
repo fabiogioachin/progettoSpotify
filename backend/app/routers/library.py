@@ -16,6 +16,7 @@ from app.schemas import TopTracksResponse
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
+from app.services.temporal_patterns import get_first_play_date
 from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
@@ -137,15 +138,11 @@ async def get_recent_summary(
         )
 
     tracks_out = []
-    global_first: object = None
 
     for track_id, plays in tracks_map.items():
         plays.sort(key=lambda x: x["datetime"], reverse=True)
         last_played = plays[0]["datetime"]
         first_played = plays[-1]["datetime"]
-
-        if global_first is None or first_played < global_first:
-            global_first = first_played
 
         # Giorni consecutivi più recenti in cui il brano è stato ascoltato
         unique_dates = sorted(
@@ -173,9 +170,7 @@ async def get_recent_summary(
     # Ordina per ultimo ascolto (più recente prima)
     tracks_out.sort(key=lambda x: x["last_played_at"], reverse=True)
 
-    first_play_date = (
-        global_first.strftime("%d/%m/%Y") if global_first else None
-    )
+    first_play_date = await get_first_play_date(db, user_id)
 
     return {
         "tracks": tracks_out,

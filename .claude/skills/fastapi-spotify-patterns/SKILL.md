@@ -62,6 +62,99 @@ Se `SpotifyAuthError` viene catturato da un generico `except Exception`, il fron
 - Chiuso nel `finally`: `await client.close()`
 - MAI passato tra richieste o riusato tra handler
 
+## RequestDataBundle — Request-Scoped Deduplication
+
+`RequestDataBundle` (`data_bundle.py`) wrappa SpotifyClient con cache in-memory per la durata di una singola request. Evita chiamate duplicate quando più servizi richiedono gli stessi dati.
+
+### Pattern: router crea bundle → prefetch → passa ai servizi
+
+```python
+from app.services.data_bundle import RequestDataBundle
+
+@router.get("/endpoint")
+async def handler(
+    request: Request,
+    user_id: int = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    client = SpotifyClient(db, user_id)
+    try:
+        bundle = RequestDataBundle(client)
+        await bundle.prefetch()  # fetch all 3 time_ranges in parallel
+        result = await some_service(client, db, bundle=bundle)
+    except (SpotifyAuthError, RateLimitError, SpotifyServerError):
+        raise
+    except Exception as exc:
+        logger.error("Errore: %s", exc)
+        raise HTTPException(status_code=500, detail="Errore interno")
+    finally:
+        await client.close()
+    return result
+```
+
+### Metodi cached dal bundle
+
+- `get_top_tracks(time_range, limit)` — cached per `(time_range, limit)`
+- `get_top_artists(time_range, limit)` — cached per `(time_range, limit)`
+- `get_recently_played()` — cached (singola chiave)
+- `get_me()` — cached (singola chiave)
+- `prefetch()` — fetch parallelo di tutti e 3 i time_range per tracks e artists
+
+### Servizi: accettano bundle=None (backward compatible)
+
+```python
+async def compute_something(client, db, *, bundle=None):
+    if bundle:
+        data = await bundle.get_top_tracks(time_range="short_term")
+    else:
+        data = await retry_with_backoff(client.get_top_tracks, time_range="short_term")
+```
+
+## Async Task Pattern (POST/Poll)
+
+Per operazioni pesanti (wrapped, playlist-analytics), usare il pattern POST → poll:
+
+1. `POST /endpoint` avvia un background task, ritorna `task_id`
+2. `GET /endpoint/{task_id}` polling per risultati progressivi
+3. Il background task usa `async_session()` dedicata (non `get_db()`)
+
+### Riferimento: `_run_wrapped_task` in `wrapped.py`
+
+```python
+@router.post("/wrapped")
+async def start_wrapped(request: Request, ...):
+    task_id = str(uuid.uuid4())
+    # Store task state in _tasks dict
+    _tasks[task_id] = {"status": "waiting", ...}
+    asyncio.create_task(_run_wrapped_task(task_id, user_id, time_range))
+    return {"task_id": task_id}
+
+@router.get("/wrapped/{task_id}")
+async def poll_wrapped(task_id: str):
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404)
+    return task  # {status: "waiting"|"completed"|"error", result: {...}}
+
+async def _run_wrapped_task(task_id, user_id, time_range):
+    async with async_session() as bg_db:  # Sessione DB dedicata
+        client = SpotifyClient(bg_db, user_id)
+        try:
+            bundle = RequestDataBundle(client)
+            await bundle.prefetch()
+            # ... compute with bundle ...
+            _tasks[task_id] = {"status": "completed", "result": result}
+        except Exception as exc:
+            _tasks[task_id] = {"status": "error", "detail": str(exc)}
+        finally:
+            await client.close()
+```
+
+**Regole**:
+- Background task DEVE usare `async_session()`, mai `get_db()`
+- Il client viene creato dentro il task, non passato dal router
+- `RequestDataBundle` funziona anche nei background task
+
 ## Resilience Patterns
 
 ### retry_with_backoff — OBBLIGATORIO per ogni chiamata SpotifyClient
@@ -125,6 +218,20 @@ except Exception as snap_exc:
 
 Prima di ogni `asyncio.gather` con N chiamate API, calcolare il worst-case budget. Se > 30 chiamate, ristrutturare.
 
+### Atomic Rate Limit Check — Lua Script (1 Redis call)
+
+`SpotifyClient._request()` chiama `_check_and_register()` che esegue un singolo `EVALSHA` Lua in Redis. Lo script atomicamente:
+1. Controlla cooldown TTL → `RateLimitError` se attivo
+2. Pulisce entries scadute dal sorted set
+3. Conta chiamate per-tier e per-user (parsing formato `{uuid}:{priority}:{user_id}`)
+4. Controlla capacità sliding window (25 chiamate/30s) → `ThrottleError` se pieno
+5. Se tutto ok, ZADD registra la chiamata
+
+**Prima**: 3 round-trip Redis per chiamata Spotify (cooldown + budget + throttle)
+**Ora**: 1 round-trip Redis (Lua script atomico)
+
+Gestione errori: NOSCRIPT → reload automatico. Redis down → fail-open.
+
 ### Global Semaphore = 3
 
 ```python
@@ -132,7 +239,7 @@ Prima di ogni `asyncio.gather` con N chiamate API, calcolare il worst-case budge
 _global_sem = asyncio.Semaphore(3)
 ```
 
-Il semaphore globale in `SpotifyClient._request()` limita a 3 richieste Spotify concorrenti. Non creare semaphore locali nei servizi — il globale gestisce tutto. Non aumentare oltre 3: dev mode punisce i burst con `retry_after` enormi (75000s+).
+Il semaphore globale in `SpotifyClient._request()` limita a 3 richieste Spotify concorrenti in-process. Il Lua script gestisce lo stato distribuito in Redis. Non creare semaphore locali nei servizi — il globale gestisce tutto. Non aumentare oltre 3: dev mode punisce i burst con `retry_after` enormi (75000s+).
 
 ### Dedup e cap artisti
 

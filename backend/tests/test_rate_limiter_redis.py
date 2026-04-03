@@ -148,16 +148,22 @@ class TestSpotifyClientThrottle:
 
 
 class TestSpotifyClientWindowUsage:
-    """Tests for get_window_usage() and get_cooldown_remaining()."""
+    """Tests for get_window_usage() and get_cooldown_remaining().
+
+    get_window_usage now uses a pipeline: ZCOUNT + ZRANGEBYSCORE LIMIT 0 1.
+    """
 
     @pytest.mark.asyncio
     async def test_get_window_usage_returns_count_and_reset(self):
         now = time.time()
-        # 3 calls in window, oldest at now-20
-        members = [("call1", now - 20), ("call2", now - 10), ("call3", now - 1)]
+        oldest_score = now - 20
 
-        mock_redis = AsyncMock()
-        mock_redis.zrangebyscore.return_value = members
+        mock_pipe = MagicMock()
+        # results: [zcount=3, zrangebyscore with LIMIT 0 1 = [(oldest_member, score)]]
+        mock_pipe.execute = AsyncMock(return_value=[3, [("call1", oldest_score)]])
+
+        mock_redis = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipe
 
         with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
             from app.services.spotify_client import SpotifyClient
@@ -169,8 +175,11 @@ class TestSpotifyClientWindowUsage:
 
     @pytest.mark.asyncio
     async def test_get_window_usage_empty(self):
-        mock_redis = AsyncMock()
-        mock_redis.zrangebyscore.return_value = []
+        mock_pipe = MagicMock()
+        mock_pipe.execute = AsyncMock(return_value=[0, []])
+
+        mock_redis = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipe
 
         with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
             from app.services.spotify_client import SpotifyClient

@@ -5,6 +5,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
@@ -32,6 +33,7 @@ class RecentPlay(Base):
         UniqueConstraint(
             "user_id", "track_spotify_id", "played_at", name="uq_user_track_played"
         ),
+        Index("ix_recent_plays_user_played", "user_id", "played_at"),
     )
 
 

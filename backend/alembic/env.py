@@ -8,7 +8,7 @@ from app.config import settings
 from app.database import Base
 
 # Import ALL models so Base.metadata is fully populated
-from app.models import listening_history, social, track, user  # noqa: F401
+from app.models import listening_history, playlist_metadata, social, track, user  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

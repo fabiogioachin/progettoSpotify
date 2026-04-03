@@ -8,10 +8,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { TrendingUp } from 'lucide-react'
 import { FEATURE_COLORS, TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
 import { FEATURE_LABELS } from '../../lib/constants'
-import EmptyState from '../ui/EmptyState'
 
 const TEMPORAL_RANGES = [
   { value: '7d', label: '7gg' },
@@ -31,16 +29,7 @@ export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Tem
   }
 
   if (!trends || trends.length === 0) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <EmptyState
-          icon={TrendingUp}
-          message="Dati insufficienti per i trend"
-          description="Torna tra qualche giorno"
-        />
-      </div>
-    )
+    return null
   }
 
   // Controlla se le features audio sono disponibili (non tutte zero)
@@ -62,16 +51,21 @@ function FeatureTrend({ trends, title }) {
     ...t.features,
   }))
 
+  // Filter out feature keys that have all-zero/null values across every period
+  const activeKeys = Object.keys(FEATURE_LABELS).filter((key) =>
+    trends.some((t) => t.features?.[key] != null && t.features[key] > 0)
+  )
+
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           <defs>
-            {Object.entries(FEATURE_COLORS).map(([key, color]) => (
+            {activeKeys.map((key) => (
               <linearGradient key={key} id={`gradient-${key}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={color} stopOpacity={0} />
+                <stop offset="5%" stopColor={FEATURE_COLORS[key]} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={FEATURE_COLORS[key]} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
@@ -98,7 +92,7 @@ function FeatureTrend({ trends, title }) {
             formatter={(val) => FEATURE_LABELS[val] || val}
             wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }}
           />
-          {Object.entries(FEATURE_LABELS).map(([key]) => (
+          {activeKeys.map((key) => (
             <Area
               key={key}
               type="monotone"
@@ -118,16 +112,7 @@ function FeatureTrend({ trends, title }) {
 
 function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
   if (!dailyMinutes || dailyMinutes.length === 0) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold">Tempo di Ascolto</h3>
-        <EmptyState
-          icon={TrendingUp}
-          message="Dati insufficienti per i trend"
-          description="Torna tra qualche giorno"
-        />
-      </div>
-    )
+    return null
   }
 
   const data = dailyMinutes.map((d) => ({

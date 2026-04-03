@@ -7,7 +7,7 @@ import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TOOLTIP_STYLE } from '../lib/chartTheme'
-import { ListMusic, Globe, Lock, Users, RefreshCw, Loader2, Clock } from 'lucide-react'
+import { ListMusic, Globe, Lock, Users, RefreshCw, Loader2, Clock, AlertTriangle } from 'lucide-react'
 import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 import { usePlaylistTask } from '../hooks/usePlaylistTask'
 
@@ -93,7 +93,14 @@ export default function PlaylistAnalyticsPage() {
           </button>
         </div>
 
-        {error && (
+        {error && data && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm rounded-lg p-3 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Analisi parziale — {error}. I dati mostrati potrebbero essere incompleti.</span>
+          </div>
+        )}
+
+        {error && !data && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-400 text-sm">{error}</div>
         )}
 
@@ -138,6 +145,21 @@ export default function PlaylistAnalyticsPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Frozen progress bar when error occurred with partial data */}
+        {!loading && error && data && progress.total > 0 && (
+          <div className="max-w-md mx-auto">
+            <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{ backgroundColor: '#f59e0b', width: `${progress.percent}%` }}
+              />
+            </div>
+            <p className="text-text-muted text-xs text-center mt-1">
+              {progress.completed}/{progress.total} playlist analizzate
+            </p>
+          </div>
+        )}
 
         {/* KPI Cards — show as soon as summary data is available, or skeletons while loading */}
         {loading && !hasSummary ? (

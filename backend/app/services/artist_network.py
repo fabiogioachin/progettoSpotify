@@ -5,13 +5,19 @@ Costruisce edges tra artisti con similarita' di genere (fuzzy matching).
 Usa NetworkX per Louvain communities, PageRank e betweenness centrality.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 import networkx as nx
 from networkx.algorithms.community import louvain_communities
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.genre_cache import get_artist_genres_cached
 from app.services.genre_utils import compute_genre_similarity, normalize_genre
 from app.services.spotify_client import SpotifyClient
 from app.services.taste_clustering import (
@@ -19,7 +25,10 @@ from app.services.taste_clustering import (
     name_clusters,
     rank_within_cluster,
 )
-from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
+from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, retry_with_backoff
+
+if TYPE_CHECKING:
+    from app.services.data_bundle import RequestDataBundle
 
 logger = logging.getLogger(__name__)
 
@@ -36,21 +45,31 @@ async def _safe_fetch(coro):
 
 
 async def build_artist_network(
-    client: SpotifyClient, max_seed_artists: int = 15
+    client: SpotifyClient,
+    db: AsyncSession | None = None,
+    max_seed_artists: int = 15,
+    bundle: RequestDataBundle | None = None,
 ) -> dict:
     """Costruisce il grafo di artisti basato su generi condivisi."""
 
     # Fetch top artists from 3 time ranges for richer data (~45 unique artists)
     # Always use default limit=50 to maximise cache hits with other endpoints
-    short_task = _safe_fetch(
-        retry_with_backoff(client.get_top_artists, time_range="short_term")
-    )
-    medium_task = _safe_fetch(
-        retry_with_backoff(client.get_top_artists, time_range="medium_term")
-    )
-    long_task = _safe_fetch(
-        retry_with_backoff(client.get_top_artists, time_range="long_term")
-    )
+    if bundle:
+        # Bundle already has data prefetched — just retrieve it
+        short_task = _safe_fetch(bundle.get_top_artists(time_range="short_term"))
+        medium_task = _safe_fetch(bundle.get_top_artists(time_range="medium_term"))
+        long_task = _safe_fetch(bundle.get_top_artists(time_range="long_term"))
+    else:
+        # Original path — direct client calls
+        short_task = _safe_fetch(
+            retry_with_backoff(client.get_top_artists, time_range="short_term")
+        )
+        medium_task = _safe_fetch(
+            retry_with_backoff(client.get_top_artists, time_range="medium_term")
+        )
+        long_task = _safe_fetch(
+            retry_with_backoff(client.get_top_artists, time_range="long_term")
+        )
 
     short_data, medium_data, long_data = await asyncio.gather(
         short_task, medium_task, long_task, return_exceptions=True
@@ -98,6 +117,30 @@ async def build_artist_network(
             "followers": artist.get("followers", {}).get("total", 0),
         }
 
+    # Enrich empty genres via genre cache (invariant #7)
+    if db:
+        empty_genre_ids = [aid for aid, node in nodes.items() if not node.get("genres")]
+        if empty_genre_ids:
+            try:
+                cached_genres = await get_artist_genres_cached(
+                    db, client, empty_genre_ids
+                )
+                enriched = 0
+                for aid, genres in cached_genres.items():
+                    if genres and aid in nodes:
+                        nodes[aid]["genres"] = genres[:5]
+                        enriched += 1
+                if enriched:
+                    logger.info(
+                        "Arricchiti generi per %d/%d artisti via genre cache",
+                        enriched,
+                        len(empty_genre_ids),
+                    )
+            except (SpotifyAuthError, RateLimitError):
+                raise
+            except Exception as exc:
+                logger.warning("Genre cache enrichment fallito: %s", exc)
+
     # Build genre-based edges with fuzzy matching
     edges = []
     seen_edges = set()
@@ -131,24 +174,9 @@ async def build_artist_network(
                                 "shared_genres": shared_genres[:3],
                             }
                         )
-            elif not genres_a or not genres_b:
-                # Fallback: popularity proximity (connect artists with similar popularity)
-                pop_a = nodes[aid_a].get("popularity", 0)
-                pop_b = nodes[aid_b].get("popularity", 0)
-                pop_diff = abs(pop_a - pop_b)
-                if pop_diff <= 15 and (pop_a > 0 or pop_b > 0):
-                    edge_key = tuple(sorted([aid_a, aid_b]))
-                    if edge_key not in seen_edges:
-                        seen_edges.add(edge_key)
-                        weight = round(1.0 - pop_diff / 100, 3)
-                        edges.append(
-                            {
-                                "source": aid_a,
-                                "target": aid_b,
-                                "weight": max(weight, 0.1),
-                                "shared_genres": [],
-                            }
-                        )
+            # Artists without genres remain unconnected (isolated nodes).
+            # Popularity-based fallback removed: Spotify dev mode returns
+            # popularity=0 for all artists, making it useless for edges.
 
     # Build NetworkX graph
     G = nx.Graph()
@@ -270,6 +298,75 @@ async def build_artist_network(
                 else:
                     cluster_names[cid] = f"Cerchia {cid + 1}"
 
+    # --- Filter singleton clusters from display dicts (Problem 2) ---
+    # Nodes keep their cluster field for SVG coloring, but cluster_names
+    # and cluster_rankings shown to the user exclude singletons.
+    multi_artist_clusters = {
+        cid
+        for cid in cluster_ids
+        if sum(1 for c in louvain_labels.values() if c == cid) > 1
+    }
+
+    filtered_names = {
+        cid: name for cid, name in cluster_names.items() if cid in multi_artist_clusters
+    }
+    filtered_rankings = {
+        str(k): v
+        for k, v in cluster_rankings.items()
+        if (k if isinstance(k, int) else int(k)) in multi_artist_clusters
+    }
+
+    # --- Deduplicate cluster names (Problem 3) ---
+    # When two clusters share a name (e.g. both "Hip Hop"), differentiate
+    # by appending the secondary genre.
+    seen_names: dict[str, int] = {}  # name -> first cid
+    for cid in sorted(filtered_names.keys()):
+        name = filtered_names[cid]
+        if name in seen_names:
+            first_cid = seen_names[name]
+
+            # Differentiate the current duplicate
+            cluster_aids_dup = [
+                aid for aid, c in louvain_labels.items() if c == cid
+            ]
+            genre_freq_dup: dict[str, int] = defaultdict(int)
+            for aid in cluster_aids_dup:
+                for g in nodes[aid].get("genres", []):
+                    genre_freq_dup[g] += 1
+            primary_norm = name.lower().replace(" ", "-")
+            secondary_dup = [
+                g
+                for g, _ in sorted(genre_freq_dup.items(), key=lambda x: -x[1])
+                if g.lower().replace(" ", "-") != primary_norm
+            ]
+            if secondary_dup:
+                suffix = secondary_dup[0].replace("-", " ").title()
+                filtered_names[cid] = f"{name} / {suffix}"
+            else:
+                filtered_names[cid] = f"{name} II"
+
+            # Differentiate the first occurrence too (if not already done)
+            if filtered_names[first_cid] == name:
+                cluster_aids_first = [
+                    aid for aid, c in louvain_labels.items() if c == first_cid
+                ]
+                genre_freq_first: dict[str, int] = defaultdict(int)
+                for aid in cluster_aids_first:
+                    for g in nodes[aid].get("genres", []):
+                        genre_freq_first[g] += 1
+                secondary_first = [
+                    g
+                    for g, _ in sorted(
+                        genre_freq_first.items(), key=lambda x: -x[1]
+                    )
+                    if g.lower().replace(" ", "-") != primary_norm
+                ]
+                if secondary_first:
+                    first_suffix = secondary_first[0].replace("-", " ").title()
+                    filtered_names[first_cid] = f"{name} / {first_suffix}"
+        else:
+            seen_names[name] = cid
+
     # --- Genre nodes and edges for KG visualization ---
     genre_nodes_list = []
     genre_edges_list = []
@@ -356,8 +453,8 @@ async def build_artist_network(
         "nodes": list(nodes.values()),
         "edges": edges,
         "clusters": clusters,
-        "cluster_names": cluster_names,
-        "cluster_rankings": {str(k): v for k, v in cluster_rankings.items()},
+        "cluster_names": filtered_names,
+        "cluster_rankings": filtered_rankings,
         "bridges": bridges,
         "top_genres": [{"genre": g, "count": c} for g, c in top_genres],
         "genre_nodes": genre_nodes_list,
@@ -366,7 +463,7 @@ async def build_artist_network(
         "metrics": {
             "total_nodes": len(nodes),
             "total_edges": len(edges),
-            "cluster_count": len(cluster_ids),
+            "cluster_count": len(multi_artist_clusters),
             "density": round(density, 3),
         },
     }

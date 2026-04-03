@@ -36,6 +36,8 @@ export default function FriendsPage() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [inviteCode, setInviteCode] = useState(null)
   const [toast, setToast] = useState(null)
+  const [inviteError, setInviteError] = useState(null)
+  const [removeError, setRemoveError] = useState(null)
 
   // Auto-accept invite code from URL
   useEffect(() => {
@@ -74,7 +76,10 @@ export default function FriendsPage() {
       setInviteCode(data.code)
       setInviteModalOpen(true)
     } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 429) throw err
       console.error('Failed to create invite:', err)
+      setInviteError('Errore nell\'invio dell\'invito. Riprova.')
+      setTimeout(() => setInviteError(null), 5000)
     }
   }, [])
 
@@ -104,7 +109,10 @@ export default function FriendsPage() {
       }
       refetchFriends()
     } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 429) throw err
       console.error('Remove failed:', err)
+      setRemoveError('Errore nella rimozione dell\'amico. Riprova.')
+      setTimeout(() => setRemoveError(null), 5000)
     }
   }, [selectedFriend, refetchFriends])
 
@@ -142,6 +150,9 @@ export default function FriendsPage() {
           <span className="sm:hidden">Invita</span>
         </button>
       </div>
+      {inviteError && (
+        <p className="text-red-400 text-sm mt-1">{inviteError}</p>
+      )}
 
       {/* Friends grid */}
       <SectionErrorBoundary sectionName="FriendsGrid">
@@ -176,6 +187,9 @@ export default function FriendsPage() {
           </StaggerContainer>
         )}
       </SectionErrorBoundary>
+      {removeError && (
+        <p className="text-red-400 text-sm mt-1">{removeError}</p>
+      )}
 
       {/* Comparison panel */}
       <SectionErrorBoundary sectionName="FriendComparison">

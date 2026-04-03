@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { ListMusic, TrendingUp, Music, Tag, Loader2, Clock } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -15,6 +15,7 @@ import PlaylistComparison from '../components/charts/PlaylistComparison'
 import AudioRadar from '../components/charts/AudioRadar'
 import { SkeletonGrid, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
+import api from '../lib/api'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { usePlaylistCompare } from '../hooks/usePlaylistCompare'
 import { PLAYLIST_COLORS, TOOLTIP_STYLE } from '../lib/chartTheme'
@@ -55,13 +56,60 @@ export default function PlaylistComparePage() {
 
   // Reset stale comparison when selection changes
   const selectionKey = useMemo(() => JSON.stringify(selectedIds), [selectedIds])
+  const comparisonRef = useRef(comparison)
+  comparisonRef.current = comparison
   useEffect(() => {
-    if (comparison) reset()
-  }, [selectionKey]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (comparisonRef.current) reset()
+  }, [selectionKey, reset])
 
-  const playlists = playlistsData?.playlists || []
-  const ownedPlaylists = playlists.filter(p => p.is_owner !== false)
-  const followedPlaylists = playlists.filter(p => p.is_owner === false)
+  const rawPlaylists = useMemo(() => playlistsData?.playlists || [], [playlistsData])
+
+  // Local overlay for track counts resolved by the lightweight /counts endpoint
+  const [countOverrides, setCountOverrides] = useState({})
+
+  const playlists = useMemo(
+    () => rawPlaylists.map(p => ({
+      ...p,
+      track_count: countOverrides[p.id] ?? p.track_count,
+    })),
+    [rawPlaylists, countOverrides],
+  )
+  const ownedPlaylists = useMemo(() => playlists.filter(p => p.is_owner !== false), [playlists])
+  const followedPlaylists = useMemo(() => playlists.filter(p => p.is_owner === false), [playlists])
+
+  // Poll lightweight /counts endpoint while owned playlists still have count=0
+  useEffect(() => {
+    if (playlistsLoading || rawPlaylists.length === 0) return
+    const needsCounts = rawPlaylists.some(
+      p => (countOverrides[p.id] ?? p.track_count) === 0 && p.is_owner !== false,
+    )
+    if (!needsCounts) return
+
+    let cancelled = false
+    let intervalId = null
+
+    const pollCounts = async () => {
+      try {
+        const res = await api.get('/api/v1/playlists/counts')
+        if (cancelled || !res.data?.counts) return
+        setCountOverrides(prev => ({ ...prev, ...res.data.counts }))
+      } catch {
+        // ignore polling errors
+      }
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (cancelled) return
+      pollCounts()
+      intervalId = setInterval(pollCounts, 5000)
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [playlistsLoading, rawPlaylists, countOverrides])
 
   function togglePlaylist(id) {
     setSelectedIds((prev) => {
@@ -124,7 +172,7 @@ export default function PlaylistComparePage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-text-primary text-sm font-medium truncate">{p.name}</p>
-                            <p className="text-text-muted text-xs">{p.track_count > 0 ? `${p.track_count} brani` : '? brani'}</p>
+                            <p className="text-text-muted text-xs">{p.track_count > 0 ? `${p.track_count} brani` : '...'}</p>
                           </div>
                           {isSelected && (
                             <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
@@ -161,7 +209,7 @@ export default function PlaylistComparePage() {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-text-primary text-sm font-medium truncate">{p.name}</p>
-                        <p className="text-text-muted text-xs">{p.track_count > 0 ? `${p.track_count} brani` : '? brani'}</p>
+                        <p className="text-text-muted text-xs">{p.track_count > 0 ? `${p.track_count} brani` : '\u2014'}</p>
                       </div>
                     </div>
                   ))}

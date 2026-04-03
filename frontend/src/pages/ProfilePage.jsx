@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Share2, Clock } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Share2, Clock, Flame } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
@@ -16,7 +16,20 @@ import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function ProfilePage() {
   const { data, loading, error } = useSpotifyData('/api/v1/profile')
+  const { data: recentSummary, loading: recentLoading, refetch: refetchRecent } = useSpotifyData('/api/v1/library/recent-summary')
   const [showShare, setShowShare] = useState(false)
+
+  // Retry once if recent-summary is empty (backend sync may not have completed yet)
+  const retriedRef = useRef(false)
+  useEffect(() => {
+    if (!recentLoading && !recentSummary?.tracks?.length && !retriedRef.current) {
+      retriedRef.current = true
+      const timer = setTimeout(() => {
+        refetchRecent()
+      }, 8000)
+      return () => clearTimeout(timer)
+    }
+  }, [recentLoading, recentSummary, refetchRecent])
 
   if (loading) {
     return (
@@ -113,6 +126,51 @@ export default function ProfilePage() {
           </StaggerItem>
         )}
       </StaggerContainer>
+
+      {/* Ascolti recenti */}
+      <SectionErrorBoundary sectionName="RecentSummary">
+        {recentLoading ? (
+          <SkeletonCard height="h-48" />
+        ) : recentSummary?.tracks?.length > 0 && (
+          <div className="glow-card bg-surface rounded-xl p-5">
+            <div className="mb-4">
+              <h3 className="text-text-primary font-display font-semibold">Ascolti recenti</h3>
+              <p className="text-text-muted text-xs mt-0.5">
+                {recentSummary.total_plays} ascolti totali
+                {recentSummary.first_play_date && (
+                  <span> &middot; dal {recentSummary.first_play_date}</span>
+                )}
+              </p>
+            </div>
+            <StaggerContainer className="space-y-1.5">
+              {recentSummary.tracks.slice(0, 10).map((track, i) => (
+                <StaggerItem key={track.track_spotify_id}>
+                  <div className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-surface-hover transition-colors">
+                    <span className="text-text-muted text-xs font-mono w-5 text-right shrink-0">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-text-primary text-sm font-medium truncate">{track.track_name}</p>
+                      <p className="text-text-muted text-xs truncate">{track.artist_name}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {track.consecutive_days > 1 && (
+                        <span className="flex items-center gap-0.5 text-xs text-accent bg-accent/10 px-1.5 py-0.5 rounded-full">
+                          <Flame className="w-3 h-3" />
+                          {track.consecutive_days}g
+                        </span>
+                      )}
+                      <span className="text-text-secondary text-xs font-mono">
+                        {track.play_count}x
+                      </span>
+                    </div>
+                  </div>
+                </StaggerItem>
+              ))}
+            </StaggerContainer>
+          </div>
+        )}
+      </SectionErrorBoundary>
 
       {/* Share modal */}
       <AnimatePresence>

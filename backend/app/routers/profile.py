@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_auth
 from app.models.listening_history import UserProfileMetrics
+from app.services.data_bundle import RequestDataBundle
 from app.services.personality import compute_archetype
 from app.services.profile_metrics import compute_profile_metrics, get_recent_daily_stats
 from app.services.spotify_client import SpotifyClient
@@ -18,7 +19,6 @@ from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
     SpotifyServerError,
-    retry_with_backoff,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,20 +43,20 @@ async def get_profile(
 ):
     """Profilo utente con metriche aggregate, personalità e statistiche giornaliere."""
     client = SpotifyClient(db, user_id)
+    bundle = RequestDataBundle(client)
     try:
+        # Prefetch all Spotify data in parallel (artists 3 ranges + tracks 3 ranges + me)
+        await bundle.prefetch(artists=True, tracks=True, me=True)
+
         # SQLAlchemy async sessions do NOT support concurrent operations.
         # compute_profile_metrics and compute_taste_map both use db for reads,
-        # so we cannot run them in the same asyncio.gather. Strategy:
-        # 1. Fetch user profile (Spotify-only, no direct db reads) concurrently
-        #    with metrics (heaviest, does Spotify + db reads sequentially)
-        # 2. Then taste_map (Spotify + pure compute) — sequential after metrics
-        # 3. Then daily stats (db-only read) — sequential after taste_map
+        # so we run them sequentially. Spotify calls are already cached in bundle.
         _, metrics_result = await _safe_fetch(
-            "metrics", compute_profile_metrics(db, client, user_id)
+            "metrics", compute_profile_metrics(db, client, user_id, bundle=bundle)
         )
-        _, user_result = await _safe_fetch("user", retry_with_backoff(client.get_me))
+        _, user_result = await _safe_fetch("user", bundle.get_me())
         _, taste_map_result = await _safe_fetch(
-            "taste_map", compute_taste_map(db, client, user_id)
+            "taste_map", compute_taste_map(db, client, user_id, bundle=bundle)
         )
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py

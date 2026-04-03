@@ -10,6 +10,8 @@ import api from '../lib/api'
  * @param {number} [config.pollInterval=2000] — ms between polls
  * @returns {{ data, progress, isLoading, isWaiting, waitSeconds, error, start, reset }}
  */
+const MAX_POLL_DURATION = 180_000 // 3 minutes
+
 export function usePlaylistTask({ postUrl, pollUrl, pollInterval = 2000 }) {
   const [data, setData] = useState(null)
   const [progress, setProgress] = useState({ total: 0, completed: 0, percent: 0, phase: '' })
@@ -20,6 +22,7 @@ export function usePlaylistTask({ postUrl, pollUrl, pollInterval = 2000 }) {
   const taskIdRef = useRef(null)
   const timeoutRef = useRef(null)
   const mountedRef = useRef(true)
+  const startTimeRef = useRef(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -32,6 +35,7 @@ export function usePlaylistTask({ postUrl, pollUrl, pollInterval = 2000 }) {
   const reset = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     taskIdRef.current = null
+    startTimeRef.current = null
     setData(null)
     setProgress({ total: 0, completed: 0, percent: 0, phase: '' })
     setIsLoading(false)
@@ -43,6 +47,7 @@ export function usePlaylistTask({ postUrl, pollUrl, pollInterval = 2000 }) {
   const start = useCallback(async (body) => {
     reset()
     setIsLoading(true)
+    startTimeRef.current = Date.now()
 
     try {
       const { data: startRes } = await api.post(postUrl, body)
@@ -53,6 +58,14 @@ export function usePlaylistTask({ postUrl, pollUrl, pollInterval = 2000 }) {
 
       const poll = async () => {
         if (!mountedRef.current) return
+
+        // Check polling timeout
+        if (Date.now() - startTimeRef.current > MAX_POLL_DURATION) {
+          setIsLoading(false)
+          setError('Tempo massimo di elaborazione superato. I dati parziali sono mostrati.')
+          return
+        }
+
         try {
           const { data: status } = await api.get(pollUrl(taskIdRef.current))
           if (!mountedRef.current) return

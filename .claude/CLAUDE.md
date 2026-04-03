@@ -63,13 +63,15 @@ All API endpoints live under `/api/v1/`. Legacy `/api/*` paths redirect to `/api
 
 **Middleware stack** (execution order, outermost first): ProxyHeaders (optional) → APIRateLimiter (120 req/min per IP) → CORS → RateLimitHeaderMiddleware → RequestContextMiddleware (request_id + user_id via contextvars) → UserQuotaMiddleware (per-user tier-based rate limit) → api_version_redirect (308 legacy paths).
 
-Each request: `require_auth` extracts user_id from signed session cookie → router creates `SpotifyClient(db, user_id)` → calls service methods → closes client in `finally` block.
+Each request: `require_auth` extracts user_id from signed session cookie → router creates `SpotifyClient(db, user_id)` → wraps in `RequestDataBundle(client)` → calls service methods with `bundle=bundle` → closes client in `finally` block.
+
+**RequestDataBundle** (`data_bundle.py`): Request-scoped in-memory cache wrapping SpotifyClient. Caches `get_top_tracks`, `get_top_artists`, `get_recently_played`, `get_me` per (time_range, limit) key. `prefetch()` fetches all 3 time_ranges in parallel via `asyncio.gather`. Services accept `bundle=None` (backward compatible) — when provided, use bundle instead of direct client calls. Result: `/wrapped` 13→7 calls, `/profile` 5→4, `/trends` 6→3.
 
 **Auth**: OAuth2 PKCE with stateless HMAC-signed state parameter. Session = signed cookie (itsdangerous URLSafeSerializer). Spotify tokens encrypted with Fernet (key derived via PBKDF2 from `SESSION_SECRET` + `ENCRYPTION_SALT`). Invite-gated registration: new users need a valid `InviteCode`; first user auto-promoted to admin. Existing users login normally without invite.
 
 **Token refresh**: proactive (5-min buffer before expiry) + reactive retry-on-401 with forced refresh. Lock prevents concurrent refreshes.
 
-**Rate limiting**: Four layers — API middleware (120 req/min per IP, Redis sorted set) + per-user quota (free=30/min, premium=60/min, admin=unlimited, Redis sorted set) + Spotify sliding window throttle (25 calls/30s, Redis sorted set) + API budget priority system (P0 interactive 70%, P1 login sync 20%, P2 batch 10%). All state in Redis for multi-worker support. Global semaphore(3) for in-process concurrency. Fail-open on Redis errors.
+**Rate limiting**: Four layers — API middleware (120 req/min per IP, Redis sorted set) + per-user quota (free=30/min, premium=60/min, admin=unlimited, Redis sorted set) + Spotify sliding window throttle (25 calls/30s, Redis sorted set) + API budget priority system (P0 interactive 70%, P1 login sync 20%, P2 batch 10%). All state in Redis for multi-worker support. Global semaphore(3) for in-process concurrency. Fail-open on Redis errors. **Atomic Lua script**: `_check_and_register()` consolidates cooldown + budget + throttle into a single `EVALSHA` call (1 Redis round-trip per Spotify API call, was 3).
 
 **Error handling**: Centralized via 3 global exception handlers in `main.py` — `SpotifyAuthError` → 401, `RateLimitError`/`ThrottleError` → 429, `SpotifyServerError` → 502. Routers only catch `(SpotifyAuthError, RateLimitError, SpotifyServerError): raise` + `except Exception` for logging. New API endpoints get error handling for free.
 
@@ -77,7 +79,11 @@ Each request: `require_auth` extracts user_id from signed session cookie → rou
 
 **Background jobs** (APScheduler): `sync_recent_plays` hourly with staggering (users distributed across 55min, jitter=120s) + Redis skip tracking for rate-limited users + opportunistic genre cache population via `get_artist_genres_cached`. `save_daily_snapshot` on first daily login via `UserSnapshot` model. `compute_daily_aggregates` at 02:00 daily (jitter=300s) — computes `DailyListeningStats` including `top_genre` from `artist_genres` DB cache (DB-only, no API calls). `cleanup_expired_data` monthly (1st of month, 03:00) — prunes user_snapshots >365d, track_popularity >90d. Background jobs use P1/P2 priority via `api_budget.py`.
 
-**Genre cache** (`genre_cache.py`): Three-tier cache for artist genres — DB `artist_genres` table (7-day TTL, shared across all users) → Redis artist cache (1h TTL) → Spotify API on miss. `get_artist_genres_cached(db, client, artist_ids)` centralizes all genre fetching. No artificial caps on artist count — the cache naturally bounds API calls. When `client=None` (background job context), returns DB-only data without API calls. `build_genre_distribution()` computes genre frequency from tracks.
+**Genre cache** (`genre_cache.py`): Three-tier cache for artist genres — DB `artist_genres` table (7-day TTL, shared across all users) → Redis artist cache (1h TTL) → Spotify API on miss. `get_artist_genres_cached(db, client, artist_ids)` centralizes all genre fetching. No artificial caps on artist count — the cache naturally bounds API calls. When `client=None` (background job context), returns DB-only data without API calls. `build_genre_distribution()` computes genre frequency from tracks. **Note**: Spotify dev mode returns empty genres for ALL artists — MusicBrainz is the primary genre source.
+
+**Genre warmup** (startup, 3 phases): Phase 1: Spotify `get_artist()` for top_artists (returns empty in dev mode but caches the row). Phase 2: MusicBrainz fallback (`musicbrainz_client.py`) — search by name + MBID lookup, 1 req/s, tag blocklist filters non-genre tags. Phase 3: Playlist-inferred genres — maps genre-like playlist names to artists in those playlists. Only fills empty-genre artists, never overwrites.
+
+**Playlist metadata** (`playlist_metadata` table): Permanent DB cache for playlist track counts, names, images, ownership. `GET /api/v1/playlists` reads DB cache first, launches background task for remaining zeros (sequential, 2s delay, retry on throttle). `GET /api/v1/playlists/counts` is DB-only for frontend polling.
 
 **Audio analysis** (on-demand): `POST /api/v1/analyze-tracks` launches async librosa extraction from preview MP3s. Frontend polls `GET /api/v1/analyze-tracks/{task_id}` for progressive results. Background task uses dedicated DB session (not request-scoped). Results cached in `AudioFeatures` table.
 

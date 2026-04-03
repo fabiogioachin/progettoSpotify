@@ -156,12 +156,15 @@ async def _sync_user_recent_plays(
     user_id: int,
     client: SpotifyClient | None = None,
     max_pages: int = 1,
+    raise_on_throttle: bool = False,
 ):
     """Sincronizza ascolti recenti per un singolo utente.
 
     Paginazione con cursore `before` per recuperare piu' di 50 brani.
     max_pages=1 (default, login/hourly) → 50 brani.
     max_pages=3 (startup sync) → fino a 150 brani se il buffer Spotify li ha.
+    raise_on_throttle=True (login sync) → propaga ThrottleError al caller
+    per consentire retry a livello superiore.
     """
     owns_client = client is None
     if owns_client:
@@ -169,9 +172,7 @@ async def _sync_user_recent_plays(
     try:
         # Ultimo ascolto nel DB: se lo incontriamo, smettiamo di paginare
         last_db_result = await db.execute(
-            select(func.max(RecentPlay.played_at)).where(
-                RecentPlay.user_id == user_id
-            )
+            select(func.max(RecentPlay.played_at)).where(RecentPlay.user_id == user_id)
         )
         last_db_played_at = last_db_result.scalar()
 
@@ -185,12 +186,17 @@ async def _sync_user_recent_plays(
                 break
             try:
                 data = await retry_with_backoff(
-                    client.get_recently_played, limit=50, before=before_cursor
+                    client.get_recently_played, limit=50, before=before_cursor,
+                    skip_cache=True,
                 )
             except (RateLimitError, ThrottleError):
+                if raise_on_throttle and page == 0 and not all_items:
+                    raise  # Login sync: propaga per retry a livello superiore
                 logger.warning(
                     "Sync user_id=%d: rate limited alla pagina %d, salvo %d items",
-                    user_id, page, len(all_items),
+                    user_id,
+                    page,
+                    len(all_items),
                 )
                 break
 
@@ -201,9 +207,7 @@ async def _sync_user_recent_plays(
             for item in items:
                 played_at_str = item.get("played_at")
                 if played_at_str and last_db_played_at:
-                    dt = datetime.fromisoformat(
-                        played_at_str.replace("Z", "+00:00")
-                    )
+                    dt = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
                     if dt <= last_db_played_at:
                         reached_db = True
                         break
@@ -219,6 +223,8 @@ async def _sync_user_recent_plays(
                 break
             before_cursor = int(before_val)
 
+        # Parse all items into (track_id, played_at, track_data) tuples
+        parsed_items: list[tuple[str, datetime, dict]] = []
         for item in all_items:
             played_at_str = item.get("played_at")
             if not played_at_str:
@@ -228,16 +234,23 @@ async def _sync_user_recent_plays(
             track_id = track.get("id", "")
             if not track_id:
                 continue
+            parsed_items.append((track_id, dt, track))
 
-            # Check duplicato
-            exists = await db.execute(
-                select(func.count(RecentPlay.id)).where(
+        # Batch duplicate check: single query instead of N individual SELECTs
+        if parsed_items:
+            candidate_played_ats = [dt for _, dt, _ in parsed_items]
+            existing_result = await db.execute(
+                select(RecentPlay.track_spotify_id, RecentPlay.played_at).where(
                     RecentPlay.user_id == user_id,
-                    RecentPlay.track_spotify_id == track_id,
-                    RecentPlay.played_at == dt,
+                    RecentPlay.played_at.in_(candidate_played_ats),
                 )
             )
-            if exists.scalar() > 0:
+            existing_pairs = {(row[0], row[1]) for row in existing_result.all()}
+        else:
+            existing_pairs = set()
+
+        for track_id, dt, track in parsed_items:
+            if (track_id, dt) in existing_pairs:
                 continue
 
             db.add(
@@ -273,11 +286,11 @@ async def _sync_user_recent_plays(
         # Upsert track popularity from recently-played response (zero extra API calls)
         now_utc = datetime.now(timezone.utc)
         pop_count = 0
-        for item in items:
+        for item in all_items:
             track = item.get("track", {})
             track_id = track.get("id", "")
             popularity = track.get("popularity")
-            if not track_id or popularity is None or popularity == 0:
+            if not track_id or popularity is None:
                 continue
             stmt = (
                 pg_insert(TrackPopularity)
@@ -309,7 +322,7 @@ async def _sync_user_recent_plays(
             artist_ids = list(
                 {
                     item.get("track", {}).get("artists", [{}])[0].get("id", "")
-                    for item in items
+                    for item in all_items
                     if item.get("track", {}).get("artists")
                 }
                 - {""}

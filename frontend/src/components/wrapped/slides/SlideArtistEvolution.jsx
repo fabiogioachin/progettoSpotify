@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Music } from 'lucide-react'
 import { StaggerContainer, StaggerItem } from '../../ui/StaggerContainer'
 
 function ArtistGroup({ title, artists, highlight }) {
+  const [imgErrors, setImgErrors] = useState(new Set())
+
   if (!artists?.length) return null
 
   return (
@@ -13,29 +16,27 @@ function ArtistGroup({ title, artists, highlight }) {
       <StaggerContainer className="flex gap-4">
         {artists.slice(0, 3).map((artist, i) => {
           const imgUrl = artist.image || artist.image_url || artist.images?.[0]?.url
+          const key = artist.name || i
           return (
-            <StaggerItem key={artist.name || i} className="flex flex-col items-center">
-              {imgUrl ? (
+            <StaggerItem key={key} className="flex flex-col items-center">
+              {imgUrl && !imgErrors.has(key) ? (
                 <img
                   src={imgUrl}
                   alt={artist.name}
                   className={`w-20 h-20 rounded-full object-cover ${
                     highlight ? 'ring-2 ring-accent' : ''
                   }`}
-                  onError={(e) => {
-                    e.target.style.display = 'none'
-                    e.target.nextElementSibling.style.display = 'flex'
-                  }}
+                  onError={() => setImgErrors(prev => new Set(prev).add(key))}
                 />
-              ) : null}
-              <div
-                className={`w-20 h-20 rounded-full bg-surface-hover items-center justify-center ${
-                  highlight ? 'ring-2 ring-accent' : ''
-                }`}
-                style={{ display: imgUrl ? 'none' : 'flex' }}
-              >
-                <Music size={24} className="text-text-muted" />
-              </div>
+              ) : (
+                <div
+                  className={`w-20 h-20 rounded-full bg-surface-hover flex items-center justify-center ${
+                    highlight ? 'ring-2 ring-accent' : ''
+                  }`}
+                >
+                  <Music size={24} className="text-text-muted" />
+                </div>
+              )}
               <span className="text-sm text-text-primary mt-2 text-center max-w-[80px] truncate">
                 {artist.name}
               </span>

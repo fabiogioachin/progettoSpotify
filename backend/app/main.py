@@ -87,6 +87,470 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
+async def _warmup_genre_cache():
+    """Fill artist_genres cache for known artists at low rate (P2_BATCH).
+
+    Runs after startup sync completes. Collects all artist IDs from
+    top_artists across all users and time ranges, then fills missing
+    genre cache entries one-by-one with 3s delay between calls.
+    """
+    await asyncio.sleep(15)  # Let startup sync finish
+
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app.models.track import ArtistGenre
+    from app.models.user import User
+    from app.services.api_budget import Priority
+    from app.services.genre_cache import get_artist_genres_cached
+
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(User.id))
+            user_ids = [row[0] for row in result.fetchall()]
+
+        if not user_ids:
+            return
+
+        # Collect artist IDs from top_artists (already cached from startup sync)
+        all_artist_ids: set[str] = set()
+        for uid in user_ids:
+            async with async_session() as db:
+                client = SpotifyClient(db, uid, priority=Priority.P2_BATCH)
+                try:
+                    for tr in ["short_term", "medium_term", "long_term"]:
+                        try:
+                            from app.utils.rate_limiter import retry_with_backoff as _rb
+
+                            data = await _rb(client.get_top_artists, time_range=tr)
+                            for artist in data.get("items", []):
+                                if artist.get("id"):
+                                    all_artist_ids.add(artist["id"])
+                        except Exception:
+                            pass
+                finally:
+                    await client.close()
+
+        if not all_artist_ids:
+            logger.info("Genre warmup: nessun artista da cachare")
+            return
+
+        # Check which are NOT already cached in DB (within TTL)
+        async with async_session() as db:
+            from datetime import datetime, timezone
+
+            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+            result = await db.execute(
+                select(ArtistGenre.artist_spotify_id).where(
+                    ArtistGenre.artist_spotify_id.in_(list(all_artist_ids)),
+                    ArtistGenre.cached_at > cutoff,
+                )
+            )
+            cached = {row[0] for row in result.fetchall()}
+
+        missing = list(all_artist_ids - cached)
+        if not missing:
+            logger.info(
+                "Genre warmup Spotify: tutti gli artisti gia' in cache (%d)",
+                len(all_artist_ids),
+            )
+            # Still run MusicBrainz pass for cached artists with empty genres
+            await _warmup_musicbrainz_pass(all_artist_ids)
+            # Phase 3: Playlist-inferred genres for remaining genreless artists
+            await _warmup_playlist_inferred_genres(user_ids, all_artist_ids)
+            return
+
+        logger.info(
+            "Genre warmup: %d artisti da cachare (su %d totali)",
+            len(missing),
+            len(all_artist_ids),
+        )
+
+        # Fetch sequentially, 1 every 3 seconds
+        for i, artist_id in enumerate(missing):
+            try:
+                async with async_session() as db:
+                    client = SpotifyClient(db, user_ids[0], priority=Priority.P2_BATCH)
+                    try:
+                        await get_artist_genres_cached(db, client, [artist_id])
+                    finally:
+                        await client.close()
+                if (i + 1) % 10 == 0:
+                    logger.info("Genre warmup: %d/%d artisti", i + 1, len(missing))
+            except (RateLimitError, ThrottleError):
+                logger.info(
+                    "Genre warmup: rate limited at %d/%d, stopping",
+                    i + 1,
+                    len(missing),
+                )
+                break
+            except Exception as exc:
+                logger.warning("Genre warmup failed for %s: %s", artist_id, exc)
+            await asyncio.sleep(3)
+
+        processed = min(i + 1, len(missing)) if missing else 0
+        logger.info(
+            "Genre warmup Spotify completato: %d artisti processati",
+            processed,
+        )
+
+        # Phase 2: MusicBrainz fallback for artists still without genres
+        await _warmup_musicbrainz_pass(all_artist_ids)
+
+        # Phase 3: Playlist-inferred genres for remaining genreless artists
+        await _warmup_playlist_inferred_genres(user_ids, all_artist_ids)
+    except Exception as exc:
+        logger.warning("Genre warmup fallito: %s", exc)
+
+
+def _needs_musicbrainz_lookup(genres_str: str | None) -> bool:
+    """Return True if the genres column value has no useful genre data.
+
+    Matches:
+    - NULL / empty string / "null" / "None" / "[]"
+    - JSON list that is empty after filtering non-genre tags
+    """
+    if not genres_str:
+        return True
+    stripped = genres_str.strip()
+    if stripped in ("[]", "null", "", "None"):
+        return True
+    # Check if stored genres contain ONLY non-genre tags (e.g. ["italian"])
+    try:
+        import json as _json
+
+        from app.services.musicbrainz_client import filter_non_genre_tags
+
+        parsed = _json.loads(stripped)
+        if isinstance(parsed, list):
+            filtered = filter_non_genre_tags(parsed)
+            return len(filtered) == 0
+    except Exception:
+        return True
+    return False
+
+
+async def _warmup_musicbrainz_pass(all_artist_ids: set[str]) -> None:
+    """MusicBrainz fallback: enrich artists with empty or bad-tag-only genres.
+
+    Runs after Spotify genre warmup. Fetches ALL artist_genres rows for the
+    given artist IDs, then filters in Python for those that need a lookup
+    (empty genres, or genres consisting only of non-genre tags like "italian").
+    Queries MusicBrainz one-by-one at 1 req/s rate. Updates DB only when
+    MusicBrainz returns valid genre results.
+    """
+    import json
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.models.track import ArtistGenre
+    from app.services.musicbrainz_client import search_artist_genres
+
+    try:
+        # Fetch ALL rows for these artist IDs and filter in Python
+        async with async_session() as db:
+            result = await db.execute(
+                select(
+                    ArtistGenre.artist_spotify_id,
+                    ArtistGenre.artist_name,
+                    ArtistGenre.genres,
+                ).where(
+                    ArtistGenre.artist_spotify_id.in_(list(all_artist_ids)),
+                )
+            )
+            all_rows = result.fetchall()
+
+        # Filter for artists that need MusicBrainz lookup
+        empty_genre_artists = [
+            (row[0], row[1])
+            for row in all_rows
+            if row[1] and _needs_musicbrainz_lookup(row[2])
+        ]
+
+        if not empty_genre_artists:
+            logger.info(
+                "Genre warmup MusicBrainz: tutti gli artisti hanno gia' generi validi"
+            )
+            return
+
+        logger.info(
+            "Genre warmup MusicBrainz: %d artisti senza generi validi (su %d totali)",
+            len(empty_genre_artists),
+            len(all_rows),
+        )
+
+        mb_found = 0
+        for i, (aid, name) in enumerate(empty_genre_artists):
+            try:
+                mb_genres = await search_artist_genres(name)
+                if mb_genres:
+                    mb_found += 1
+                    async with async_session() as db:
+                        now = datetime.now(timezone.utc)
+                        stmt = (
+                            pg_insert(ArtistGenre)
+                            .values(
+                                artist_spotify_id=aid,
+                                artist_name=name,
+                                genres=json.dumps(mb_genres),
+                                cached_at=now,
+                            )
+                            .on_conflict_do_update(
+                                index_elements=["artist_spotify_id"],
+                                set_={
+                                    "genres": json.dumps(mb_genres),
+                                    "cached_at": now,
+                                },
+                            )
+                        )
+                        await db.execute(stmt)
+                        await db.commit()
+            except Exception as exc:
+                logger.warning("MusicBrainz warmup failed for %s: %s", name, exc)
+
+            if (i + 1) % 10 == 0:
+                logger.info(
+                    "Genre warmup MusicBrainz: %d/%d artisti (%d trovati)",
+                    i + 1,
+                    len(empty_genre_artists),
+                    mb_found,
+                )
+
+        logger.info(
+            "Genre warmup MusicBrainz completato: %d/%d artisti arricchiti",
+            mb_found,
+            len(empty_genre_artists),
+        )
+    except Exception as exc:
+        logger.warning("Genre warmup MusicBrainz fallito: %s", exc)
+
+
+# --- Phase 3: Playlist-inferred genres ---
+
+_GENRE_PLAYLIST_KEYWORDS: set[str] = {
+    "phonk",
+    "drill",
+    "tek",
+    "techno",
+    "house",
+    "cassa dritta",
+    "funk",
+    "trap",
+    "hip hop",
+    "rap",
+    "rock",
+    "pop",
+    "r&b",
+    "reggaeton",
+    "afrobeat",
+    "dance",
+    "edm",
+    "dubstep",
+    "dnb",
+    "drum and bass",
+    "chill",
+    "lo-fi",
+    "lofi",
+    "jazz",
+    "soul",
+    "gospel",
+    "metal",
+    "punk",
+    "indie",
+    "alternative",
+    "classical",
+    "electronic",
+    "ambient",
+    "trance",
+    "psytrance",
+    "minimal",
+    "deep house",
+    "tech house",
+    "bass",
+    "grime",
+    "garage",
+    "uk garage",
+    "reggae",
+    "dancehall",
+    "latin",
+    "salsa",
+    "bachata",
+    "cumbia",
+    "disco",
+    "synthwave",
+    "new wave",
+    "post-punk",
+    "shoegaze",
+    "grunge",
+    "emo",
+    "hardcore",
+    "breakbeat",
+    "jungle",
+    "dub",
+    "ska",
+    "blues",
+    "country",
+    "folk",
+    # Italian / niche
+    "hi tech",
+    "drip",
+}
+
+
+def _playlist_name_to_genre(name: str) -> str | None:
+    """Return genre string if playlist name looks like a genre, else None."""
+    lower = name.lower().strip()
+    if lower in _GENRE_PLAYLIST_KEYWORDS:
+        return lower
+    # Partial match: "Chill house" -> "chill house" (short name = likely a genre)
+    for keyword in _GENRE_PLAYLIST_KEYWORDS:
+        if keyword in lower and len(lower) < 30:
+            return lower
+    return None
+
+
+async def _warmup_playlist_inferred_genres(
+    user_ids: list[int], all_artist_ids: set[str]
+) -> None:
+    """Phase 3: Infer genres from playlist names for remaining genreless artists.
+
+    For each user, fetches their playlists (1 API call, cached). For playlists
+    whose name matches a known genre keyword, fetches items (1 call each, cached).
+    Builds artist -> {playlist_genres} mapping, then upserts only for artists
+    that still have empty genres after Spotify + MusicBrainz passes.
+    """
+    import json
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.models.track import ArtistGenre
+    from app.services.api_budget import Priority
+    from app.utils.rate_limiter import retry_with_backoff
+
+    try:
+        for uid in user_ids:
+            async with async_session() as db:
+                client = SpotifyClient(db, uid, priority=Priority.P2_BATCH)
+                try:
+                    # Get playlists (cached in Redis, 1 API call)
+                    playlists_data = await retry_with_backoff(
+                        client.get_playlists, limit=50
+                    )
+                    playlists = playlists_data.get("items", [])
+
+                    # Map genre-like playlists
+                    genre_playlists: list[tuple[str, str]] = []
+                    for p in playlists:
+                        genre = _playlist_name_to_genre(p.get("name", ""))
+                        if genre:
+                            genre_playlists.append((p["id"], genre))
+
+                    if not genre_playlists:
+                        continue
+
+                    logger.info(
+                        "Playlist genre inference: %d playlist-genere per user_id=%d",
+                        len(genre_playlists),
+                        uid,
+                    )
+
+                    # For each genre playlist, get items (cached)
+                    artist_genres_map: dict[str, set[str]] = {}
+                    artist_names: dict[str, str] = {}
+
+                    for pid, genre in genre_playlists:
+                        try:
+                            items_data = await retry_with_backoff(
+                                client.get_playlist_items, pid, limit=50, offset=0
+                            )
+                            for item in items_data.get("items", []):
+                                track = item.get("item") or item.get("track")
+                                if not track:
+                                    continue
+                                for artist in track.get("artists", []):
+                                    aid = artist.get("id")
+                                    if aid:
+                                        artist_genres_map.setdefault(aid, set()).add(
+                                            genre
+                                        )
+                                        if aid not in artist_names:
+                                            artist_names[aid] = artist.get("name", "")
+                        except (RateLimitError, ThrottleError):
+                            logger.info(
+                                "Playlist genre inference: rate limited, stopping playlist fetch"
+                            )
+                            break
+                        except Exception as exc:
+                            logger.debug(
+                                "Playlist items fetch failed for %s: %s", pid, exc
+                            )
+                            continue
+                        await asyncio.sleep(2)
+
+                    if not artist_genres_map:
+                        continue
+
+                    # Only update artists that are in our warmup set AND have empty genres
+                    relevant_ids = set(artist_genres_map.keys()) & all_artist_ids
+                    if not relevant_ids:
+                        continue
+
+                    result = await db.execute(
+                        select(
+                            ArtistGenre.artist_spotify_id, ArtistGenre.genres
+                        ).where(
+                            ArtistGenre.artist_spotify_id.in_(list(relevant_ids))
+                        )
+                    )
+                    existing = {row[0]: row[1] for row in result.fetchall()}
+
+                    updated = 0
+                    for aid in relevant_ids:
+                        current = existing.get(aid)
+                        # Only update if current genres are empty/missing
+                        if not _needs_musicbrainz_lookup(current):
+                            continue
+
+                        inferred_genres = artist_genres_map[aid]
+                        genres_list = sorted(inferred_genres)
+                        now = datetime.now(timezone.utc)
+                        stmt = (
+                            pg_insert(ArtistGenre)
+                            .values(
+                                artist_spotify_id=aid,
+                                artist_name=artist_names.get(aid, ""),
+                                genres=json.dumps(genres_list),
+                                cached_at=now,
+                            )
+                            .on_conflict_do_update(
+                                index_elements=["artist_spotify_id"],
+                                set_={
+                                    "genres": json.dumps(genres_list),
+                                    "cached_at": now,
+                                },
+                            )
+                        )
+                        await db.execute(stmt)
+                        updated += 1
+
+                    if updated:
+                        await db.commit()
+                        logger.info(
+                            "Playlist genre inference completato: %d artisti arricchiti per user_id=%d",
+                            updated,
+                            uid,
+                        )
+                finally:
+                    await client.close()
+    except Exception as exc:
+        logger.warning("Playlist genre inference fallito: %s", exc)
+
+
 async def _startup_sync_recent_plays():
     """Sync ascolti recenti per tutti gli utenti all'avvio del backend.
 
@@ -114,19 +578,38 @@ async def _startup_sync_recent_plays():
         )
 
         for uid in user_ids:
-            try:
-                async with async_session() as db:
-                    client = SpotifyClient(
-                        db, uid, priority=Priority.P1_BACKGROUND_SYNC
-                    )
-                    try:
-                        await _sync_user_recent_plays(
-                            db, uid, client, max_pages=20
+            synced = False
+            for attempt in range(3):
+                try:
+                    async with async_session() as db:
+                        client = SpotifyClient(
+                            db, uid, priority=Priority.P0_INTERACTIVE
                         )
-                    finally:
-                        await client.close()
-            except Exception as exc:
-                logger.warning("Startup sync user_id=%d fallito: %s", uid, exc)
+                        try:
+                            await _sync_user_recent_plays(
+                                db,
+                                uid,
+                                client,
+                                max_pages=20,
+                                raise_on_throttle=True,
+                            )
+                            synced = True
+                        finally:
+                            await client.close()
+                    break
+                except (RateLimitError, ThrottleError) as exc:
+                    wait = min(getattr(exc, "retry_after", 10) or 10, 35)
+                    logger.info(
+                        "Startup sync user_id=%d throttled (tentativo %d/3), "
+                        "attendo %ds",
+                        uid,
+                        attempt + 1,
+                        wait,
+                    )
+                    await asyncio.sleep(wait)
+                except Exception as exc:
+                    logger.warning("Startup sync user_id=%d fallito: %s", uid, exc)
+                    break
             await asyncio.sleep(5)  # Stagger tra utenti
 
         logger.info("Startup sync completato")
@@ -182,6 +665,9 @@ async def lifespan(app: FastAPI):
     # Startup sync: recupera ascolti recenti per tutti gli utenti (max 3 pagine = 150 brani)
     # Non-blocking: lancia come task asincrono, il backend è già pronto per le request
     asyncio.create_task(_startup_sync_recent_plays())
+
+    # Genre cache warmup: fill artist_genres for known artists (runs after startup sync)
+    asyncio.create_task(_warmup_genre_cache())
 
     yield
 

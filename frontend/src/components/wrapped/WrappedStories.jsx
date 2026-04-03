@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import PeriodSelector from '../ui/PeriodSelector'
@@ -33,30 +33,49 @@ const slideVariants = {
   }),
 }
 
-export default function WrappedStories({ data, period, onPeriodChange, onClose }) {
-  const [currentIndex, setCurrentIndex] = useState(0)
+export default function WrappedStories({
+  data,
+  availableSlides = [],
+  isComputing = false,
+  computePhase = '',
+  computeProgress = { completed: 0, total: 5 },
+  isWaiting = false,
+  waitSeconds = 0,
+  period,
+  onPeriodChange,
+  onClose,
+}) {
+  const [currentSlideId, setCurrentSlideId] = useState('intro')
   const [direction, setDirection] = useState(1)
 
-  const slides = ALL_SLIDES.filter((s) =>
-    data?.available_slides?.includes(s.id)
+  // Set of available slide IDs for quick lookup
+  const availableSet = useMemo(() => new Set(availableSlides), [availableSlides])
+
+  // Slides that are currently navigable
+  const activeSlides = useMemo(
+    () => ALL_SLIDES.filter((s) => availableSet.has(s.id)),
+    [availableSet],
   )
 
-  // Fallback: if available_slides is missing, show all slides
-  const activeSlides = slides.length > 0 ? slides : ALL_SLIDES
+  // Current index within activeSlides
+  const currentIndex = useMemo(
+    () => Math.max(0, activeSlides.findIndex((s) => s.id === currentSlideId)),
+    [activeSlides, currentSlideId],
+  )
 
   const goNext = useCallback(() => {
     if (currentIndex < activeSlides.length - 1) {
       setDirection(1)
-      setCurrentIndex((i) => i + 1)
+      setCurrentSlideId(activeSlides[currentIndex + 1].id)
     }
-  }, [currentIndex, activeSlides.length])
+  }, [currentIndex, activeSlides])
 
   const goPrev = useCallback(() => {
     if (currentIndex > 0) {
       setDirection(-1)
-      setCurrentIndex((i) => i - 1)
+      setCurrentSlideId(activeSlides[currentIndex - 1].id)
     }
-  }, [currentIndex])
+  }, [currentIndex, activeSlides])
 
   // Keyboard navigation
   useEffect(() => {
@@ -86,20 +105,34 @@ export default function WrappedStories({ data, period, onPeriodChange, onClose }
 
   return (
     <div className="fixed inset-0 bg-background z-[100]">
-      {/* Progress bars */}
+      {/* Progress bars — all expected slides as segments */}
       <div className="absolute top-0 left-0 right-0 z-50 flex gap-1 px-3 pt-3">
-        {activeSlides.map((_, i) => (
-          <div
-            key={i}
-            className="flex-1 h-[3px] bg-white/20 rounded-full overflow-hidden"
-          >
+        {ALL_SLIDES.map((slide) => {
+          const isAvailable = availableSet.has(slide.id)
+          const activeIdx = activeSlides.findIndex((s) => s.id === slide.id)
+          const isVisited = isAvailable && activeIdx <= currentIndex
+
+          return (
             <div
-              className={`h-full rounded-full transition-all duration-300 ${
-                i <= currentIndex ? 'bg-accent w-full' : 'w-0'
-              }`}
-            />
-          </div>
-        ))}
+              key={slide.id}
+              className="flex-1 h-[3px] bg-white/20 rounded-full overflow-hidden"
+            >
+              {isAvailable ? (
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    isVisited ? 'bg-accent w-full' : 'w-0'
+                  }`}
+                />
+              ) : (
+                /* Shimmer for pending slides */
+                <div
+                  className="h-full w-full rounded-full bg-gradient-to-r from-white/5 via-white/15 to-white/5 animate-shimmer"
+                  style={{ backgroundSize: '200% 100%' }}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Close button */}
@@ -111,10 +144,24 @@ export default function WrappedStories({ data, period, onPeriodChange, onClose }
         <X size={20} />
       </button>
 
-      {/* Slide content — pointer-events-none so click zone works through it */}
+      {/* Computing indicator */}
+      {isComputing && (
+        <div className="absolute top-4 left-4 z-50 flex items-center gap-2 text-text-muted text-xs">
+          <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+          <span>
+            {isWaiting
+              ? `In attesa (${waitSeconds}s)...`
+              : computePhase
+                ? `${computePhase} (${computeProgress.completed}/${computeProgress.total})`
+                : `Elaborazione in corso (${computeProgress.completed}/${computeProgress.total})...`}
+          </span>
+        </div>
+      )}
+
+      {/* Slide content */}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.div
-          key={currentIndex}
+          key={currentSlideId}
           custom={direction}
           variants={slideVariants}
           initial="enter"
@@ -126,14 +173,14 @@ export default function WrappedStories({ data, period, onPeriodChange, onClose }
         </motion.div>
       </AnimatePresence>
 
-      {/* Period selector — bottom center, interactive */}
+      {/* Period selector */}
       {onPeriodChange && (
         <div className="absolute bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-auto">
           <PeriodSelector value={period} onChange={onPeriodChange} />
         </div>
       )}
 
-      {/* Click zones — below slide content, handles navigation taps */}
+      {/* Click zones */}
       <div
         className="absolute inset-0 z-10"
         onPointerDown={handlePointerDown}

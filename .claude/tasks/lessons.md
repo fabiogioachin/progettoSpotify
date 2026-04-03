@@ -56,17 +56,28 @@ Lessons that affect future tasks. Target: under 15 entries.
 **Root cause**: Il workflow di verifica (lint/test/build) non include `git status -u` per individuare file spazzatura.
 **Action**: Dopo ogni wave di agenti, eseguire `git status -u` per individuare file non tracked inattesi. Verificare che i comandi pip usino quoting (`"pkg>=version"`).
 
-### 2026-03-21 — [codebase] TrackPopularity had no writer — dead table for weeks
-**Context**: `popularity_cache.py` comment said "populated by sync_recent_plays" but no write path existed.
-**What happened**: Popularity null everywhere. Discovery chart disappeared (all tracks in 0-20 bucket).
-**Root cause**: Writer was never implemented. Comment was aspirational, not factual.
-**Action**: When creating a DB table + read function, implement the write path in the same PR. Verify the table has rows after the job runs.
+### 2026-03-21 / 2026-04-02 — [codebase] Login sync: cache poisoning + priority + retry
+**Context**: Login/startup sync ran but stored 0 items. DB stuck at March 28, Spotify API had April 1 data.
+**What happened**: Three stacked bugs: (1) `get_recently_played(limit=50)` cached in Redis 120s — page load cached stale data, sync got cached result. (2) P1_BACKGROUND_SYNC budget (1 call/user) exhausted by page loads. (3) ThrottleError swallowed with `break`, no retry.
+**Root cause**: Sync shared the same cached `get_recently_played` as the interactive endpoints. The sync MUST see fresh data to detect new plays.
+**Action**: (1) `skip_cache=True` on `get_recently_played` in sync — fresh API data always. (2) P0_INTERACTIVE priority. (3) `raise_on_throttle=True` + retry loop (3 attempts). (4) Same fix in both startup sync (main.py) and login sync (auth.py).
 
-### 2026-03-21 — [codebase] Listening data lost when backend is down — sync only on timer
-**Context**: User reported missing listening days (Sun/Mon/Tue). `sync_recent_plays` only ran on 60-min APScheduler timer.
-**What happened**: Backend was not running for days. Spotify's recently-played buffer (50 items max) rolled over. Older plays permanently lost.
-**Root cause**: APScheduler is in-memory only — no persistence, no catch-up for missed fires. No sync triggered on user login.
-**Action**: Always sync recent plays on login (`/auth/me`), not just on the timer. The login sync is the safety net — the timer is optimization. Applied: `_try_sync_and_snapshot` now runs `_sync_user_recent_plays` before the daily snapshot.
+### 2026-04-03 — [codebase] Spotify dev mode returns empty genres AND popularity for ALL artists
+**Context**: Ecosistema Artisti showed 0 connections, 82 artists without genres
+**What happened**: `/me/top/artists` AND `/artists/{id}` both return `popularity: 0, genres: []` for every artist in dev mode. Not just underground — Sfera Ebbasta, Drake, Ludovico Einaudi all empty.
+**Root cause**: Spotify dev mode strips these fields entirely. This is NOT a per-artist issue — it's a blanket dev mode limitation.
+**Action**: (1) Never rely on Spotify for genres/popularity in dev mode. (2) Use MusicBrainz as primary genre source (1 req/s, search + MBID lookup). (3) Use playlist-inferred genres as tertiary fallback. (4) Remove popularity-based fallback logic (all zeros = garbage edges).
+
+### 2026-04-03 — [codebase] MusicBrainz first match is often wrong for common names
+**Context**: MEDUZA matched "Eddie Meduza" (Swedish rock) instead of "MEDUZA" (Italian house group)
+**What happened**: MusicBrainz search returns by score. "Eddie Meduza" had score=100, correct "MEDUZA" had score=91.
+**Root cause**: First-match-above-threshold picks the wrong artist when names are shared.
+**Action**: Among candidates within 10 score points, prefer exact name match (case-insensitive). Implemented in `_pick_best_match()`.
+
+### 2026-04-03 — [codebase] MusicBrainz tags include non-genre junk that creates false graph edges
+**Context**: Ludovico Einaudi placed in Trap cluster. MusicBrainz tagged him "italian" — same tag as Sfera Ebbasta.
+**Root cause**: MusicBrainz community tags include nationality, roles, decades, junk. These create false genre-similarity edges.
+**Action**: `_NON_GENRE_TAGS` blocklist (~100 entries) filters nationality, decades, roles, meta tags. Applied at fetch time in `musicbrainz_client.py`.
 
 ### 2026-03-21 — [codebase] Falsy-zero bug: `not t.get("popularity")` treats 0 as missing
 **Context**: `popularity_cache.py` line 31 used truthiness check on a numeric field.
@@ -75,6 +86,9 @@ Lessons that affect future tasks. Target: under 15 entries.
 
 ## Archive
 Resolved or one-off entries. Not read by agents.
+
+### 2026-03-21 — [codebase] TrackPopularity had no writer — RESOLVED 2026-04-02
+Writer implemented: `sync_recent_plays` now correctly iterates `all_items` (was `items` — last page only). Fixed `popularity == 0` rejection. Table populates on every hourly sync.
 
 ### 2026-03 — [codebase] html2canvas doesn't resolve CSS variables
 Pass explicit `backgroundColor: '#121212'` to html2canvas options. Fixed.

@@ -1,6 +1,4 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
-import { Network } from 'lucide-react'
-import EmptyState from '../ui/EmptyState'
 
 const CLUSTER_COLORS = [
   '#6366f1', '#1DB954', '#f59e0b', '#ec4899', '#06b6d4',
@@ -202,6 +200,8 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return () => {
       if (kgAnimRef.current) cancelAnimationFrame(kgAnimRef.current)
     }
+  // Suppressed: genreNodes/genreEdges are unstable array props; kgDataKey (derived string)
+  // already captures their identity, and adding them would restart the simulation on every render.
   }, [viewMode, kgDataKey, kgNodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize positions
@@ -304,6 +304,8 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
     }
+  // Suppressed: nodes/edges are unstable array props; dataKey (derived string)
+  // already captures their identity, and adding them would restart the simulation on every render.
   }, [dataKey, nodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMouseEnter = useCallback((node, pos) => {
@@ -337,12 +339,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
   }
 
   if (!nodes.length) {
-    return (
-      <div className="glow-card bg-surface rounded-xl p-5">
-        <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-        <EmptyState icon={Network} message="Ascolta più artisti per creare la rete" />
-      </div>
-    )
+    return null
   }
 
   if (viewMode === 'kg') {
@@ -492,12 +489,14 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
         )}
         {/* Cluster Legend */}
         <div className="flex flex-wrap gap-3 mt-3">
-          {[...new Set(clusters.map(c => c.cluster))].slice(0, 8).map(clusterId => (
-            <div key={clusterId} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
-              <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cerchia ${clusterId + 1}`}</span>
-            </div>
-          ))}
+          {[...new Set(clusters.map(c => c.cluster))]
+            .filter(clusterId => clusterNames[clusterId])
+            .map(clusterId => (
+              <div key={clusterId} className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
+                <span className="text-text-muted text-xs">{clusterNames[clusterId]}</span>
+              </div>
+            ))}
         </div>
       </div>
     )
@@ -626,12 +625,14 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
       )}
       {/* Cluster Legend */}
       <div className="flex flex-wrap gap-3 mt-3">
-        {[...new Set(clusters.map(c => c.cluster))].slice(0, 8).map(clusterId => (
-          <div key={clusterId} className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
-            <span className="text-text-muted text-xs">{clusterNames[clusterId] || `Cerchia ${clusterId + 1}`}</span>
-          </div>
-        ))}
+        {[...new Set(clusters.map(c => c.cluster))]
+          .filter(clusterId => clusterNames[clusterId])
+          .map(clusterId => (
+            <div key={clusterId} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length] }} />
+              <span className="text-text-muted text-xs">{clusterNames[clusterId]}</span>
+            </div>
+          ))}
       </div>
     </div>
   )

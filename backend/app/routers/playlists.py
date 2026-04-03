@@ -4,13 +4,16 @@ import asyncio
 import logging
 import re
 from collections import Counter
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session, get_db
 from app.dependencies import require_auth
+from app.models.playlist_metadata import PlaylistMetadata
 from app.models.user import User
 from app.schemas import (
     PlaylistCompareRequest,
@@ -28,7 +31,6 @@ from app.utils.rate_limiter import (
     SpotifyAuthError,
     SpotifyServerError,
     ThrottleError,
-    gather_in_chunks,
     retry_with_backoff,
 )
 
@@ -40,6 +42,122 @@ router = APIRouter(prefix="/api/v1/playlists", tags=["playlists"])
 _MAX_THROTTLE_RETRIES = 3
 
 
+# ---------------------------------------------------------------------------
+# Helper: upsert playlist metadata to DB cache
+# ---------------------------------------------------------------------------
+
+async def _upsert_playlist_metadata(
+    db: AsyncSession,
+    user_id: int,
+    playlist_id: str,
+    track_count: int,
+    name: str = "",
+    image_url: str | None = None,
+    is_owner: bool = True,
+) -> None:
+    """Upsert playlist metadata to DB cache. Non-blocking — swallows errors."""
+    try:
+        stmt = pg_insert(PlaylistMetadata).values(
+            user_id=user_id,
+            playlist_id=playlist_id,
+            track_count=track_count,
+            name=name,
+            image_url=image_url,
+            is_owner=is_owner,
+            updated_at=datetime.now(timezone.utc),
+        ).on_conflict_do_update(
+            constraint="uq_playlist_metadata_user_pid",
+            set_={
+                "track_count": track_count,
+                "name": name,
+                "image_url": image_url,
+                "is_owner": is_owner,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+        await db.execute(stmt)
+        await db.commit()
+    except Exception as exc:
+        logger.warning("Playlist metadata upsert failed for %s: %s", playlist_id, exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Background task: fetch remaining zero-count playlist track counts
+# ---------------------------------------------------------------------------
+
+async def _bg_fetch_remaining_counts(
+    user_id: int,
+    zero_pids: list[dict],
+) -> None:
+    """Background task: fetch track counts sequentially with delay, upsert to DB.
+
+    Uses dedicated DB session and SpotifyClient (not request-scoped).
+    """
+    if not zero_pids:
+        return
+
+    logger.info(
+        "BG playlist count fetch: %d playlist per user_id=%d",
+        len(zero_pids), user_id,
+    )
+
+    try:
+        async with async_session() as db:
+            client = SpotifyClient(db, user_id)
+            try:
+                for i, pinfo in enumerate(zero_pids):
+                    pid = pinfo["id"]
+                    fetched = False
+                    for attempt in range(3):
+                        try:
+                            meta = await retry_with_backoff(
+                                client.get_playlist_items, pid, limit=1, offset=0
+                            )
+                            total = meta.get("total") if meta else None
+                            if total and total > 0:
+                                await _upsert_playlist_metadata(
+                                    db,
+                                    user_id=user_id,
+                                    playlist_id=pid,
+                                    track_count=total,
+                                    name=pinfo.get("name", ""),
+                                    image_url=pinfo.get("image"),
+                                    is_owner=pinfo.get("is_owner", True),
+                                )
+                            fetched = True
+                            break
+                        except SpotifyAuthError:
+                            logger.warning("BG playlist count: auth expired, stopping")
+                            return
+                        except (ThrottleError, RateLimitError) as exc:
+                            wait = min(getattr(exc, "retry_after", 10) or 10, 35)
+                            logger.info(
+                                "BG playlist count: throttled at %d/%d (attempt %d/3), waiting %ds",
+                                i + 1, len(zero_pids), attempt + 1, wait,
+                            )
+                            await asyncio.sleep(wait)
+                        except Exception as exc:
+                            logger.warning("BG playlist count failed for %s: %s", pid, exc)
+                            break
+                    if not fetched:
+                        logger.warning("BG playlist count: gave up on %s after 3 attempts", pid)
+                    await asyncio.sleep(2)  # Sequential with 2s delay
+            finally:
+                await client.close()
+    except Exception as exc:
+        logger.warning("BG playlist count fetch failed: %s", exc)
+
+    logger.info("BG playlist count fetch completato per user_id=%d", user_id)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/playlists — list playlists with DB-cached track counts
+# ---------------------------------------------------------------------------
+
 @router.get("", response_model=PlaylistListResponse)
 async def get_playlists(
     request: Request,
@@ -48,7 +166,7 @@ async def get_playlists(
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    """Lista playlist dell'utente."""
+    """Lista playlist dell'utente con track count da cache DB."""
     client = SpotifyClient(db, user_id)
 
     try:
@@ -57,68 +175,118 @@ async def get_playlists(
         user = user_result.scalar_one_or_none()
         user_spotify_id = user.spotify_id if user else None
 
+        # Step 1: Fetch playlist list from Spotify API (1 call)
         data = await retry_with_backoff(
             client.get_playlists, limit=limit, offset=offset
         )
 
+        # Step 2: Read ALL PlaylistMetadata rows for this user from DB
+        cached_result = await db.execute(
+            select(PlaylistMetadata).where(PlaylistMetadata.user_id == user_id)
+        )
+        cached_map: dict[str, PlaylistMetadata] = {
+            row.playlist_id: row for row in cached_result.scalars().all()
+        }
+
         playlists = []
+        to_upsert = []  # Playlists with real counts to persist
+        still_zero = []  # Playlists with no count from API or DB
+
         for item in data.get("items", []):
             if not item:
                 continue
+
+            pid = item["id"]
+            api_count = item.get("tracks", {}).get("total", 0)
+            is_owner = (
+                user_spotify_id is not None
+                and item.get("owner", {}).get("id") == user_spotify_id
+            )
+            name = item.get("name", "")
+            image = (
+                item.get("images", [{}])[0].get("url")
+                if item.get("images")
+                else None
+            )
+
+            # Step 3: Determine best-known track count
+            if api_count > 0:
+                # Spotify gave us a real count — use it
+                track_count = api_count
+                to_upsert.append({
+                    "playlist_id": pid,
+                    "track_count": api_count,
+                    "name": name,
+                    "image_url": image,
+                    "is_owner": is_owner,
+                })
+            elif pid in cached_map and cached_map[pid].track_count > 0:
+                # DB cache has a previously fetched count
+                track_count = cached_map[pid].track_count
+            else:
+                # No data from API or DB
+                track_count = 0
+                still_zero.append({
+                    "id": pid,
+                    "name": name,
+                    "image": image,
+                    "is_owner": is_owner,
+                })
+
             playlists.append(
                 {
-                    "id": item["id"],
-                    "name": item.get("name", ""),
+                    "id": pid,
+                    "name": name,
                     "description": item.get("description", ""),
-                    "image": (
-                        item.get("images", [{}])[0].get("url")
-                        if item.get("images")
-                        else None
-                    ),
-                    "track_count": item.get("tracks", {}).get("total", 0),
+                    "image": image,
+                    "track_count": track_count,
                     "owner": item.get("owner", {}).get("display_name", ""),
-                    "is_owner": (
-                        user_spotify_id is not None
-                        and item.get("owner", {}).get("id") == user_spotify_id
-                    ),
+                    "is_owner": is_owner,
                 }
             )
 
-        # Fallback: track_count può essere 0 se /me/playlists non restituisce
-        # tracks.total in dev mode. Fetch metadata individuale per quelle playlist.
-        # Limitato a 10 per non esaurire il budget API — le altre restano a 0
-        # e il conteggio reale arriva quando l'utente le apre in compare/analytics.
-        zero_count = [p for p in playlists if p["track_count"] == 0]
-        if zero_count:
-            to_fix = zero_count[:10]
-            logger.info(
-                "Track count fallback: fixing %d/%d playlist con count=0",
-                len(to_fix),
-                len(zero_count),
-            )
-
-            async def _fetch_playlist_meta(p: dict) -> None:
+        # Step 4: Upsert metadata for playlists with real counts (non-blocking)
+        if to_upsert:
+            try:
+                rows = [
+                    {
+                        "user_id": user_id,
+                        "playlist_id": r["playlist_id"],
+                        "track_count": r["track_count"],
+                        "name": r["name"],
+                        "image_url": r["image_url"],
+                        "is_owner": r["is_owner"],
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                    for r in to_upsert
+                ]
+                stmt = pg_insert(PlaylistMetadata).values(rows)
+                stmt = stmt.on_conflict_do_update(
+                    constraint="uq_playlist_metadata_user_pid",
+                    set_={
+                        "track_count": stmt.excluded.track_count,
+                        "name": stmt.excluded.name,
+                        "image_url": stmt.excluded.image_url,
+                        "is_owner": stmt.excluded.is_owner,
+                        "updated_at": stmt.excluded.updated_at,
+                    },
+                )
+                await db.execute(stmt)
+                await db.commit()
+            except Exception as exc:
+                logger.warning("Bulk playlist metadata upsert failed: %s", exc)
                 try:
-                    meta = await retry_with_backoff(
-                        client.get_playlist_items, p["id"], limit=1, offset=0
-                    )
-                    total = meta.get("total") if meta else None
-                    if total is not None:
-                        p["track_count"] = total
-                except SpotifyAuthError:
-                    raise
-                except Exception as exc:
-                    logger.warning(
-                        "Fallback track count failed for %s: %s", p["id"], exc
-                    )
+                    await db.rollback()
+                except Exception:
+                    pass
 
-            meta_results = await gather_in_chunks(
-                [_fetch_playlist_meta(p) for p in to_fix],
-                chunk_size=2,
+        # Step 5-6: Launch background task for remaining zeros
+        if still_zero:
+            logger.info(
+                "Launching BG task: %d playlist con track_count=0 per user_id=%d",
+                len(still_zero), user_id,
             )
-            for r in meta_results:
-                if isinstance(r, SpotifyAuthError):
-                    raise r
+            asyncio.create_task(_bg_fetch_remaining_counts(user_id, still_zero))
 
         return {"playlists": playlists, "total": data.get("total", 0)}
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
@@ -130,6 +298,24 @@ async def get_playlists(
         )
     finally:
         await client.close()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/playlists/counts — lightweight DB-only endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/counts")
+async def get_playlist_counts(
+    user_id: int = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restituisce track count cachati dal DB. Zero chiamate API."""
+    result = await db.execute(
+        select(PlaylistMetadata.playlist_id, PlaylistMetadata.track_count)
+        .where(PlaylistMetadata.user_id == user_id)
+    )
+    counts = {row.playlist_id: row.track_count for row in result.fetchall()}
+    return {"counts": counts}
 
 
 # ---------------------------------------------------------------------------

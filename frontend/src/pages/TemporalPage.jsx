@@ -64,7 +64,7 @@ export default function TemporalPage() {
         </div>
 
         {/* Data source info */}
-        <div className="bg-accent/5 border border-accent/10 rounded-xl px-4 py-2 text-text-secondary text-xs flex flex-wrap items-center gap-2">
+        {!loading && <div className="bg-accent/5 border border-accent/10 rounded-xl px-4 py-2 text-text-secondary text-xs flex flex-wrap items-center gap-2">
           {accumulated ? (
             <>
               <TrendingUp size={14} className="text-accent flex-shrink-0" />
@@ -85,7 +85,7 @@ export default function TemporalPage() {
               <span className="text-text-muted sm:ml-auto">I dati si accumulano ad ogni visita</span>
             </>
           )}
-        </div>
+        </div>}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-400 text-sm">{error}</div>

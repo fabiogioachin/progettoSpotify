@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Download, Share2 } from 'lucide-react'
-import html2canvas from 'html2canvas'
 
 export default function SlideOutro({ data }) {
   const cardRef = useRef(null)
@@ -25,6 +24,7 @@ export default function SlideOutro({ data }) {
   const handleDownload = async () => {
     if (!cardRef.current) return
     try {
+      const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#121212',
         scale: 2,
@@ -33,7 +33,7 @@ export default function SlideOutro({ data }) {
       const url = canvas.toDataURL('image/png')
       const a = document.createElement('a')
       a.href = url
-      a.download = 'my-wrapped-2026.png'
+      a.download = `my-wrapped-${new Date().getFullYear()}.png`
       a.click()
       canvas.remove()
     } catch (err) {
@@ -45,15 +45,17 @@ export default function SlideOutro({ data }) {
     if (!cardRef.current) return
     let canvas = null
     try {
+      const html2canvas = (await import('html2canvas')).default
       canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#121212',
         scale: 2,
         useCORS: true,
       })
       const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
-      const file = new File([blob], 'my-wrapped-2026.png', { type: 'image/png' })
+      const year = new Date().getFullYear()
+      const file = new File([blob], `my-wrapped-${year}.png`, { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Il Mio Wrapped 2026' })
+        await navigator.share({ files: [file], title: `Il Mio Wrapped ${year}` })
         return
       }
     } catch {
@@ -72,7 +74,7 @@ export default function SlideOutro({ data }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        Il Tuo 2026 in Musica
+        Il Tuo {new Date().getFullYear()} in Musica
       </motion.h2>
 
       {/* Summary card (captured for export) */}

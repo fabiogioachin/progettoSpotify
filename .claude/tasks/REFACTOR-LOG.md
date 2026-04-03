@@ -1,5 +1,122 @@
 # Refactor Log
 
+## 2026-04-02 — WrappedPage POST/poll progressive loading
+
+Date: 2026-04-02
+Description: Convert WrappedPage from blocking GET to async POST/poll with progressive slide availability
+Triggered by: /feature WrappedPage POST/poll (from todo.md Fase 2.4)
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Files created | 4 (wrapped_tasks.py, useWrappedTask.js, test_wrapped_tasks.py, test_wrapped_router.py) |
+| Files modified | 3 (wrapped.py, WrappedPage.jsx, WrappedStories.jsx) + 4 SKILL.md |
+| Tests added | 27 (411 total) |
+| Verification | pytest 411 passed, lint 0 errors, build OK |
+
+### Architecture
+
+- `POST /api/v1/wrapped?time_range=X` starts background task, returns task_id
+- `GET /api/v1/wrapped/{task_id}` polls for progressive results
+- Backend executes 5 services sequentially by importance (top_tracks → temporal → evolution → profile → network)
+- `available_slides` grows as each service completes
+- Frontend shows slides immediately as they become available (shimmer progress bar for pending)
+- Legacy `GET /wrapped` (blocking) preserved with deprecation log
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `backend/app/services/wrapped_tasks.py` | New: in-memory task store (TTL 30min, max 3/user) |
+| `backend/app/routers/wrapped.py` | Added POST, GET/{task_id}, _run_wrapped_task background worker |
+| `frontend/src/hooks/useWrappedTask.js` | New: POST/poll hook with auto-start, period change reset |
+| `frontend/src/pages/WrappedPage.jsx` | Replaced useSpotifyData with useWrappedTask |
+| `frontend/src/components/wrapped/WrappedStories.jsx` | Progressive slides, shimmer progress bar, slide-ID tracking |
+| `tailwind.config.js` | Added shimmer keyframe animation |
+| 4 SKILL.md files | Updated with RequestDataBundle + POST/poll patterns |
+
+---
+
+## 2026-04-02 — API Request Deduplication via RequestDataBundle
+
+Date: 2026-04-02
+Description: Eliminate duplicate Spotify API calls across services using request-scoped in-memory caching
+Triggered by: Refactoring API piano in todo.md
+Health findings: none (pre-refactoring bugs resolved in previous session)
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| Slices planned | 8 |
+| Slices completed | 6 (2 skipped — frontend already optimized or needs /feature) |
+| Slices reverted | 0 |
+| Files changed | 12 |
+| Files created | 7 (1 service + 6 test files) |
+| Tests added | 97 (287 baseline -> 384) |
+| Verification | `pytest -q` (384 passed) + `npm run lint` (0 errors) + `npm run build` (OK) |
+| Final status | All passing |
+
+### API Call Reduction
+
+| Endpoint | Before | After | Savings |
+|----------|--------|-------|---------|
+| `GET /wrapped` | 13 calls | 7 calls | -46% |
+| `GET /profile` | 5 calls | 4 calls | -20% |
+| `GET /analytics/trends` | 6 calls | 3 calls | -50% |
+| **Total per session** | **24 calls** | **14 calls** | **-42%** |
+
+### Slices
+
+| # | Description | Files | Status |
+|---|-------------|-------|--------|
+| P1 | Test taste_evolution (28 tests) | tests/test_taste_evolution.py | Prerequisite |
+| P2 | Test temporal_patterns (22 tests) | tests/test_temporal_patterns.py | Prerequisite |
+| P3 | Test audio_analyzer (18 tests) | tests/test_audio_analyzer.py | Prerequisite |
+| 1 | Create RequestDataBundle + 14 tests | services/data_bundle.py, tests/test_data_bundle.py | Done |
+| 2+3 | Wire bundle into /wrapped (taste_evolution + artist_network) | wrapped.py, taste_evolution.py, artist_network.py, 2 test files | Done |
+| 4 | Wire bundle into /profile (profile_metrics + taste_map) | profile.py, profile_metrics.py, taste_map.py, 2 test files | Done |
+| 5 | Wire bundle into /analytics/trends + fix wrapped compute_profile | analytics.py, audio_analyzer.py, wrapped.py, test file | Done |
+| 6-7 | Frontend progressive rendering | - | Skipped |
+
+### Changes by File
+
+| File | What Changed |
+|------|-------------|
+| `backend/app/services/data_bundle.py` | **Created** — RequestDataBundle: in-memory cache for get_top_tracks/artists/recently_played/me + parallel prefetch |
+| `backend/app/services/taste_evolution.py` | Added `bundle=None` param; uses bundle instead of direct client calls when provided |
+| `backend/app/services/artist_network.py` | Added `bundle=None` param; uses bundle for top_artists when provided |
+| `backend/app/services/profile_metrics.py` | Added `bundle=None` param; uses bundle for top_artists/top_tracks when provided |
+| `backend/app/services/taste_map.py` | Added `bundle=None` param; uses bundle for top_artists when provided |
+| `backend/app/services/audio_analyzer.py` | Added `bundle=None` to compute_trends + compute_profile; bundle flows from trends into profile |
+| `backend/app/routers/wrapped.py` | Creates bundle, prefetches artists+tracks+recent, passes to all services |
+| `backend/app/routers/profile.py` | Creates bundle, prefetches artists+tracks+me, passes to services |
+| `backend/app/routers/analytics.py` | Creates bundle, prefetches tracks, passes to compute_trends |
+| `backend/tests/test_data_bundle.py` | **Created** — 14 tests for RequestDataBundle |
+| `backend/tests/test_taste_evolution.py` | **Created** — 28 tests + 4 bundle integration tests |
+| `backend/tests/test_temporal_patterns.py` | **Created** — 22 tests |
+| `backend/tests/test_audio_analyzer.py` | **Created** — 18 tests + 2 bundle integration tests |
+| `backend/tests/test_profile_metrics.py` | Added 2 bundle integration tests |
+| `backend/tests/test_taste_map.py` | Added 3 bundle integration tests |
+| `backend/tests/test_artist_network.py` | Added 4 bundle integration tests |
+
+### Skipped Slices
+
+**Slice 6-7: Frontend Progressive Rendering**
+- DashboardPage: Already 3 independent hooks + per-section skeletons + SectionErrorBoundary. No changes needed.
+- ProfilePage: Blocked on single `/profile` endpoint. Splitting = API change -> /feature.
+- WrappedPage: POST/poll pattern = behavioral change -> /feature.
+
+### Notes
+
+- All `bundle=None` defaults preserve backward compatibility. Existing callers unaffected.
+- `TYPE_CHECKING` import pattern avoids circular imports between data_bundle and services.
+- Hidden duplication found in /analytics/trends: compute_trends fetched top_tracks 3x, then compute_profile re-fetched them 3 more times. Bundle eliminated this.
+- Frontend Phase 2.4 (Wrapped POST/poll) remains the main pending architectural change -> dedicated /feature session.
+
+---
+
 ## 2026-03-18 — Health report fixes (DEAD + UI)
 
 Date: 2026-03-18
