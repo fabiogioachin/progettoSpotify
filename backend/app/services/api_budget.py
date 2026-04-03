@@ -29,7 +29,8 @@ TIER_LIMITS = {
     Priority.P1_BACKGROUND_SYNC: 5,  # ~20%
     Priority.P2_BATCH: 3,  # ~10%
 }
-MAX_USER_SHARE = 0.30  # No single user > 30% of their tier
+MAX_USER_SHARE_MIN = 0.40  # Floor: with many users, no single user > 40%
+MAX_USER_SHARE_MAX = 1.00  # Ceiling: solo user gets full tier budget
 
 WINDOW_SIZE = 30  # seconds
 
@@ -53,9 +54,10 @@ async def check_budget(user_id: int, priority: Priority) -> bool:
         # Get all members in the current window
         members = await r.zrangebyscore(_REDIS_CALLS_KEY, window_start, "+inf")
 
-        # Count calls per tier and per user-in-tier
+        # Count calls per tier, per user-in-tier, and distinct active users
         tier_count = 0
         user_count_in_tier = 0
+        active_users: set[str] = set()
         user_id_str = str(user_id)
         priority_str = str(int(priority))
 
@@ -65,6 +67,7 @@ async def check_budget(user_id: int, priority: Priority) -> bool:
             if len(parts) >= 3:
                 member_priority = parts[1]
                 member_user_id = parts[2]
+                active_users.add(member_user_id)
                 if member_priority == priority_str:
                     tier_count += 1
                     if member_user_id == user_id_str:
@@ -72,7 +75,10 @@ async def check_budget(user_id: int, priority: Priority) -> bool:
             # Legacy members without priority encoding are ignored for tier counting
 
         tier_limit = TIER_LIMITS[priority]
-        user_limit = max(1, math.floor(tier_limit * MAX_USER_SHARE))
+        # Dynamic user share: 1 user → 100%, 2 → 50%, 3+ → floor at 40%
+        n_users = max(1, len(active_users))
+        user_share = max(MAX_USER_SHARE_MIN, min(MAX_USER_SHARE_MAX, 1.0 / n_users))
+        user_limit = max(1, math.floor(tier_limit * user_share))
 
         if tier_count >= tier_limit:
             logger.info(

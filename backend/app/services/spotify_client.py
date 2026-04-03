@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import math
 import re
 import time
 import uuid
@@ -21,7 +20,6 @@ from app.services.redis_client import get_redis
 from cryptography.fernet import InvalidToken
 
 from app.services.api_budget import (
-    MAX_USER_SHARE,
     Priority,
     TIER_LIMITS,
     extend_cache_ttl,
@@ -305,7 +303,10 @@ return {1, 0, 0, total + 1}
             call_id = f"{uuid.uuid4().hex}:{int(self.priority)}:{self.user_id}"
 
             tier_limit = TIER_LIMITS[self.priority]
-            user_limit = max(1, math.floor(tier_limit * MAX_USER_SHARE))
+            # Dynamic user share: with 1 active user, allow full tier budget.
+            # The Lua script enforces this per-call; actual multi-user fairness
+            # is handled by natural competition within the tier limit.
+            user_limit = tier_limit  # Full tier for the fast path
 
             try:
                 result = await r.evalsha(

@@ -249,11 +249,16 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
                         task["status"] = "error"
                         task["error_detail"] = "Sessione scaduta"
                         return
-                    except (ThrottleError, RateLimitError):
+                    except (ThrottleError, RateLimitError) as exc:
                         count_throttle += 1
                         if count_throttle > _MAX_THROTTLE_RETRIES:
                             break  # stop trying, use what we have
-                        break  # stop on first rate limit, use what we have
+                        wait_secs = min(getattr(exc, "retry_after", 10) or 10, 35)
+                        task["status"] = "waiting"
+                        task["waiting_seconds"] = int(wait_secs)
+                        await asyncio.sleep(wait_secs)
+                        task["status"] = "processing"
+                        task["waiting_seconds"] = 0
                     except Exception:
                         pass  # keep raw_sizes[pid] = 0
                     await asyncio.sleep(1)  # sequential with delay
@@ -283,7 +288,7 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
             playlists_sorted = sorted(
                 my_playlists,
                 key=lambda p: raw_sizes.get(p["id"], 0),
-                reverse=True,
+                reverse=False,  # Smallest first → quick results, big playlists last
             )
             playlists_to_analyze = playlists_sorted[:50]
 
@@ -342,11 +347,13 @@ async def _run_analytics_task(task_id: str, user_id: int) -> None:
                     except (ThrottleError, RateLimitError) as exc:
                         throttle_count += 1
                         if throttle_count > _MAX_THROTTLE_RETRIES:
-                            task["status"] = "error"
-                            task["error_detail"] = (
-                                "Troppe richieste a Spotify. Riprova tra qualche minuto."
+                            # Skip this playlist, continue with next
+                            logger.warning(
+                                "Analytics: skipping playlist %s after %d throttle retries",
+                                pid, _MAX_THROTTLE_RETRIES,
                             )
-                            return
+                            fetched = True  # move to next playlist
+                            break
                         wait_secs = min(getattr(exc, "retry_after", 10) or 10, 35)
                         task["status"] = "waiting"
                         task["waiting_seconds"] = int(wait_secs)

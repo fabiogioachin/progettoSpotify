@@ -56,17 +56,33 @@ class TestCheckBudget:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_denies_when_user_exceeds_share(self):
-        """Single user exceeding 30% of their tier gets denied."""
+    async def test_denies_when_user_exceeds_share_multi_user(self):
+        """With 2 active users, each gets max 50% of tier → user_limit=8."""
         mock_redis = AsyncMock()
-        # P0 tier limit is 17, 30% of 17 = 5.1 → floor = 5
-        # Put 5 calls from user 42 (at user limit)
-        members = [f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42" for i in range(5)]
+        # P0 tier limit is 17, 2 users → share=0.50 → user_limit=floor(17*0.5)=8
+        # User 42 has 8 calls, user 99 has 1 call
+        members = (
+            [f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42" for i in range(8)]
+            + [f"99{i:030x}:{int(Priority.P0_INTERACTIVE)}:99" for i in range(1)]
+        )
         mock_redis.zrangebyscore.return_value = members
 
         with patch("app.services.api_budget.get_redis", return_value=mock_redis):
             result = await check_budget(user_id=42, priority=Priority.P0_INTERACTIVE)
             assert result is False
+
+    @pytest.mark.asyncio
+    async def test_allows_solo_user_full_tier(self):
+        """With 1 active user, they get 100% of tier budget."""
+        mock_redis = AsyncMock()
+        # P0 tier limit is 17, 1 user → share=1.0 → user_limit=17
+        # User 42 has 10 calls — well within the 17 limit
+        members = [f"{i:032x}:{int(Priority.P0_INTERACTIVE)}:42" for i in range(10)]
+        mock_redis.zrangebyscore.return_value = members
+
+        with patch("app.services.api_budget.get_redis", return_value=mock_redis):
+            result = await check_budget(user_id=42, priority=Priority.P0_INTERACTIVE)
+            assert result is True
 
     @pytest.mark.asyncio
     async def test_allows_different_user_when_one_is_capped(self):

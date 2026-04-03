@@ -10,7 +10,7 @@ import api from '../lib/api'
  * @param {number} [config.pollInterval=2000] — ms between polls
  * @returns {{ data, progress, isLoading, isWaiting, waitSeconds, error, start, reset }}
  */
-const MAX_POLL_DURATION = 180_000 // 3 minutes
+const MAX_POLL_DURATION = 600_000 // 10 minutes (playlist analysis is slow in dev mode)
 
 export function usePlaylistTask({ postUrl, pollUrl, pollInterval = 2000 }) {
   const [data, setData] = useState(null)
