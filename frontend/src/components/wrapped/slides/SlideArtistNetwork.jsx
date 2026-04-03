@@ -69,12 +69,12 @@ export default function SlideArtistNetwork({ data }) {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}
         >
-          {topGenres.map((genre) => (
+          {topGenres.map((g) => (
             <span
-              key={genre}
+              key={g.genre}
               className="px-2.5 py-0.5 rounded-full bg-accent/10 text-xs text-accent border border-accent/20"
             >
-              {genre}
+              {g.genre}
             </span>
           ))}
         </motion.div>
