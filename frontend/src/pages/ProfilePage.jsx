@@ -7,6 +7,7 @@ import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer
 import ObscurityGauge from '../components/profile/ObscurityGauge'
 import GenreDNA from '../components/profile/GenreDNA'
 import DecadeChart from '../components/profile/DecadeChart'
+import TasteOverlapBar from '../components/charts/TasteOverlapBar'
 import PersonalityBadge from '../components/profile/PersonalityBadge'
 import LifetimeStats from '../components/profile/LifetimeStats'
 import TasteMap from '../components/profile/TasteMap'
@@ -17,6 +18,7 @@ import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 export default function ProfilePage() {
   const { data, loading, error } = useSpotifyData('/api/v1/profile')
   const { data: recentSummary, loading: recentLoading, refetch: refetchRecent } = useSpotifyData('/api/v1/library/recent-summary')
+  const { data: evolutionData } = useSpotifyData('/api/v1/taste-evolution')
   const [showShare, setShowShare] = useState(false)
 
   // Retry once if recent-summary is empty (backend sync may not have completed yet)
@@ -103,6 +105,13 @@ export default function ProfilePage() {
           <StaggerItem>
             <SectionErrorBoundary sectionName="GenreDNA">
               <GenreDNA topGenres={metrics.top_genres} />
+            </SectionErrorBoundary>
+          </StaggerItem>
+        )}
+        {evolutionData?.overlap_distribution?.length > 0 && (
+          <StaggerItem className="lg:col-span-2">
+            <SectionErrorBoundary sectionName="TasteOverlapBar">
+              <TasteOverlapBar data={evolutionData.overlap_distribution} />
             </SectionErrorBoundary>
           </StaggerItem>
         )}

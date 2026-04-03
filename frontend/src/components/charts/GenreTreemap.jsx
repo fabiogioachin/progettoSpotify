@@ -1,4 +1,4 @@
-import { ResponsiveContainer, Treemap, Tooltip } from 'recharts'
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import { TOOLTIP_STYLE } from '../../lib/chartTheme'
 
 const GENRE_COLORS = [
@@ -8,6 +8,20 @@ const GENRE_COLORS = [
   '#ec4899', '#f472b6', '#f9a8d4',
   '#06b6d4', '#22d3ee', '#67e8f9',
 ]
+
+const CustomTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null
+  const { name, value } = payload[0].payload
+  return (
+    <div style={{
+      ...TOOLTIP_STYLE.contentStyle,
+      padding: '8px 12px',
+    }}>
+      <span style={{ color: '#b3b3b3', fontWeight: 600 }}>{name}</span>
+      <span style={{ color: '#FFFFFF', marginLeft: 8 }}>{value}%</span>
+    </div>
+  )
+}
 
 export default function GenreTreemap({ genres, title = 'Distribuzione Generi', loading = false }) {
   if (loading) {
@@ -26,63 +40,51 @@ export default function GenreTreemap({ genres, title = 'Distribuzione Generi', l
   const data = Object.entries(genres)
     .slice(0, 12)
     .map(([name, value], idx) => ({
-      name: `${name} (${value}%)`,
-      size: value,
+      name,
+      value,
       fill: GENRE_COLORS[idx % GENRE_COLORS.length],
     }))
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <Treemap
-          data={data}
-          dataKey="size"
-          nameKey="name"
-          stroke="#121212"
-          animationDuration={1200}
-          content={<CustomTreemapContent />}
-        >
-          <Tooltip
-            {...TOOLTIP_STYLE}
-            formatter={(val) => [`${val}%`, 'Percentuale']}
-          />
-        </Treemap>
-      </ResponsiveContainer>
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0" style={{ minHeight: 260 }}>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius="45%"
+                outerRadius="80%"
+                paddingAngle={2}
+                animationDuration={1200}
+                stroke="none"
+              >
+                {data.map((entry, idx) => (
+                  <Cell key={`cell-${idx}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex flex-col gap-1.5 shrink-0 max-h-[260px] overflow-y-auto pr-1">
+          {data.map((entry, idx) => (
+            <div key={idx} className="flex items-center gap-2 text-sm">
+              <span
+                className="inline-block w-3 h-3 rounded-sm shrink-0"
+                style={{ backgroundColor: entry.fill }}
+              />
+              <span className="text-text-secondary truncate max-w-[120px]">{entry.name}</span>
+              <span className="text-text-muted ml-auto tabular-nums">{entry.value}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
-
-function CustomTreemapContent({ x, y, width, height, name, fill }) {
-  if (width < 40 || height < 30) return null
-
-  return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={fill}
-        stroke="#121212"
-        strokeWidth={2}
-        rx={4}
-        style={{ opacity: 0.85 }}
-      />
-      {width > 60 && height > 35 && (
-        <text
-          x={x + width / 2}
-          y={y + height / 2}
-          fill="#fff"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={Math.min(12, width / 8)}
-          fontWeight="500"
-        >
-          {name}
-        </text>
-      )}
-    </g>
-  )
-}
-

@@ -1,6 +1,6 @@
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import KPICard from '../components/cards/KPICard'
-import TasteOverlapBar from '../components/charts/TasteOverlapBar'
+
 import TrackCard from '../components/cards/TrackCard'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
@@ -17,8 +17,6 @@ export default function TasteEvolutionPage() {
   const metrics = data?.metrics || {}
   const artists = data?.artists || {}
   const tracks = data?.tracks || {}
-  const overlapData = data?.overlap_distribution || []
-
   const years = historicalData?.years || []
 
   return (
@@ -68,11 +66,6 @@ export default function TasteEvolutionPage() {
                   <KPICard title="Tracce Persistenti" value={metrics.persistent_tracks_count || 0} icon={Music} delay={300} tooltip="Brani che compaiono nei tuoi top 50 in tutti e 3 i periodi (1M, 6M, All). Clicca per vederli" link="#persistent-tracks" />
                 </StaggerItem>
               </StaggerContainer>
-            </SectionErrorBoundary>
-
-            {/* Overlap Distribution */}
-            <SectionErrorBoundary sectionName="TasteOverlapBar">
-              <TasteOverlapBar data={overlapData} />
             </SectionErrorBoundary>
 
             {/* Artist Sections */}

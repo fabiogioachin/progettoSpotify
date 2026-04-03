@@ -494,6 +494,48 @@ return {1, 0, 0, total + 1}
             return 0, 0
 
     @staticmethod
+    async def get_effective_budget() -> int:
+        """Return effective per-user P0 budget based on active users in the window.
+
+        Formula: floor(MAX_CALLS * P0_TIER_SHARE * user_share)
+        where user_share = max(0.40, min(1.0, 1.0 / n_active_users)).
+
+        Used by RateLimitHeaderMiddleware to show the user-facing budget
+        instead of the raw Spotify throttle limit.
+
+        Returns _MAX_CALLS_PER_WINDOW as fallback if Redis is unavailable (fail-open).
+        """
+        try:
+            r = get_redis()
+            now = time.time()
+            window_start = now - SpotifyClient._WINDOW_SIZE
+
+            # Get all members in window to count distinct active users
+            members = await r.zrangebyscore(
+                SpotifyClient._REDIS_CALLS_KEY, window_start, "+inf"
+            )
+
+            # Count distinct user IDs from member format: {uuid}:{priority}:{user_id}
+            active_user_ids: set[str] = set()
+            for member in members:
+                # member may be bytes or str depending on Redis client config
+                if isinstance(member, bytes):
+                    member = member.decode("utf-8")
+                parts = member.split(":")
+                if len(parts) >= 3:
+                    active_user_ids.add(parts[2])
+
+            n_users = max(1, len(active_user_ids))
+            user_share = max(0.40, min(1.0, 1.0 / n_users))
+            p0_tier_share = 0.70  # P0_INTERACTIVE = 70% (from api_budget.py)
+            effective = int(
+                SpotifyClient._MAX_CALLS_PER_WINDOW * p0_tier_share * user_share
+            )
+            return max(1, effective)  # never report 0
+        except Exception:
+            return SpotifyClient._MAX_CALLS_PER_WINDOW
+
+    @staticmethod
     async def get_cooldown_remaining() -> float:
         """Return seconds remaining in cooldown, or 0. Redis-safe."""
         remaining = await SpotifyClient._check_cooldown()

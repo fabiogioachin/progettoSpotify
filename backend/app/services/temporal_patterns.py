@@ -7,6 +7,7 @@ Ogni volta che viene chiamato, salva i nuovi ascolti e analizza l'intero storico
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,23 +41,31 @@ async def compute_temporal_patterns(
     db: AsyncSession = None,
     user_id: int = None,
     days: int = 30,
+    user_tz: ZoneInfo | None = None,
 ) -> dict:
     """Analizza i pattern temporali dai brani ascoltati di recente.
 
     Se db e user_id sono forniti, accumula gli ascolti nel DB per avere
     uno storico superiore ai 50 dell'API Spotify.
+
+    user_tz: IANA timezone from the client (e.g. ZoneInfo("Europe/Rome")).
+    All hour/weekday/date computations use this timezone so that heatmap,
+    peak hours, streaks, and daily minutes match the user's local clock.
+    ZoneInfo handles DST transitions automatically per-timestamp.
     """
+    tz = user_tz or ZoneInfo("UTC")
 
     data = await retry_with_backoff(client.get_recently_played, limit=50)
     items = data.get("items", [])
 
-    # Parse timestamps from Spotify API
+    # Parse timestamps from Spotify API (always UTC), convert to user TZ
     api_plays = []
     for item in items:
         played_at_str = item.get("played_at")
         if not played_at_str:
             continue
-        dt = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
+        dt_utc = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
+        dt = dt_utc.astimezone(tz)
         track = item.get("track", {})
         api_plays.append(
             {
@@ -84,7 +93,7 @@ async def compute_temporal_patterns(
     first_play_date = None
     if db and user_id:
         first_play_date = await get_first_play_date(db, user_id)
-        db_plays = await _load_plays(db, user_id)
+        db_plays = await _load_plays(db, user_id, tz=tz)
         if db_plays and len(db_plays) > len(api_plays):
             plays = db_plays
             logger.info(
@@ -93,16 +102,9 @@ async def compute_temporal_patterns(
                 len(api_plays),
             )
 
-    # Filter plays by time range
+    # Filter plays by time range (using user timezone for "today" boundary)
     cutoff = (
-        datetime.now(
-            plays[0]["datetime"].tzinfo
-            if plays and plays[0]["datetime"].tzinfo
-            else None
-        )
-        - timedelta(days=days)
-        if plays
-        else None
+        datetime.now(tz) - timedelta(days=days) if plays else None
     )
     if cutoff:
         plays = [p for p in plays if p["datetime"] >= cutoff]
@@ -165,8 +167,7 @@ async def compute_temporal_patterns(
     max_streak = _compute_streak(unique_days)
 
     # Last 7 calendar days activity (Mon→Sun aligned with DAY_LABELS)
-    _tz = plays[0]["datetime"].tzinfo if plays and plays[0]["datetime"].tzinfo else None
-    today = datetime.now(_tz).date()
+    today = datetime.now(tz).date()
     unique_days_set = set(unique_days)
     active_last_7 = []
     for offset in range(6, -1, -1):  # 6 days ago → today
@@ -188,7 +189,7 @@ async def compute_temporal_patterns(
     # Daily listening minutes
     daily_minutes = []
     if db and user_id:
-        daily_minutes = await _compute_daily_minutes(db, user_id, plays, days=days)
+        daily_minutes = await _compute_daily_minutes(db, user_id, plays, days=days, user_tz=tz)
 
     return {
         "heatmap": {
@@ -263,8 +264,11 @@ async def _store_plays(db: AsyncSession, user_id: int, plays: list[dict]) -> int
     return stored
 
 
-async def _load_plays(db: AsyncSession, user_id: int) -> list[dict]:
-    """Carica tutti gli ascolti accumulati dal DB."""
+async def _load_plays(
+    db: AsyncSession, user_id: int, tz: ZoneInfo | None = None,
+) -> list[dict]:
+    """Carica tutti gli ascolti accumulati dal DB, convertiti nella TZ utente."""
+    _tz = tz or ZoneInfo("UTC")
     result = await db.execute(
         select(RecentPlay)
         .where(RecentPlay.user_id == user_id)
@@ -276,6 +280,7 @@ async def _load_plays(db: AsyncSession, user_id: int) -> list[dict]:
         dt = r.played_at
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(_tz)
         plays.append(
             {
                 "datetime": dt,
@@ -336,13 +341,15 @@ def _empty_result():
 
 
 async def _compute_daily_minutes(
-    db: AsyncSession, user_id: int, plays: list[dict], days: int = 30
+    db: AsyncSession, user_id: int, plays: list[dict], days: int = 30,
+    user_tz: ZoneInfo | None = None,
 ) -> list[dict]:
     """Calcola i minuti di ascolto giornalieri.
 
     Priorità: DailyListeningStats (pre-aggregato) > fallback da plays in-memory.
+    Today's entry is always recomputed from in-memory plays (fresher than pre-aggregated).
     """
-    _tz = plays[0]["datetime"].tzinfo if plays and plays[0]["datetime"].tzinfo else None
+    _tz = user_tz or ZoneInfo("UTC")
     today = datetime.now(_tz).date()
     start_date = today - timedelta(days=days)
 
@@ -358,7 +365,7 @@ async def _compute_daily_minutes(
     stats = result.scalars().all()
 
     if stats:
-        return [
+        result_list = [
             {
                 "date": s.date.isoformat(),
                 "minutes": round((s.total_duration_ms or 0) / 60000, 1),
@@ -366,6 +373,29 @@ async def _compute_daily_minutes(
             }
             for s in stats
         ]
+        # DailyListeningStats is pre-aggregated at 02:00, so today's entry may be
+        # stale or missing. Always recompute today from in-memory plays (which come
+        # from recent_plays DB table) and use the richer of the two sources.
+        today_str = today.isoformat()
+        if plays:
+            today_ms = 0
+            today_count = 0
+            for p in plays:
+                if p["datetime"].date() == today:
+                    today_ms += p.get("duration_ms", 0)
+                    today_count += 1
+            if today_count > 0:
+                live_entry = {
+                    "date": today_str,
+                    "minutes": round(today_ms / 60000, 1),
+                    "plays": today_count,
+                }
+                # Replace stale pre-aggregated entry or append if missing
+                result_list = [
+                    r for r in result_list if r["date"] != today_str
+                ]
+                result_list.append(live_entry)
+        return result_list
 
     # Fallback: aggrega dai plays in-memory (per utenti nuovi senza background job)
     if not plays:

@@ -10,7 +10,6 @@ import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function ArtistNetworkPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/v1/artist-network')
-  const [viewMode, setViewMode] = useState('rete')
 
   const metrics = data?.metrics || {}
   const nodes = data?.nodes || []
@@ -22,8 +21,6 @@ export default function ArtistNetworkPage() {
   const clusterRankings = data?.cluster_rankings || {}
   const genreNodes = data?.genre_nodes || []
   const genreEdges = data?.genre_edges || []
-
-  const showToggle = genreNodes.length > 0
 
 
   return (
@@ -78,32 +75,6 @@ export default function ArtistNetworkPage() {
               </div>
             )}
 
-            {/* View toggle */}
-            {showToggle && (
-              <div className="flex gap-1 mb-4">
-                <button
-                  onClick={() => setViewMode('rete')}
-                  className={`px-3 py-1.5 min-h-[32px] text-xs rounded transition-colors ${
-                    viewMode === 'rete'
-                      ? 'bg-accent text-white'
-                      : 'bg-surface-hover text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  Rete
-                </button>
-                <button
-                  onClick={() => setViewMode('kg')}
-                  className={`px-3 py-1.5 min-h-[32px] text-xs rounded transition-colors ${
-                    viewMode === 'kg'
-                      ? 'bg-accent text-white'
-                      : 'bg-surface-hover text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  Knowledge Graph
-                </button>
-              </div>
-            )}
-
             {/* Network Graph */}
             <SectionErrorBoundary sectionName="ArtistNetwork">
               <ArtistNetwork
@@ -112,10 +83,10 @@ export default function ArtistNetworkPage() {
                 clusters={clusters}
                 clusterNames={clusterNames}
                 loading={loading}
-                viewMode={showToggle ? viewMode : 'rete'}
                 genreNodes={genreNodes}
                 genreEdges={genreEdges}
               />
+              <p className="text-text-muted text-xs text-center mt-2">Usa la rotella del mouse per esplorare le connessioni</p>
             </SectionErrorBoundary>
 
             {/* Genre Cloud */}

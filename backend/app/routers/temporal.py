@@ -2,6 +2,7 @@
 
 import logging
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,15 +23,24 @@ _DAYS_MAP = {"7d": 7, "30d": 30, "90d": 90, "all": 365}
 async def get_temporal_patterns(
     request: Request,
     range: Literal["7d", "30d", "90d", "all"] = Query(default="30d"),
+    tz: str = Query(default="UTC", alias="tz"),
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
     """Pattern temporali di ascolto dell'utente."""
     days = _DAYS_MAP[range]
+
+    # Validate timezone from client (IANA identifier, e.g. "Europe/Rome")
+    try:
+        user_tz = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, KeyError):
+        logger.warning("Invalid timezone %r from client, falling back to UTC", tz)
+        user_tz = ZoneInfo("UTC")
+
     client = SpotifyClient(db, user_id)
     try:
         result = await compute_temporal_patterns(
-            client, db=db, user_id=user_id, days=days
+            client, db=db, user_id=user_id, days=days, user_tz=user_tz,
         )
     except (SpotifyAuthError, RateLimitError, SpotifyServerError):
         raise  # Handled by global exception handlers in main.py

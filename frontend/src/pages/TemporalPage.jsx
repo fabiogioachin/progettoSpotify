@@ -18,7 +18,7 @@ const TEMPORAL_RANGES = [
 
 export default function TemporalPage() {
   const [range, setRange] = useState('30d')
-  const { data, loading, error, refetch } = useSpotifyData('/api/v1/temporal', { range })
+  const { data, loading, error, refetch } = useSpotifyData('/api/v1/temporal', { range, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
 
   const heatmap = data?.heatmap || {}
   const sessions = data?.sessions || {}
@@ -122,24 +122,6 @@ export default function TemporalPage() {
               />
             </SectionErrorBoundary>
 
-            {/* Streak + Sessions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <SectionErrorBoundary sectionName="StreakDisplay">
-                <StreakDisplay
-                  streak={streak.max_streak || 0}
-                  uniqueDays={streak.unique_days || 0}
-                  activeDays={streak.active_last_7 || []}
-                />
-              </SectionErrorBoundary>
-              <SectionErrorBoundary sectionName="SessionStats">
-                <SessionStats
-                  sessions={sessions}
-                  patterns={patterns}
-                  mostPlayed={mostPlayed}
-                />
-              </SectionErrorBoundary>
-            </div>
-
             {/* Top tracks from history */}
             {topTracks.length > 0 && (
               <SectionErrorBoundary sectionName="TopTracks">
@@ -161,6 +143,24 @@ export default function TemporalPage() {
                 </div>
               </SectionErrorBoundary>
             )}
+
+            {/* Streak + Sessions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <SectionErrorBoundary sectionName="StreakDisplay">
+                <StreakDisplay
+                  streak={streak.max_streak || 0}
+                  uniqueDays={streak.unique_days || 0}
+                  activeDays={streak.active_last_7 || []}
+                />
+              </SectionErrorBoundary>
+              <SectionErrorBoundary sectionName="SessionStats">
+                <SessionStats
+                  sessions={sessions}
+                  patterns={patterns}
+                  mostPlayed={mostPlayed}
+                />
+              </SectionErrorBoundary>
+            </div>
 
             {/* Peak Hours */}
             {peakHours.length > 0 && (

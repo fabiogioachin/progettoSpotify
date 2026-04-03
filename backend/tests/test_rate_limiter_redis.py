@@ -223,6 +223,105 @@ class TestSpotifyClientWindowUsage:
             assert result == 0
 
 
+class TestGetEffectiveBudget:
+    """Tests for get_effective_budget() — per-user P0 budget calculation."""
+
+    @pytest.mark.asyncio
+    async def test_single_user_gets_full_p0_budget(self):
+        """1 active user: floor(25 * 0.70 * 1.0) = 17."""
+        mock_redis = AsyncMock()
+        # One member in window: {uuid}:{priority}:{user_id}
+        mock_redis.zrangebyscore.return_value = [
+            "abc123:0:42",
+        ]
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            from app.services.spotify_client import SpotifyClient
+
+            effective = await SpotifyClient.get_effective_budget()
+            # floor(25 * 0.70 * 1.0) = floor(17.5) = 17
+            assert effective == 17
+
+    @pytest.mark.asyncio
+    async def test_two_users_splits_budget(self):
+        """2 active users: floor(25 * 0.70 * 0.50) = 8."""
+        mock_redis = AsyncMock()
+        mock_redis.zrangebyscore.return_value = [
+            "abc123:0:42",
+            "def456:0:43",
+            "ghi789:1:42",  # same user 42 different priority
+        ]
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            from app.services.spotify_client import SpotifyClient
+
+            effective = await SpotifyClient.get_effective_budget()
+            # 2 distinct users (42, 43): user_share = 0.50
+            # floor(25 * 0.70 * 0.50) = floor(8.75) = 8
+            assert effective == 8
+
+    @pytest.mark.asyncio
+    async def test_three_plus_users_hits_floor(self):
+        """3+ active users: user_share floors at 0.40 → floor(25 * 0.70 * 0.40) = 7."""
+        mock_redis = AsyncMock()
+        mock_redis.zrangebyscore.return_value = [
+            "a:0:1",
+            "b:0:2",
+            "c:0:3",
+        ]
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            from app.services.spotify_client import SpotifyClient
+
+            effective = await SpotifyClient.get_effective_budget()
+            # 3 distinct users: 1/3 = 0.333 → clamped to 0.40
+            # floor(25 * 0.70 * 0.40) = floor(7.0) = 7
+            assert effective == 7
+
+    @pytest.mark.asyncio
+    async def test_empty_window_returns_full_budget(self):
+        """No active users → n_users=1 → full P0 budget."""
+        mock_redis = AsyncMock()
+        mock_redis.zrangebyscore.return_value = []
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            from app.services.spotify_client import SpotifyClient
+
+            effective = await SpotifyClient.get_effective_budget()
+            # 0 active users → n_users = max(1, 0) = 1 → user_share = 1.0
+            # floor(25 * 0.70 * 1.0) = 17
+            assert effective == 17
+
+    @pytest.mark.asyncio
+    async def test_redis_error_returns_raw_max(self):
+        """Redis unavailable → fail-open with raw _MAX_CALLS_PER_WINDOW."""
+        with patch(
+            "app.services.spotify_client.get_redis",
+            side_effect=ConnectionError("down"),
+        ):
+            from app.services.spotify_client import SpotifyClient
+
+            effective = await SpotifyClient.get_effective_budget()
+            assert effective == SpotifyClient._MAX_CALLS_PER_WINDOW
+
+    @pytest.mark.asyncio
+    async def test_bytes_member_format_handled(self):
+        """Redis may return bytes instead of str — verify decoding."""
+        mock_redis = AsyncMock()
+        mock_redis.zrangebyscore.return_value = [
+            b"abc123:0:42",
+            b"def456:0:43",
+        ]
+
+        with patch("app.services.spotify_client.get_redis", return_value=mock_redis):
+            from app.services.spotify_client import SpotifyClient
+
+            effective = await SpotifyClient.get_effective_budget()
+            # 2 distinct users: user_share = 0.50
+            # floor(25 * 0.70 * 0.50) = floor(8.75) = 8
+            assert effective == 8
+
+
 class TestAPIRateLimiterRedis:
     """Tests for the Redis-backed APIRateLimiter middleware."""
 
@@ -242,6 +341,11 @@ class TestAPIRateLimiterRedis:
                 "app.services.spotify_client.SpotifyClient.get_window_usage",
                 new_callable=AsyncMock,
                 return_value=(0, 0),
+            ),
+            patch(
+                "app.services.spotify_client.SpotifyClient.get_effective_budget",
+                new_callable=AsyncMock,
+                return_value=17,
             ),
             patch(
                 "app.services.spotify_client.SpotifyClient.get_cooldown_remaining",
@@ -281,6 +385,11 @@ class TestAPIRateLimiterRedis:
                 return_value=(0, 0),
             ),
             patch(
+                "app.services.spotify_client.SpotifyClient.get_effective_budget",
+                new_callable=AsyncMock,
+                return_value=17,
+            ),
+            patch(
                 "app.services.spotify_client.SpotifyClient.get_cooldown_remaining",
                 new_callable=AsyncMock,
                 return_value=0,
@@ -304,6 +413,11 @@ class TestAPIRateLimiterRedis:
                 "app.services.spotify_client.SpotifyClient.get_window_usage",
                 new_callable=AsyncMock,
                 return_value=(0, 0),
+            ),
+            patch(
+                "app.services.spotify_client.SpotifyClient.get_effective_budget",
+                new_callable=AsyncMock,
+                return_value=17,
             ),
             patch(
                 "app.services.spotify_client.SpotifyClient.get_cooldown_remaining",
@@ -333,6 +447,11 @@ class TestAPIRateLimiterRedis:
                 "app.services.spotify_client.SpotifyClient.get_window_usage",
                 new_callable=AsyncMock,
                 return_value=(0, 0),
+            ),
+            patch(
+                "app.services.spotify_client.SpotifyClient.get_effective_budget",
+                new_callable=AsyncMock,
+                return_value=17,
             ),
             patch(
                 "app.services.spotify_client.SpotifyClient.get_cooldown_remaining",

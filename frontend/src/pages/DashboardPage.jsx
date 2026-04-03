@@ -15,28 +15,42 @@ import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 import { useAuth } from '../contexts/AuthContext'
 import OnboardingModal from '../components/onboarding/OnboardingModal'
 
+const DASHBOARD_RANGES = [
+  { value: '7d', label: '7gg' },
+  { value: '30d', label: '30gg' },
+  { value: '90d', label: '3M' },
+  { value: 'all', label: 'Tutto' },
+]
+
+const RANGE_TO_SPOTIFY = {
+  '7d': 'short_term',
+  '30d': 'short_term',
+  '90d': 'medium_term',
+  'all': 'long_term',
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const [showOnboarding, setShowOnboarding] = useState(
     user?.onboarding_completed === false &&
     localStorage.getItem('wrap_onboarding_dismissed') !== 'true'
   )
-  const [period, setPeriod] = useState('medium_term')
+  const [range, setRange] = useState('30d')
+  const spotifyPeriod = RANGE_TO_SPOTIFY[range]
 
   const { data: topData, loading: topLoading, error: topError } = useSpotifyData(
     '/api/v1/library/top',
-    { time_range: period, limit: 50 }
+    { time_range: spotifyPeriod, limit: 50 }
   )
 
   const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/v1/analytics/trends')
-  const [temporalRange, setTemporalRange] = useState('30d')
-  const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/v1/temporal', { range: temporalRange })
+  const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/v1/temporal', { range, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
 
   const tracks = topData?.tracks || []
   const trends = trendsData?.current || []
 
   // Extract features/genres from trends for the selected period (avoids a separate API call)
-  const periodProfile = trends.find(t => t.period === period)
+  const periodProfile = trends.find(t => t.period === spotifyPeriod)
   const features = periodProfile?.features || {}
   const genres = periodProfile?.genres || {}
   const featuresLoading = trendsLoading
@@ -98,7 +112,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-display font-bold text-text-primary">Dashboard</h1>
           <p className="text-text-secondary text-sm">Panoramica del tuo profilo musicale</p>
         </div>
-        <PeriodSelector value={period} onChange={setPeriod} />
+        <PeriodSelector value={range} onChange={setRange} options={DASHBOARD_RANGES} />
       </div>
 
       {hasError && (
@@ -117,7 +131,7 @@ export default function DashboardPage() {
                 value={trackCount}
                 icon={Music}
                 delay={0}
-                tooltip="Top brani che Spotify ha registrato per te nel periodo selezionato (1M ≈ ultimo mese, 6M ≈ 6 mesi, All ≈ da sempre). Scorri in basso per vederli"
+                tooltip="Top brani che Spotify ha registrato per te nel periodo selezionato. Scorri in basso per vederli"
                 link="#top-tracks"
               />
             )}
@@ -172,8 +186,7 @@ export default function DashboardPage() {
           <TrendTimeline
             trends={trends}
             dailyMinutes={temporalData?.daily_minutes}
-            temporalRange={temporalRange}
-            onTemporalRangeChange={setTemporalRange}
+            temporalRange={range}
           />
         )}
       </SectionErrorBoundary>

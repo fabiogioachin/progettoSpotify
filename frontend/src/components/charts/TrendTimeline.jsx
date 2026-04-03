@@ -11,14 +11,7 @@ import {
 import { FEATURE_COLORS, TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
 import { FEATURE_LABELS } from '../../lib/constants'
 
-const TEMPORAL_RANGES = [
-  { value: '7d', label: '7gg' },
-  { value: '30d', label: '30gg' },
-  { value: '90d', label: '3M' },
-  { value: 'all', label: 'Tutto' },
-]
-
-export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Temporale', loading = false, temporalRange, onTemporalRangeChange }) {
+export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Temporale', loading = false, temporalRange }) {
   if (loading) {
     return (
       <div className="glow-card bg-surface rounded-xl p-5 animate-pulse">
@@ -42,7 +35,7 @@ export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Tem
   }
 
   // Fallback: mostra tempo di ascolto giornaliero
-  return <ListeningTimeTrend dailyMinutes={dailyMinutes} temporalRange={temporalRange} onRangeChange={onTemporalRangeChange} />
+  return <ListeningTimeTrend dailyMinutes={dailyMinutes} temporalRange={temporalRange} />
 }
 
 function FeatureTrend({ trends, title }) {
@@ -110,7 +103,7 @@ function FeatureTrend({ trends, title }) {
   )
 }
 
-function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
+function ListeningTimeTrend({ dailyMinutes, temporalRange }) {
   if (!dailyMinutes || dailyMinutes.length === 0) {
     return null
   }
@@ -125,26 +118,7 @@ function ListeningTimeTrend({ dailyMinutes, temporalRange, onRangeChange }) {
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-text-primary font-display font-semibold">Tempo di Ascolto</h3>
-        {onRangeChange && (
-          <div className="flex gap-1">
-            {TEMPORAL_RANGES.map((r) => (
-              <button
-                key={r.value}
-                onClick={() => onRangeChange(r.value)}
-                className={`px-2.5 py-1.5 min-h-[32px] text-xs rounded transition-colors ${
-                  temporalRange === r.value
-                    ? 'bg-accent text-white'
-                    : 'bg-surface-hover text-text-muted hover:text-text-primary'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <h3 className="text-text-primary font-display font-semibold mb-1">Tempo di Ascolto</h3>
       <p className="text-text-muted text-xs mb-4">
         Minuti ascoltati al giorno — {rangeLabel[temporalRange] || 'ultimi 30 giorni'}
       </p>

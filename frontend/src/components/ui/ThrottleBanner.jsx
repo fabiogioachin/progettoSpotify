@@ -4,22 +4,43 @@ import { Activity, Clock, AlertTriangle, Timer } from 'lucide-react'
 
 export function ThrottleBanner() {
   const [usage, setUsage] = useState({ current: 0, max: 25, pct: 0 })
+  const [displayUsage, setDisplayUsage] = useState({ current: 0, max: 25, pct: 0 })
   const [countdown, setCountdown] = useState(0)
   const [totalDuration, setTotalDuration] = useState(0)
   const [windowReset, setWindowReset] = useState(0)
   const windowResetRef = useRef(0)
+  const lastUpdateRef = useRef(Date.now())
+  const originalResetRef = useRef(0)
 
   // Listen for usage updates from API responses
   useEffect(() => {
     const handler = (e) => {
-      setUsage(e.detail)
-      const reset = e.detail.reset || 0
+      const detail = e.detail
+      setUsage(detail)
+      setDisplayUsage(detail)
+      lastUpdateRef.current = Date.now()
+      originalResetRef.current = detail.reset || 0
+      const reset = detail.reset || 0
       setWindowReset(reset)
       windowResetRef.current = reset
     }
     window.addEventListener('api:usage', handler)
     return () => window.removeEventListener('api:usage', handler)
   }, [])
+
+  // Progressive drain simulation: interpolate usage between API responses
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const elapsed = (Date.now() - lastUpdateRef.current) / 1000
+      const totalWindow = originalResetRef.current
+      if (totalWindow <= 0 || usage.current <= 0) return
+      const drainFraction = Math.min(1, elapsed / totalWindow)
+      const estimatedCurrent = Math.max(0, Math.round(usage.current * (1 - drainFraction)))
+      const estimatedPct = usage.max > 0 ? Math.round(estimatedCurrent / usage.max * 100) : 0
+      setDisplayUsage({ ...usage, current: estimatedCurrent, pct: estimatedPct })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [usage])
 
   // Listen for throttle events (429)
   useEffect(() => {
@@ -58,12 +79,12 @@ export function ThrottleBanner() {
     return () => clearInterval(timer)
   }, [windowReset > 0]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Determine banner state
+  // Determine banner state (using interpolated displayUsage for smooth drain)
   const isThrottled = countdown > 0
-  const isCritical = !isThrottled && usage.pct > 85
-  const isWarning = !isThrottled && !isCritical && usage.pct > 60
+  const isCritical = !isThrottled && displayUsage.pct > 85
+  const isWarning = !isThrottled && !isCritical && displayUsage.pct > 60
   const showAlertBanner = isThrottled || isCritical || isWarning
-  const showRollingCountdown = !showAlertBanner && windowReset > 0 && usage.current > 0
+  const showRollingCountdown = !showAlertBanner && windowReset > 0 && displayUsage.current > 0
 
   // Banner content by state
   let bannerClass, icon, message
@@ -81,7 +102,7 @@ export function ThrottleBanner() {
     icon = <AlertTriangle className="w-4 h-4 flex-shrink-0" />
     message = (
       <>
-        Carico API elevato ({usage.current}/{usage.max}) — rallenta la navigazione
+        Carico API elevato ({displayUsage.current}/{displayUsage.max}) — rallenta la navigazione
       </>
     )
   } else if (isWarning) {
@@ -89,7 +110,7 @@ export function ThrottleBanner() {
     icon = <Activity className="w-4 h-4 flex-shrink-0" />
     message = (
       <>
-        Carico API moderato ({usage.current}/{usage.max})
+        Carico API moderato ({displayUsage.current}/{displayUsage.max})
       </>
     )
   }
@@ -124,7 +145,7 @@ export function ThrottleBanner() {
                   className={`h-full rounded-full transition-all duration-500 ${
                     isCritical ? 'bg-red-400' : 'bg-amber-400'
                   }`}
-                  style={{ width: `${usage.pct}%` }}
+                  style={{ width: `${displayUsage.pct}%` }}
                 />
               </div>
             )}
@@ -147,7 +168,7 @@ export function ThrottleBanner() {
           >
             <Timer className="w-3.5 h-3.5 text-accent flex-shrink-0" />
             <span>
-              Finestra API: <span className="text-text-primary font-medium">{usage.current}/{usage.max}</span>
+              Finestra API: <span className="text-text-primary font-medium">{displayUsage.current}/{displayUsage.max}</span>
               {' '}&bull; rinnovo tra{' '}
               <span className="font-display font-medium text-accent">{Math.ceil(windowReset)}s</span>
             </span>

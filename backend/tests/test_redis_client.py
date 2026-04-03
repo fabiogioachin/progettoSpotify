@@ -88,6 +88,11 @@ class TestHealthEndpointRedis:
                 return_value=(0, 0),
             ),
             patch(
+                "app.services.spotify_client.SpotifyClient.get_effective_budget",
+                new_callable=AsyncMock,
+                return_value=17,
+            ),
+            patch(
                 "app.services.spotify_client.SpotifyClient.get_cooldown_remaining",
                 new_callable=AsyncMock,
                 return_value=0,
@@ -112,6 +117,11 @@ class TestHealthEndpointRedis:
                 "app.services.spotify_client.SpotifyClient.get_window_usage",
                 new_callable=AsyncMock,
                 return_value=(0, 0),
+            ),
+            patch(
+                "app.services.spotify_client.SpotifyClient.get_effective_budget",
+                new_callable=AsyncMock,
+                return_value=17,
             ),
             patch(
                 "app.services.spotify_client.SpotifyClient.get_cooldown_remaining",

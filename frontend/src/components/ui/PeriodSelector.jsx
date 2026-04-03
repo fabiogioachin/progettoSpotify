@@ -1,9 +1,10 @@
 import { TIME_PERIODS } from '../../lib/constants'
 
-export default function PeriodSelector({ value, onChange }) {
+export default function PeriodSelector({ value, onChange, options }) {
+  const periods = options || TIME_PERIODS
   return (
     <div className="flex gap-1 bg-surface rounded-lg p-1" role="group" aria-label="Seleziona periodo">
-      {TIME_PERIODS.map((period) => (
+      {periods.map((period) => (
         <button
           key={period.value}
           onClick={() => onChange(period.value)}

@@ -747,15 +747,15 @@ async def lifespan(app: FastAPI):
             "SECURITY: cookie_secure=False su ambiente non-localhost. Impostare COOKIE_SECURE=true in produzione."
         )
 
-    # APScheduler: sync ascolti recenti ogni 60 minuti
-    # jitter=120 adds random 0-120s delay to prevent thundering herd on restart
+    # APScheduler: sync ascolti recenti ogni 30 minuti
+    # jitter=60 adds random 0-60s delay to prevent thundering herd on restart
     scheduler.add_job(
         sync_recent_plays,
-        trigger=IntervalTrigger(minutes=60),
+        trigger=IntervalTrigger(minutes=30),
         id="sync_recent_plays",
-        name="Sync ascolti recenti ogni 60 minuti",
+        name="Sync ascolti recenti ogni 30 minuti",
         replace_existing=True,
-        jitter=120,
+        jitter=60,
     )
     # jitter=300 adds random 0-300s delay to the 02:00 job
     scheduler.add_job(
@@ -777,7 +777,7 @@ async def lifespan(app: FastAPI):
     )
     scheduler.start()
     logger.info(
-        "APScheduler avviato — sync_recent_plays ogni 60 minuti (jitter=120s), "
+        "APScheduler avviato — sync_recent_plays ogni 30 minuti (jitter=60s), "
         "compute_daily_aggregates alle 02:00 (jitter=300s), "
         "cleanup_expired_data il 1\u00b0 del mese alle 03:00 (jitter=600s)"
     )
@@ -801,10 +801,12 @@ class RateLimitHeaderMiddleware(BaseHTTPMiddleware):
     """Inject X-RateLimit-Usage and X-RateLimit-Reset headers into every /api/ response.
 
     Reads current usage from Redis via SpotifyClient.get_window_usage().
+    Uses get_effective_budget() to show the per-user P0 budget instead of the
+    raw Spotify throttle limit (25).
     Caches result for 2s to avoid Redis round-trip on every response.
     """
 
-    _cached_usage: tuple[int, float] = (0, 0.0)
+    _cached_usage: tuple[int, float, int] = (0, 0.0, 25)
     _cached_at: float = 0.0
     _CACHE_TTL: float = 2.0
 
@@ -816,12 +818,12 @@ class RateLimitHeaderMiddleware(BaseHTTPMiddleware):
             now = _time.monotonic()
             if now - self._cached_at > self._CACHE_TTL:
                 current, reset = await SpotifyClient.get_window_usage()
-                RateLimitHeaderMiddleware._cached_usage = (current, reset)
+                effective = await SpotifyClient.get_effective_budget()
+                RateLimitHeaderMiddleware._cached_usage = (current, reset, effective)
                 RateLimitHeaderMiddleware._cached_at = now
             else:
-                current, reset = self._cached_usage
-            max_calls = SpotifyClient._MAX_CALLS_PER_WINDOW
-            response.headers["X-RateLimit-Usage"] = f"{current}/{max_calls}"
+                current, reset, effective = self._cached_usage
+            response.headers["X-RateLimit-Usage"] = f"{current}/{effective}"
             response.headers["X-RateLimit-Reset"] = str(reset)
         return response
 
