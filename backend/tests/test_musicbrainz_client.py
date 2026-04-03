@@ -533,20 +533,36 @@ class TestPickBestMatch:
         assert result is not None
         assert result["name"] == "MEDUZA"
 
-    def test_exact_name_not_preferred_when_score_too_low(self):
-        """If exact name match is more than 10 points below top, top wins."""
+    def test_exact_name_wins_even_with_12_point_gap(self):
+        """Exact name bonus (+15) overcomes a 12-point score gap."""
         from app.services.musicbrainz_client import _pick_best_match
 
         candidates = [
             {"name": "Eddie Meduza", "score": 100},
-            {"name": "MEDUZA", "score": 88},  # 100-88 = 12 > 10
+            {"name": "MEDUZA", "score": 88},  # 100-88=12, but +15 exact bonus → 103 vs 100
+        ]
+        result = _pick_best_match(candidates, "MEDUZA")
+        assert result is not None
+        assert result["name"] == "MEDUZA"
+
+    def test_exact_name_not_preferred_when_score_gap_too_large(self):
+        """When score gap exceeds exact bonus (15), higher score wins."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {"name": "Eddie Meduza", "score": 100, "tags": [
+                {"name": "rock"}, {"name": "rockabilly"}, {"name": "pop"},
+                {"name": "punk"}, {"name": "blues"},
+            ]},
+            {"name": "MEDUZA", "score": 85},  # 100+10 vs 85+15=100 → Eddie wins
         ]
         result = _pick_best_match(candidates, "MEDUZA")
         assert result is not None
         assert result["name"] == "Eddie Meduza"
 
-    def test_highest_score_wins_when_no_exact_match(self):
-        """When no candidate has an exact name match, highest score wins."""
+    def test_highest_score_wins_when_no_exact_match_and_equal_signals(self):
+        """When no candidate has an exact name match and signals are equal,
+        highest base score wins."""
         from app.services.musicbrainz_client import _pick_best_match
 
         candidates = [
@@ -627,6 +643,289 @@ class TestPickBestMatch:
         assert "dance" in result
         assert "house" in result
         assert "rockabilly" not in result
+
+
+class TestPickBestMatchCompositeScoring:
+    """Tests for the composite scoring signals in _pick_best_match."""
+
+    def test_tag_count_bonus_breaks_tie(self):
+        """Among equal-score candidates, more genre tags wins."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "Artist A",
+                "score": 95,
+                "tags": [{"name": "folk"}],
+            },
+            {
+                "name": "Artist B",
+                "score": 95,
+                "tags": [
+                    {"name": "house"},
+                    {"name": "dance"},
+                    {"name": "electronic"},
+                    {"name": "edm"},
+                ],
+            },
+        ]
+        result = _pick_best_match(candidates, "Artist X")
+        assert result is not None
+        assert result["name"] == "Artist B"
+
+    def test_tag_count_bonus_capped_at_10(self):
+        """Tag bonus caps at +10 (5 tags * 2 each)."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "Many Tags",
+                "score": 90,
+                "tags": [{"name": f"genre-{i}"} for i in range(10)],
+            },
+            {
+                "name": "Few Tags",
+                "score": 100,
+                "tags": [],
+            },
+        ]
+        # Many Tags: 90 + 10 (tag cap) = 100. Few Tags: 100 + 0 = 100. Tie → stable sort → Many Tags first
+        # Actually both are 100, but Many Tags was sorted first due to stable sort
+        result = _pick_best_match(candidates, "Unrelated")
+        assert result is not None
+        # Both score 100 composite, stable sort preserves order (Many Tags sorted first)
+        assert result["name"] == "Many Tags"
+
+    def test_non_genre_tags_dont_count(self):
+        """Tags in _NON_GENRE_TAGS blocklist don't contribute to tag bonus."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "Bloated Tags",
+                "score": 95,
+                "tags": [
+                    {"name": "italian"},
+                    {"name": "seen live"},
+                    {"name": "2010s"},
+                    {"name": "composer"},
+                ],  # all blocked → 0 filtered
+            },
+            {
+                "name": "Good Tags",
+                "score": 95,
+                "tags": [{"name": "rock"}, {"name": "pop"}],  # 2 valid → +4
+            },
+        ]
+        result = _pick_best_match(candidates, "Unrelated")
+        assert result is not None
+        assert result["name"] == "Good Tags"
+
+    def test_disambiguation_bonus_with_genre_words(self):
+        """Disambiguation containing genre words gives a bonus."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "MEDUZA",
+                "score": 90,
+                "tags": [],
+                "disambiguation": "Italian house music trio",
+            },
+            {
+                "name": "MEDUZA",
+                "score": 90,
+                "tags": [],
+                "disambiguation": "",
+            },
+        ]
+        result = _pick_best_match(candidates, "MEDUZA")
+        assert result is not None
+        # First candidate: "house" + "music" + "trio" = 3 words → +9
+        assert result["disambiguation"] == "Italian house music trio"
+
+    def test_disambiguation_bonus_capped_at_9(self):
+        """Disambig bonus caps at +9 (3 words * 3 each)."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "A",
+                "score": 90,
+                "tags": [],
+                "disambiguation": "rock pop jazz funk soul blues house techno",
+            },
+            {
+                "name": "B",
+                "score": 99,
+                "tags": [],
+                "disambiguation": "",
+            },
+        ]
+        # A: 90 + 9 (cap) = 99. B: 99 + 0 = 99. Tie → stable sort → A first
+        result = _pick_best_match(candidates, "Unrelated")
+        assert result is not None
+        assert result["name"] == "A"
+
+    def test_meduza_full_disambiguation(self):
+        """Real-world MEDUZA case: exact name + tags + disambig vs higher score."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "Eddie Meduza",
+                "score": 100,
+                "tags": [{"name": "rock"}, {"name": "rockabilly"}],
+                "disambiguation": "Swedish rock singer",
+            },
+            {
+                "name": "MEDUZA",
+                "score": 91,
+                "tags": [
+                    {"name": "dance"},
+                    {"name": "house"},
+                    {"name": "edm"},
+                ],
+                "disambiguation": "Italian house music trio",
+            },
+        ]
+        result = _pick_best_match(candidates, "MEDUZA")
+        assert result is not None
+        assert result["name"] == "MEDUZA"
+        # MEDUZA: 91 + 15 (exact) + 6 (3 tags * 2) + 9 (house+music+trio) = 121
+        # Eddie:  100 + 0 + 4 (2 tags * 2) + 6 (rock+singer) = 110
+
+    def test_fisher_disambiguation(self):
+        """FISHER case: house DJ should win over vocal trance homonym."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "Fisher",
+                "score": 100,
+                "tags": [{"name": "trance"}, {"name": "vocal trance"}],
+                "disambiguation": "vocal trance artist",
+            },
+            {
+                "name": "FISHER",
+                "score": 95,
+                "tags": [
+                    {"name": "house"},
+                    {"name": "tech house"},
+                    {"name": "dance"},
+                    {"name": "electronic"},
+                ],
+                "disambiguation": "Australian house DJ and producer",
+            },
+        ]
+        result = _pick_best_match(candidates, "FISHER")
+        assert result is not None
+        assert result["name"] == "FISHER"
+        # FISHER: 95 + 15 (exact) + 8 (4 tags * 2) + 9 (house+dj+producer → cap) = 127
+        # Fisher: 100 + 0 + 4 (2 tags * 2) + 3 (trance) = 107
+
+    def test_single_viable_candidate_returned_directly(self):
+        """When only one candidate is viable (score >= 85), return it without ranking."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {"name": "Good Artist", "score": 90, "tags": []},
+            {"name": "Bad Artist", "score": 50, "tags": []},
+        ]
+        result = _pick_best_match(candidates, "Other Name")
+        assert result is not None
+        assert result["name"] == "Good Artist"
+
+    def test_all_signals_combine(self):
+        """Composite score uses all three signals additively."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {
+                "name": "Weak Match",
+                "score": 100,
+                "tags": [],
+                "disambiguation": "",
+            },
+            {
+                "name": "Target",
+                "score": 86,
+                "tags": [
+                    {"name": "electronic"},
+                    {"name": "house"},
+                    {"name": "techno"},
+                ],
+                "disambiguation": "electronic music producer",
+            },
+        ]
+        result = _pick_best_match(candidates, "Target")
+        assert result is not None
+        # Target: 86 + 15 (exact) + 6 (3 tags) + 9 (electronic+music+producer) = 116
+        # Weak:   100 + 0 + 0 + 0 = 100
+        assert result["name"] == "Target"
+
+    def test_missing_tags_and_disambig_fields(self):
+        """Candidates without tags or disambiguation fields don't crash."""
+        from app.services.musicbrainz_client import _pick_best_match
+
+        candidates = [
+            {"name": "Minimal", "score": 95},
+            {"name": "Also Minimal", "score": 92},
+        ]
+        result = _pick_best_match(candidates, "Minimal")
+        assert result is not None
+        assert result["name"] == "Minimal"  # exact name + higher score
+
+    @pytest.mark.asyncio
+    async def test_fisher_end_to_end(self):
+        """End-to-end: search_artist_genres picks FISHER over vocal trance homonym."""
+        search_response = MagicMock()
+        search_response.status_code = 200
+        search_response.raise_for_status = MagicMock()
+        search_response.json.return_value = {
+            "artists": [
+                {
+                    "id": "mbid-vocal-fisher",
+                    "name": "Fisher",
+                    "score": 100,
+                    "tags": [
+                        {"name": "trance", "count": 3},
+                        {"name": "vocal trance", "count": 2},
+                    ],
+                    "disambiguation": "vocal trance artist",
+                },
+                {
+                    "id": "mbid-house-fisher",
+                    "name": "FISHER",
+                    "score": 95,
+                    "tags": [
+                        {"name": "house", "count": 5},
+                        {"name": "tech house", "count": 4},
+                        {"name": "dance", "count": 3},
+                        {"name": "electronic", "count": 2},
+                    ],
+                    "disambiguation": "Australian house DJ and producer",
+                },
+            ]
+        }
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=search_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "app.services.musicbrainz_client.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
+            from app.services.musicbrainz_client import search_artist_genres
+
+            result = await search_artist_genres("FISHER")
+
+        assert "house" in result
+        assert "tech house" in result
+        assert "trance" not in result
+        assert "vocal trance" not in result
 
 
 class TestFilterNonGenreTags:

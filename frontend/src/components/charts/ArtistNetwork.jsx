@@ -346,6 +346,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return (
       <div className="glow-card bg-surface rounded-xl p-5 relative">
         <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+        <div className="w-full max-w-[700px] mx-auto">
         <svg viewBox="0 0 700 500" className="w-full h-auto" style={{ maxHeight: '500px' }} role="img" aria-label="Knowledge graph generi e artisti">
           {/* Genre edges only */}
           {genreEdges.map((edge, i) => {
@@ -453,6 +454,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
             )
           })}
         </svg>
+        </div>
         {/* Tooltip */}
         {tooltip && (
           <div
@@ -506,6 +508,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
   return (
     <div className="glow-card bg-surface rounded-xl p-5 relative">
       <h3 className="text-text-primary font-display font-semibold mb-4">{title}</h3>
+      <div className="w-full max-w-[700px] mx-auto">
       <svg ref={svgRef} viewBox="0 0 700 500" className="w-full h-auto" style={{ maxHeight: '500px' }} role="img" aria-label="Grafo delle connessioni tra artisti">
         {/* Edges */}
         {edges.map((edge, i) => {
@@ -586,6 +589,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
           )
         })}
       </svg>
+      </div>
       {/* Tooltip */}
       {tooltip && (
         <div

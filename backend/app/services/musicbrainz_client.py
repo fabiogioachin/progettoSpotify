@@ -157,6 +157,70 @@ _NON_GENRE_TAGS: frozenset[str] = frozenset(
     }
 )
 
+# ---------------------------------------------------------------------------
+# Words in MusicBrainz disambiguation strings that indicate a music artist.
+# Used by _pick_best_match() to boost candidates whose disambig field
+# contains genre/role keywords (e.g. "Italian house music trio").
+# Intentionally includes role words (dj, producer, band, etc.) that are
+# blocked from genre TAG output — in a disambiguation string they signal
+# a real music artist, not a genre label.
+# ---------------------------------------------------------------------------
+_DISAMBIG_GENRE_WORDS: frozenset[str] = frozenset(
+    {
+        # Broad genres
+        "house",
+        "techno",
+        "trance",
+        "trap",
+        "hip hop",
+        "hip-hop",
+        "rap",
+        "electronic",
+        "dance",
+        "rock",
+        "pop",
+        "jazz",
+        "classical",
+        "reggaeton",
+        "drill",
+        "funk",
+        "soul",
+        "r&b",
+        "edm",
+        "metal",
+        "punk",
+        "blues",
+        "country",
+        "folk",
+        "ambient",
+        "indie",
+        "gospel",
+        "reggae",
+        "ska",
+        "grunge",
+        "disco",
+        "synthpop",
+        "dubstep",
+        "dnb",
+        "drum and bass",
+        "garage",
+        "grime",
+        "afrobeat",
+        "bossa nova",
+        "latin",
+        # Roles / formation descriptors (useful in disambig, blocked in tags)
+        "dj",
+        "producer",
+        "band",
+        "duo",
+        "trio",
+        "singer",
+        "rapper",
+        "musician",
+        "music",
+    }
+)
+
 # MusicBrainz requires max 1 request/second — enforced globally
 _mb_semaphore = asyncio.Semaphore(1)
 _last_call_time: float = 0
@@ -196,13 +260,13 @@ async def _mark_call() -> None:
 def _pick_best_match(candidates: list[dict], query_name: str) -> dict | None:
     """Pick the best MusicBrainz artist match from search candidates.
 
-    Strategy:
-    1. Only consider candidates with score >= 85
-    2. Sort by score descending
-    3. Among candidates within 10 points of the top score, prefer the one
-       whose name exactly matches the query (case-insensitive). This prevents
-       e.g. "Eddie Meduza" (score=100) from beating "MEDUZA" (score=91)
-       when searching for "MEDUZA".
+    Uses composite scoring with multiple disambiguation signals:
+    1. MusicBrainz search score (base)
+    2. Exact name match bonus (+15) — strongest signal
+    3. Tag count bonus (up to +10) — more genre tags = more community engagement
+    4. Disambiguation field bonus (up to +9) — genre-related words in disambig string
+
+    Only considers candidates with score >= 85.
     """
     if not candidates:
         return None
@@ -210,22 +274,35 @@ def _pick_best_match(candidates: list[dict], query_name: str) -> dict | None:
     viable = [a for a in candidates if a.get("score", 0) >= 85]
     if not viable:
         return None
+    if len(viable) == 1:
+        return viable[0]
 
-    viable.sort(key=lambda a: a.get("score", 0), reverse=True)
-    top_score = viable[0].get("score", 0)
     query_lower = query_name.lower().strip()
 
-    # Among candidates within 10 points of the top, prefer exact name match
-    best = viable[0]
-    for a in viable:
-        if a.get("score", 0) < top_score - 10:
-            break  # too far below top score
-        candidate_name = a.get("name", "").lower().strip()
-        if candidate_name == query_lower:
-            best = a
-            break
+    def _rank(a: dict) -> int:
+        """Compute composite rank for a candidate. Higher is better."""
+        score = a.get("score", 0)
+        name_lower = a.get("name", "").lower().strip()
 
-    return best
+        # Exact name match bonus (strong signal)
+        exact_bonus = 15 if name_lower == query_lower else 0
+
+        # Tag count bonus: more genre-relevant tags = more community engagement
+        tags = a.get("tags", [])
+        filtered = [t for t in tags if _is_genre_tag(t.get("name", "").lower())]
+        tag_bonus = min(len(filtered) * 2, 10)  # cap at +10
+
+        # Disambiguation field bonus: genre-related words increase confidence
+        disambig = a.get("disambiguation", "").lower()
+        disambig_bonus = 0
+        if disambig:
+            matching = sum(1 for w in _DISAMBIG_GENRE_WORDS if w in disambig)
+            disambig_bonus = min(matching * 3, 9)  # cap at +9
+
+        return score + exact_bonus + tag_bonus + disambig_bonus
+
+    viable.sort(key=_rank, reverse=True)
+    return viable[0]
 
 
 async def search_artist_genres(artist_name: str) -> list[str]:

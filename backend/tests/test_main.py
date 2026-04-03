@@ -168,13 +168,55 @@ class TestPlaylistNameToGenre:
         assert _playlist_name_to_genre("  Trap  ") == "trap"
 
     def test_italian_specific_keywords(self):
+        """Mapped keywords return canonical genres, not raw playlist names."""
         from app.main import _playlist_name_to_genre
 
-        assert _playlist_name_to_genre("cassa dritta") == "cassa dritta"
-        assert _playlist_name_to_genre("Hi Tech") == "hi tech"
-        assert _playlist_name_to_genre("DRIP") == "drip"
+        # These are in _PLAYLIST_GENRE_MAP — return canonical genre
+        assert _playlist_name_to_genre("cassa dritta") == "techno"
+        assert _playlist_name_to_genre("Hi Tech") == "techno"
+        assert _playlist_name_to_genre("DRIP") == "trap"
 
     def test_empty_string_returns_none(self):
         from app.main import _playlist_name_to_genre
 
         assert _playlist_name_to_genre("") is None
+
+    def test_playlist_genre_map_exact_match(self):
+        """_PLAYLIST_GENRE_MAP entries are matched exactly (case-insensitive)."""
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("afrodisiaco") == "reggaeton"
+        assert _playlist_name_to_genre("Bebecita") == "reggaeton"
+        assert _playlist_name_to_genre("PERREO") == "reggaeton"
+        assert _playlist_name_to_genre("neomelodico") == "neomelodico"
+        assert _playlist_name_to_genre("cantautorato") == "cantautorato italiano"
+        assert _playlist_name_to_genre("trap italiana") == "italian trap"
+        assert _playlist_name_to_genre("rap italiano") == "italian hip hop"
+        assert _playlist_name_to_genre("musica italiana") == "italian pop"
+        assert _playlist_name_to_genre("banger") == "edm"
+        assert _playlist_name_to_genre("peaktime") == "peak time techno"
+        assert _playlist_name_to_genre("afro") == "afrobeats"
+        assert _playlist_name_to_genre("afrohouse") == "afro house"
+        assert _playlist_name_to_genre("Chill House") == "chill house"
+        assert _playlist_name_to_genre("backup gold") == "hip hop"
+        assert _playlist_name_to_genre("tek") == "techno"
+
+    def test_map_takes_priority_over_keywords(self):
+        """When a name is in both map and keywords, the map's canonical genre wins."""
+        from app.main import _playlist_name_to_genre
+
+        # "drip" is in keywords AND map; map should win → "trap" not "drip"
+        assert _playlist_name_to_genre("drip") == "trap"
+        # "tek" is in keywords AND map; map should win → "techno" not "tek"
+        assert _playlist_name_to_genre("tek") == "techno"
+
+    def test_new_keywords_substring_match(self):
+        """Newly added keywords work with substring matching."""
+        from app.main import _playlist_name_to_genre
+
+        assert _playlist_name_to_genre("afrobeats") == "afrobeats"
+        assert _playlist_name_to_genre("afro house") == "afro house"
+        assert _playlist_name_to_genre("neomelodico") == "neomelodico"
+        assert _playlist_name_to_genre("peak time") == "peak time"
+        assert _playlist_name_to_genre("lofi") == "lofi"
+        assert _playlist_name_to_genre("lo-fi") == "lo-fi"

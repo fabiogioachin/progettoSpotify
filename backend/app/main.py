@@ -346,6 +346,8 @@ _GENRE_PLAYLIST_KEYWORDS: set[str] = {
     "r&b",
     "reggaeton",
     "afrobeat",
+    "afrobeats",
+    "afro house",
     "dance",
     "edm",
     "dubstep",
@@ -394,18 +396,57 @@ _GENRE_PLAYLIST_KEYWORDS: set[str] = {
     "blues",
     "country",
     "folk",
+    "neomelodico",
+    "cantautorato",
+    "peak time",
+    "peaktime",
     # Italian / niche
     "hi tech",
     "drip",
 }
 
+# Map slang/Italian playlist names to canonical genre strings.
+# Checked FIRST (exact match on lowered name) before keyword substring matching.
+_PLAYLIST_GENRE_MAP: dict[str, str] = {
+    # Italian genre names
+    "afrodisiaco": "reggaeton",
+    "bebecita": "reggaeton",
+    "perreo": "reggaeton",
+    "neomelodico": "neomelodico",
+    "cantautorato": "cantautorato italiano",
+    "trap italiana": "italian trap",
+    "rap italiano": "italian hip hop",
+    "musica italiana": "italian pop",
+    # Slang/mood-based that imply genres
+    "drip": "trap",
+    "hi tech": "techno",
+    "cassa dritta": "techno",
+    "tek": "techno",
+    "banger": "edm",
+    "peaktime": "peak time techno",
+    "afro": "afrobeats",
+    "afrohouse": "afro house",
+    "chill house": "chill house",
+    "backup gold": "hip hop",
+}
+
 
 def _playlist_name_to_genre(name: str) -> str | None:
-    """Return genre string if playlist name looks like a genre, else None."""
+    """Return genre string if playlist name looks like a genre, else None.
+
+    Checks ``_PLAYLIST_GENRE_MAP`` first (exact match on lowered name) so that
+    slang/Italian playlist names map to canonical genre strings.  Falls back to
+    ``_GENRE_PLAYLIST_KEYWORDS`` for exact and substring matching.
+    """
     lower = name.lower().strip()
+    # 1. Exact map lookup → canonical genre (not the playlist name)
+    mapped = _PLAYLIST_GENRE_MAP.get(lower)
+    if mapped is not None:
+        return mapped
+    # 2. Exact keyword match
     if lower in _GENRE_PLAYLIST_KEYWORDS:
         return lower
-    # Partial match: "Chill house" -> "chill house" (short name = likely a genre)
+    # 3. Partial match: "Chill house" -> "chill house" (short name = likely a genre)
     for keyword in _GENRE_PLAYLIST_KEYWORDS:
         if keyword in lower and len(lower) < 30:
             return lower
@@ -421,8 +462,12 @@ async def _warmup_playlist_inferred_genres(
     whose name matches a known genre keyword, fetches items (1 call each, cached).
     Builds artist -> {playlist_genres} mapping, then upserts only for artists
     that still have empty genres after Spotify + MusicBrainz passes.
+
+    Uses retry-with-wait on throttle (max 3 attempts per playlist) and a total
+    time budget of 5 minutes to prevent infinite warmup.
     """
     import json
+    import time
     from datetime import datetime, timezone
 
     from sqlalchemy import select
@@ -432,8 +477,31 @@ async def _warmup_playlist_inferred_genres(
     from app.services.api_budget import Priority
     from app.utils.rate_limiter import retry_with_backoff
 
+    _PHASE3_TIME_BUDGET = 5 * 60  # 5 minutes
+    _MAX_RETRY_PER_PLAYLIST = 3
+    _MAX_WAIT_SECS = 35
+
+    phase3_start = time.monotonic()
+
+    def _time_budget_exceeded() -> bool:
+        return (time.monotonic() - phase3_start) >= _PHASE3_TIME_BUDGET
+
     try:
+        total_playlists = 0
+        completed_playlists = 0
+        total_updated = 0
+
         for uid in user_ids:
+            if _time_budget_exceeded():
+                logger.info(
+                    "Playlist inference: tempo esaurito (5min budget), "
+                    "completate %d/%d playlist, %d artisti arricchiti",
+                    completed_playlists,
+                    total_playlists,
+                    total_updated,
+                )
+                break
+
             async with async_session() as db:
                 client = SpotifyClient(db, uid, priority=Priority.P2_BATCH)
                 try:
@@ -453,43 +521,81 @@ async def _warmup_playlist_inferred_genres(
                     if not genre_playlists:
                         continue
 
+                    total_playlists += len(genre_playlists)
+
                     logger.info(
                         "Playlist genre inference: %d playlist-genere per user_id=%d",
                         len(genre_playlists),
                         uid,
                     )
 
-                    # For each genre playlist, get items (cached)
+                    # For each genre playlist, get items (cached) with retry
                     artist_genres_map: dict[str, set[str]] = {}
                     artist_names: dict[str, str] = {}
 
                     for pid, genre in genre_playlists:
-                        try:
-                            items_data = await retry_with_backoff(
-                                client.get_playlist_items, pid, limit=50, offset=0
-                            )
-                            for item in items_data.get("items", []):
-                                track = item.get("item") or item.get("track")
-                                if not track:
-                                    continue
-                                for artist in track.get("artists", []):
-                                    aid = artist.get("id")
-                                    if aid:
-                                        artist_genres_map.setdefault(aid, set()).add(
-                                            genre
-                                        )
-                                        if aid not in artist_names:
-                                            artist_names[aid] = artist.get("name", "")
-                        except (RateLimitError, ThrottleError):
-                            logger.info(
-                                "Playlist genre inference: rate limited, stopping playlist fetch"
-                            )
+                        if _time_budget_exceeded():
                             break
-                        except Exception as exc:
+
+                        fetched = False
+                        for attempt in range(_MAX_RETRY_PER_PLAYLIST):
+                            try:
+                                items_data = await retry_with_backoff(
+                                    client.get_playlist_items,
+                                    pid,
+                                    limit=50,
+                                    offset=0,
+                                )
+                                for item in items_data.get("items", []):
+                                    track = item.get("item") or item.get(
+                                        "track"
+                                    )
+                                    if not track:
+                                        continue
+                                    for artist in track.get("artists", []):
+                                        aid = artist.get("id")
+                                        if aid:
+                                            artist_genres_map.setdefault(
+                                                aid, set()
+                                            ).add(genre)
+                                            if aid not in artist_names:
+                                                artist_names[aid] = artist.get(
+                                                    "name", ""
+                                                )
+                                fetched = True
+                                completed_playlists += 1
+                                break  # success, exit retry loop
+                            except (RateLimitError, ThrottleError) as exc:
+                                wait = min(
+                                    getattr(exc, "retry_after", 10) or 10,
+                                    _MAX_WAIT_SECS,
+                                )
+                                logger.info(
+                                    "Playlist inference: throttled on playlist %s "
+                                    "(tentativo %d/%d), attendo %ds",
+                                    pid,
+                                    attempt + 1,
+                                    _MAX_RETRY_PER_PLAYLIST,
+                                    wait,
+                                )
+                                await asyncio.sleep(wait)
+                                # Check time budget after sleeping
+                                if _time_budget_exceeded():
+                                    break
+                            except Exception as exc:
+                                logger.debug(
+                                    "Playlist items fetch failed for %s: %s",
+                                    pid,
+                                    exc,
+                                )
+                                break  # non-retryable error, skip playlist
+
+                        if not fetched:
                             logger.debug(
-                                "Playlist items fetch failed for %s: %s", pid, exc
+                                "Playlist inference: skipped playlist %s after retries",
+                                pid,
                             )
-                            continue
+
                         await asyncio.sleep(2)
 
                     if not artist_genres_map:
@@ -540,13 +646,27 @@ async def _warmup_playlist_inferred_genres(
 
                     if updated:
                         await db.commit()
+                        total_updated += updated
                         logger.info(
-                            "Playlist genre inference completato: %d artisti arricchiti per user_id=%d",
+                            "Playlist inference: %d/%d playlist, "
+                            "%d artisti arricchiti per user_id=%d",
+                            completed_playlists,
+                            total_playlists,
                             updated,
                             uid,
                         )
                 finally:
                     await client.close()
+
+        elapsed = time.monotonic() - phase3_start
+        logger.info(
+            "Playlist inference completato in %.0fs: %d/%d playlist, "
+            "%d artisti arricchiti",
+            elapsed,
+            completed_playlists,
+            total_playlists,
+            total_updated,
+        )
     except Exception as exc:
         logger.warning("Playlist genre inference fallito: %s", exc)
 

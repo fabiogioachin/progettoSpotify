@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.artist_network import build_artist_network, _empty_result
+from app.services.artist_network import build_artist_network, _dedup_cluster_names, _empty_result
 from app.services.data_bundle import RequestDataBundle
 
 
@@ -378,6 +378,146 @@ class TestClusterNameDeduplication:
         assert len(names) == len(set(names)), (
             f"Duplicate cluster names found: {names}"
         )
+
+
+class TestDedupClusterNamesUnit:
+    """Unit tests for _dedup_cluster_names — deterministic, no Louvain involved."""
+
+    @staticmethod
+    def _build_nodes(artists_by_cluster):
+        """Helper: {cid: [(id, name, genres, pop), ...]} -> (nodes, louvain_labels)."""
+        nodes = {}
+        labels = {}
+        for cid, artists in artists_by_cluster.items():
+            for aid, name, genres, pop in artists:
+                nodes[aid] = {
+                    "id": aid,
+                    "name": name,
+                    "genres": genres,
+                    "popularity": pop,
+                }
+                labels[aid] = cid
+        return nodes, labels
+
+    def test_no_duplicates_unchanged(self):
+        """Names that are already unique stay unchanged."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "A1", ["rock"], 50)],
+            1: [("a2", "A2", ["pop"], 50)],
+        })
+        names = {0: "Rock", 1: "Pop"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        assert result == {0: "Rock", 1: "Pop"}
+
+    def test_secondary_genre_differentiates(self):
+        """Pass 1: secondary genre suffix resolves collision."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "A1", ["hip-hop", "trap"], 50),
+                ("a2", "A2", ["hip-hop", "trap"], 40)],
+            1: [("a3", "A3", ["hip-hop", "r&b"], 60),
+                ("a4", "A4", ["hip-hop", "r&b"], 30)],
+        })
+        names = {0: "Hip Hop", 1: "Hip Hop"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
+        # Both should have "/" separator from genre suffix
+        assert all("/" in v for v in values)
+
+    def test_tertiary_genre_when_secondary_collides(self):
+        """Pass 2: tertiary genre resolves when secondary is the same."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "A1", ["hip-hop", "trap", "drill"], 50),
+                ("a2", "A2", ["hip-hop", "trap", "drill"], 40)],
+            1: [("a3", "A3", ["hip-hop", "trap", "grime"], 60),
+                ("a4", "A4", ["hip-hop", "trap", "grime"], 30)],
+        })
+        names = {0: "Hip Hop", 1: "Hip Hop"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
+
+    def test_artist_name_fallback_when_genres_identical(self):
+        """Pass 3: top artist name resolves when all genres are identical."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "Sfera Ebbasta", ["hip-hop", "trap"], 80),
+                ("a2", "A2", ["hip-hop", "trap"], 40)],
+            1: [("a3", "Travis Scott", ["hip-hop", "trap"], 90),
+                ("a4", "A4", ["hip-hop", "trap"], 30)],
+        })
+        names = {0: "Hip Hop", 1: "Hip Hop"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
+        # Should contain "(Artist)" pattern
+        assert any("(Sfera)" in v for v in values)
+        assert any("(Travis)" in v for v in values)
+
+    def test_roman_numeral_safety_net(self):
+        """Pass 4: roman numerals as last resort when even artist names collide."""
+        # Same genres, same top artist name (unlikely but must be handled)
+        nodes, labels = self._build_nodes({
+            0: [("a1", "Same Name", ["hip-hop", "trap"], 80)],
+            1: [("a2", "Same Name", ["hip-hop", "trap"], 80)],
+        })
+        names = {0: "Hip Hop", 1: "Hip Hop"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
+
+    def test_three_way_collision(self):
+        """Three clusters with the same name all get unique names."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "A1", ["hip-hop", "trap"], 50),
+                ("a2", "A2", ["hip-hop", "trap"], 40)],
+            1: [("a3", "A3", ["hip-hop", "r&b"], 60),
+                ("a4", "A4", ["hip-hop", "r&b"], 30)],
+            2: [("a5", "A5", ["hip-hop", "soul"], 70),
+                ("a6", "A6", ["hip-hop", "soul"], 20)],
+        })
+        names = {0: "Hip Hop", 1: "Hip Hop", 2: "Hip Hop"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
+
+    def test_single_cluster_unchanged(self):
+        """Single cluster returns immediately, no processing."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "A1", ["rock"], 50)],
+        })
+        names = {0: "Rock"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        assert result == {0: "Rock"}
+
+    def test_empty_input(self):
+        """Empty dict returns empty dict."""
+        result = _dedup_cluster_names({}, {}, {})
+        assert result == {}
+
+    def test_mixed_collisions(self):
+        """Some names collide, others don't — only colliding ones change."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "A1", ["rock", "indie"], 50)],
+            1: [("a2", "A2", ["rock", "metal"], 50)],
+            2: [("a3", "A3", ["jazz"], 50)],
+        })
+        names = {0: "Rock", 1: "Rock", 2: "Jazz"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
+        # Jazz should remain unchanged
+        assert result[2] == "Jazz"
+
+    def test_no_genres_uses_artist_name(self):
+        """Clusters with no genres at all fall through to artist name."""
+        nodes, labels = self._build_nodes({
+            0: [("a1", "Sfera Ebbasta", [], 80)],
+            1: [("a2", "Travis Scott", [], 90)],
+        })
+        names = {0: "Cerchia 1", 1: "Cerchia 1"}
+        result = _dedup_cluster_names(names, labels, nodes)
+        values = list(result.values())
+        assert len(values) == len(set(values)), f"Duplicate names: {values}"
 
 
 class TestGenreEnrichment:

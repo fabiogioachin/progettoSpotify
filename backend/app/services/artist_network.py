@@ -317,55 +317,9 @@ async def build_artist_network(
     }
 
     # --- Deduplicate cluster names (Problem 3) ---
-    # When two clusters share a name (e.g. both "Hip Hop"), differentiate
-    # by appending the secondary genre.
-    seen_names: dict[str, int] = {}  # name -> first cid
-    for cid in sorted(filtered_names.keys()):
-        name = filtered_names[cid]
-        if name in seen_names:
-            first_cid = seen_names[name]
-
-            # Differentiate the current duplicate
-            cluster_aids_dup = [
-                aid for aid, c in louvain_labels.items() if c == cid
-            ]
-            genre_freq_dup: dict[str, int] = defaultdict(int)
-            for aid in cluster_aids_dup:
-                for g in nodes[aid].get("genres", []):
-                    genre_freq_dup[g] += 1
-            primary_norm = name.lower().replace(" ", "-")
-            secondary_dup = [
-                g
-                for g, _ in sorted(genre_freq_dup.items(), key=lambda x: -x[1])
-                if g.lower().replace(" ", "-") != primary_norm
-            ]
-            if secondary_dup:
-                suffix = secondary_dup[0].replace("-", " ").title()
-                filtered_names[cid] = f"{name} / {suffix}"
-            else:
-                filtered_names[cid] = f"{name} II"
-
-            # Differentiate the first occurrence too (if not already done)
-            if filtered_names[first_cid] == name:
-                cluster_aids_first = [
-                    aid for aid, c in louvain_labels.items() if c == first_cid
-                ]
-                genre_freq_first: dict[str, int] = defaultdict(int)
-                for aid in cluster_aids_first:
-                    for g in nodes[aid].get("genres", []):
-                        genre_freq_first[g] += 1
-                secondary_first = [
-                    g
-                    for g, _ in sorted(
-                        genre_freq_first.items(), key=lambda x: -x[1]
-                    )
-                    if g.lower().replace(" ", "-") != primary_norm
-                ]
-                if secondary_first:
-                    first_suffix = secondary_first[0].replace("-", " ").title()
-                    filtered_names[first_cid] = f"{name} / {first_suffix}"
-        else:
-            seen_names[name] = cid
+    # Post-processing pass: guarantee unique names regardless of naming source
+    # (TF-IDF from taste_clustering or fallback genre-counting).
+    filtered_names = _dedup_cluster_names(filtered_names, louvain_labels, nodes)
 
     # --- Genre nodes and edges for KG visualization ---
     genre_nodes_list = []
@@ -467,6 +421,109 @@ async def build_artist_network(
             "density": round(density, 3),
         },
     }
+
+
+def _dedup_cluster_names(
+    names: dict[int, str],
+    louvain_labels: dict[str, int],
+    nodes: dict[str, dict],
+) -> dict[int, str]:
+    """Guarantee unique cluster names via cascading differentiation.
+
+    Cascade order for duplicates sharing the same base name:
+    1. Secondary genre suffix (e.g. "Hip Hop / Trap" vs "Hip Hop / R&B")
+    2. Tertiary genre suffix (if secondary also collides)
+    3. Top artist name in parentheses (e.g. "Hip Hop (Sfera)" vs "Hip Hop (Travis)")
+    4. Roman numeral safety net (I, II, III, ...)
+
+    Works as a post-processing pass on already-computed names.
+    """
+    result = dict(names)
+    if len(result) <= 1:
+        return result
+
+    # Pre-compute per-cluster data: sorted genre list (excl. primary) + top artist
+    _cluster_info: dict[int, dict] = {}
+    for cid in result:
+        cluster_aids = [aid for aid, c in louvain_labels.items() if c == cid]
+        # Genre frequency within this cluster
+        genre_freq: dict[str, int] = defaultdict(int)
+        for aid in cluster_aids:
+            for g in nodes.get(aid, {}).get("genres", []):
+                genre_freq[g] += 1
+        sorted_genres = [g for g, _ in sorted(genre_freq.items(), key=lambda x: -x[1])]
+        # Top artist by popularity within this cluster
+        cluster_nodes = [nodes[aid] for aid in cluster_aids if aid in nodes]
+        top_artist = ""
+        if cluster_nodes:
+            best = max(cluster_nodes, key=lambda n: n.get("popularity", 0))
+            top_artist = best.get("name", "")
+            # Use first name/word only for brevity
+            top_artist = top_artist.split()[0] if top_artist else ""
+        _cluster_info[cid] = {
+            "sorted_genres": sorted_genres,
+            "top_artist": top_artist,
+        }
+
+    def _find_duplicates(d: dict[int, str]) -> dict[str, list[int]]:
+        """Return {name: [cid, ...]} for names appearing more than once."""
+        from collections import Counter
+
+        counts = Counter(d.values())
+        dups: dict[str, list[int]] = {}
+        for name, cnt in counts.items():
+            if cnt > 1:
+                dups[name] = sorted(cid for cid, n in d.items() if n == name)
+        return dups
+
+    def _non_primary_genres(cid: int, base_name: str) -> list[str]:
+        """Return genres for cid excluding those matching base_name."""
+        primary_norm = base_name.lower().replace(" ", "-")
+        return [
+            g
+            for g in _cluster_info.get(cid, {}).get("sorted_genres", [])
+            if g.lower().replace(" ", "-") != primary_norm
+        ]
+
+    # --- Pass 1: secondary genre suffix ---
+    dups = _find_duplicates(result)
+    for base_name, cids in dups.items():
+        for cid in cids:
+            secondary = _non_primary_genres(cid, base_name)
+            if secondary:
+                suffix = secondary[0].replace("-", " ").title()
+                result[cid] = f"{base_name} / {suffix}"
+            # If no secondary genre available, leave name unchanged for now
+
+    # --- Pass 2: tertiary genre suffix (when secondary also collided) ---
+    dups = _find_duplicates(result)
+    for dup_name, cids in dups.items():
+        # Extract the base name (before " / ") for genre exclusion
+        base_name = dup_name.split(" / ")[0]
+        for cid in cids:
+            non_primary = _non_primary_genres(cid, base_name)
+            # Skip the secondary (index 0) which already collided; try tertiary
+            if len(non_primary) >= 2:
+                tertiary_suffix = non_primary[1].replace("-", " ").title()
+                result[cid] = f"{base_name} / {tertiary_suffix}"
+
+    # --- Pass 3: top artist name fallback ---
+    dups = _find_duplicates(result)
+    for dup_name, cids in dups.items():
+        for cid in cids:
+            artist = _cluster_info.get(cid, {}).get("top_artist", "")
+            if artist:
+                result[cid] = f"{dup_name} ({artist})"
+
+    # --- Pass 4: roman numeral safety net ---
+    _roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+    dups = _find_duplicates(result)
+    for dup_name, cids in dups.items():
+        for i, cid in enumerate(cids):
+            numeral = _roman[i] if i < len(_roman) else str(i + 1)
+            result[cid] = f"{dup_name} {numeral}"
+
+    return result
 
 
 def _empty_result():
