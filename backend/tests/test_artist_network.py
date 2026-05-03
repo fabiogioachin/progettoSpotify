@@ -45,8 +45,15 @@ class TestEmptyResult:
         assert "cluster_names" in result
         assert "bridges" in result
         assert "top_genres" in result
+        assert "genre_rankings" in result
+        assert "genre_names" in result
         assert "data_quality" in result
         assert "metrics" in result
+
+    def test_genre_rankings_and_names_empty(self):
+        result = _empty_result()
+        assert result["genre_rankings"] == {}
+        assert result["genre_names"] == {}
 
     def test_metrics_fields(self):
         result = _empty_result()
@@ -518,6 +525,136 @@ class TestDedupClusterNamesUnit:
         result = _dedup_cluster_names(names, labels, nodes)
         values = list(result.values())
         assert len(values) == len(set(values)), f"Duplicate names: {values}"
+
+
+class TestGenreRankings:
+    """Tests for genre_rankings and genre_names in the artist network response."""
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_present_in_response(self):
+        """Response includes genre_rankings and genre_names dicts."""
+        artists = [
+            _make_artist("a1", "A1", ["rock", "indie"]),
+            _make_artist("a2", "A2", ["rock", "pop"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        assert isinstance(result["genre_rankings"], dict)
+        assert isinstance(result["genre_names"], dict)
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_keys_match_genre_nodes(self):
+        """Every key in genre_rankings corresponds to a genre node id."""
+        artists = [
+            _make_artist("a1", "A1", ["rock", "indie"]),
+            _make_artist("a2", "A2", ["rock", "pop"]),
+            _make_artist("a3", "A3", ["rock", "electronic"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        genre_node_ids = {gn["id"] for gn in result["genre_nodes"]}
+        for gid in result["genre_rankings"]:
+            assert gid in genre_node_ids
+
+    @pytest.mark.asyncio
+    async def test_genre_names_maps_id_to_name(self):
+        """genre_names maps genre node id to display name."""
+        artists = [
+            _make_artist("a1", "A1", ["rock", "indie"]),
+            _make_artist("a2", "A2", ["rock", "pop"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        for gn in result["genre_nodes"]:
+            assert gn["id"] in result["genre_names"]
+            assert result["genre_names"][gn["id"]] == gn["name"]
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_sorted_by_connections_desc(self):
+        """Artists within each genre ranking are sorted by connections descending."""
+        artists = [
+            _make_artist("a1", "A1", ["rock", "indie", "pop"]),
+            _make_artist("a2", "A2", ["rock", "pop"]),
+            _make_artist("a3", "A3", ["rock", "electronic"]),
+            _make_artist("a4", "A4", ["pop", "dance"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        for genre_id, artist_list in result["genre_rankings"].items():
+            connections = [a["connections"] for a in artist_list]
+            assert connections == sorted(connections, reverse=True), (
+                f"Genre {genre_id} not sorted by connections desc: {connections}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_score_normalization(self):
+        """Top artist in each genre gets score=1.0; others are proportional."""
+        artists = [
+            _make_artist("a1", "A1", ["rock", "indie", "pop"]),
+            _make_artist("a2", "A2", ["rock", "pop"]),
+            _make_artist("a3", "A3", ["rock", "electronic"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        for genre_id, artist_list in result["genre_rankings"].items():
+            if not artist_list:
+                continue
+            # First artist (most connections) should have score 1.0
+            assert artist_list[0]["score"] == 1.0
+            # All scores should be between 0 and 1
+            for a in artist_list:
+                assert 0.0 <= a["score"] <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_artist_fields(self):
+        """Each artist entry in genre_rankings has the expected fields."""
+        artists = [
+            _make_artist("a1", "A1", ["rock", "indie"]),
+            _make_artist("a2", "A2", ["rock", "pop"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        expected_fields = {"name", "image", "genres", "popularity", "connections", "score"}
+        for genre_id, artist_list in result["genre_rankings"].items():
+            for entry in artist_list:
+                assert set(entry.keys()) == expected_fields, (
+                    f"Missing fields in genre_rankings entry: {set(entry.keys())}"
+                )
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_empty_when_no_genres(self):
+        """When all artists lack genres, genre_rankings is empty."""
+        artists = [
+            _make_artist("a1", "A1", []),
+            _make_artist("a2", "A2", []),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        assert result["genre_rankings"] == {}
+        assert result["genre_names"] == {}
+
+    @pytest.mark.asyncio
+    async def test_genre_rankings_zero_connections_score(self):
+        """Artists with 0 connections get score 0.0 (no division by zero)."""
+        # Single artist with a genre — will be connected to genre node but has 0 artist-artist connections
+        artists = [
+            _make_artist("a1", "A1", ["niche_genre_xyz"]),
+        ]
+        client = _make_client(medium_items=artists)
+        result = await build_artist_network(client)
+
+        for genre_id, artist_list in result["genre_rankings"].items():
+            for a in artist_list:
+                # score should be valid even if connections == 0
+                assert isinstance(a["score"], float)
+                assert 0.0 <= a["score"] <= 1.0
 
 
 class TestGenreEnrichment:

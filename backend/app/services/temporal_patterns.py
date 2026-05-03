@@ -373,28 +373,34 @@ async def _compute_daily_minutes(
             }
             for s in stats
         ]
-        # DailyListeningStats is pre-aggregated at 02:00, so today's entry may be
-        # stale or missing. Always recompute today from in-memory plays (which come
-        # from recent_plays DB table) and use the richer of the two sources.
-        today_str = today.isoformat()
+        # DailyListeningStats is pre-aggregated at 02:00 UTC, but uses UTC day
+        # boundaries — not the user's timezone. For recent dates (today + yesterday)
+        # the UTC-bucketed totals may differ from user-local days, especially for
+        # UTC+ timezones (e.g. Italy, UTC+2: plays 22:00-23:59 local shift a day).
+        # Always recompute the last 2 days from in-memory plays with correct tz.
+        yesterday = today - timedelta(days=1)
+        override_dates = {today, yesterday}
         if plays:
-            today_ms = 0
-            today_count = 0
+            override_entries = {}
             for p in plays:
-                if p["datetime"].date() == today:
-                    today_ms += p.get("duration_ms", 0)
-                    today_count += 1
-            if today_count > 0:
-                live_entry = {
-                    "date": today_str,
-                    "minutes": round(today_ms / 60000, 1),
-                    "plays": today_count,
-                }
-                # Replace stale pre-aggregated entry or append if missing
-                result_list = [
-                    r for r in result_list if r["date"] != today_str
-                ]
-                result_list.append(live_entry)
+                p_local = p["datetime"].astimezone(_tz) if p["datetime"].tzinfo else p["datetime"]
+                p_date = p_local.date()
+                if p_date in override_dates:
+                    key = p_date.isoformat()
+                    if key not in override_entries:
+                        override_entries[key] = {"ms": 0, "count": 0}
+                    override_entries[key]["ms"] += p.get("duration_ms", 0)
+                    override_entries[key]["count"] += 1
+            # Remove stale pre-aggregated entries for override dates
+            override_strs = {d.isoformat() for d in override_dates}
+            result_list = [r for r in result_list if r["date"] not in override_strs]
+            for date_str, agg in override_entries.items():
+                if agg["count"] > 0:
+                    result_list.append({
+                        "date": date_str,
+                        "minutes": round(agg["ms"] / 60000, 1),
+                        "plays": agg["count"],
+                    })
         return result_list
 
     # Fallback: aggrega dai plays in-memory (per utenti nuovi senza background job)

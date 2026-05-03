@@ -18,7 +18,8 @@ export default function ArtistNetworkPage() {
   const clusterNames = data?.cluster_names || {}
   const bridges = data?.bridges || []
   const topGenres = data?.top_genres || []
-  const clusterRankings = data?.cluster_rankings || {}
+  const genreRankings = data?.genre_rankings || {}
+  const genreNames = data?.genre_names || {}
   const genreNodes = data?.genre_nodes || []
   const genreEdges = data?.genre_edges || []
 
@@ -158,10 +159,10 @@ export default function ArtistNetworkPage() {
               </SectionErrorBoundary>
             )}
 
-            {/* Le tue Cerchie */}
-            {Object.keys(clusterRankings).length > 0 && (
+            {/* Le tue Cerchie — aligned with genre nodes from graph */}
+            {Object.keys(genreRankings).length > 0 && (
               <SectionErrorBoundary sectionName="CerchieSection">
-                <CerchieSection clusterRankings={clusterRankings} clusterNames={clusterNames} />
+                <CerchieSection genreRankings={genreRankings} genreNames={genreNames} genreNodes={genreNodes} />
               </SectionErrorBoundary>
             )}
           </>
@@ -175,16 +176,18 @@ const CLUSTER_COLORS = [
   '#8b5cf6', '#ef4444', '#10b981', '#f97316', '#14b8a6',
 ]
 
-function CerchieSection({ clusterRankings, clusterNames }) {
-  const sortedEntries = Object.entries(clusterRankings)
+function CerchieSection({ genreRankings, genreNames, genreNodes }) {
+  // Build genre node color map (cluster -> color)
+  const genreColorMap = {}
+  for (const gn of genreNodes) {
+    genreColorMap[gn.id] = CLUSTER_COLORS[(gn.cluster ?? 0) % CLUSTER_COLORS.length]
+  }
+
+  const sortedEntries = Object.entries(genreRankings)
     .filter(([, artists]) => artists.length > 0)
     .sort((a, b) => b[1].length - a[1].length)
 
-  const [expanded, setExpanded] = useState(() => {
-    const initial = {}
-    sortedEntries.slice(0, 3).forEach(([id]) => { initial[id] = true })
-    return initial
-  })
+  const [expanded, setExpanded] = useState({})
 
   const toggle = (id) => {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
@@ -198,27 +201,27 @@ function CerchieSection({ clusterRankings, clusterNames }) {
           Le tue Cerchie
         </h3>
         <p className="text-text-secondary text-sm mt-1">
-          Tutti gli artisti raggruppati per cerchia musicale
+          Artisti raggruppati per genere — come nel grafico sopra
         </p>
       </div>
       <StaggerContainer className="space-y-3">
-        {sortedEntries.map(([clusterId, artists]) => {
-          const cName = clusterNames[clusterId] || `Cerchia ${Number(clusterId) + 1}`
-          const color = CLUSTER_COLORS[Number(clusterId) % CLUSTER_COLORS.length]
-          const isOpen = !!expanded[clusterId]
+        {sortedEntries.map(([genreId, artists]) => {
+          const name = genreNames[genreId] || genreId
+          const color = genreColorMap[genreId] || '#6366f1'
+          const isOpen = !!expanded[genreId]
 
           return (
-            <StaggerItem key={clusterId}>
+            <StaggerItem key={genreId}>
               <div className="glow-card bg-surface rounded-xl overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => toggle(clusterId)}
+                  onClick={() => toggle(genreId)}
                   className="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-hover transition-colors duration-200"
                   aria-expanded={isOpen}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                    <span className="text-text-primary font-display font-semibold text-sm">{cName}</span>
+                    <span className="text-text-primary font-display font-semibold text-sm">{name}</span>
                     <span className="text-text-muted text-xs">({artists.length} artisti)</span>
                   </div>
                   {isOpen ? (
@@ -257,7 +260,7 @@ function CerchieSection({ clusterRankings, clusterNames }) {
                               <div className="flex items-center justify-between gap-2">
                                 <p className="text-text-primary text-sm font-medium truncate">{artist.name}</p>
                                 <span className="text-text-muted text-xs flex-shrink-0">
-                                  {Math.round(artist.score * 100)}%
+                                  {artist.connections} conn.
                                 </span>
                               </div>
                               {artist.genres && artist.genres.length > 0 && (

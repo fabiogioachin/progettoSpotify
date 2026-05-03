@@ -15,7 +15,10 @@ from typing import TYPE_CHECKING
 import networkx as nx
 from networkx.algorithms.community import louvain_communities
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.listening_history import RecentPlay
 
 from app.services.genre_cache import get_artist_genres_cached
 from app.services.genre_utils import compute_genre_similarity, normalize_genre
@@ -140,6 +143,38 @@ async def build_artist_network(
                 raise
             except Exception as exc:
                 logger.warning("Genre cache enrichment fallito: %s", exc)
+
+    # Per-artist play count from recent_plays
+    if db:
+        try:
+            artist_ids_list = list(nodes.keys())
+            stmt = (
+                select(
+                    RecentPlay.artist_spotify_id,
+                    func.count().label("play_count"),
+                )
+                .where(
+                    RecentPlay.user_id == client.user_id,
+                    RecentPlay.artist_spotify_id.in_(artist_ids_list),
+                )
+                .group_by(RecentPlay.artist_spotify_id)
+            )
+            result = await db.execute(stmt)
+            play_counts = {row.artist_spotify_id: row.play_count for row in result}
+            for nid in nodes:
+                nodes[nid]["play_count"] = play_counts.get(nid, 0)
+            logger.debug(
+                "Play count caricati per %d/%d artisti",
+                len(play_counts),
+                len(nodes),
+            )
+        except Exception as exc:
+            logger.warning("Query play count fallita: %s", exc)
+            for nid in nodes:
+                nodes[nid]["play_count"] = 0
+    else:
+        for nid in nodes:
+            nodes[nid]["play_count"] = 0
 
     # Build genre-based edges with fuzzy matching
     edges = []
@@ -382,6 +417,46 @@ async def build_artist_network(
                             }
                         )
 
+    # --- Genre rankings: artists grouped by genre node, sorted by connections ---
+    genre_artists: dict[str, list[str]] = defaultdict(list)
+    for ge in genre_edges_list:
+        source, target = ge["source"], ge["target"]
+        # One end is the genre node (id starts with "genre_"), the other is the artist
+        if target.startswith("genre_"):
+            genre_artists[target].append(source)
+        elif source.startswith("genre_"):
+            genre_artists[source].append(target)
+
+    genre_rankings: dict[str, list[dict]] = {}
+    for genre_id, artist_ids_in_genre in genre_artists.items():
+        # Deduplicate (should already be unique via seen_genre_edges, but be safe)
+        unique_aids = list(dict.fromkeys(artist_ids_in_genre))
+        artist_entries = []
+        for aid in unique_aids:
+            node = nodes.get(aid)
+            if node:
+                artist_entries.append(
+                    {
+                        "name": node["name"],
+                        "image": node.get("image"),
+                        "genres": node.get("genres", []),
+                        "popularity": node.get("popularity", 0),
+                        "connections": node.get("connections", 0),
+                    }
+                )
+        # Sort by connections descending
+        artist_entries.sort(key=lambda a: a["connections"], reverse=True)
+        # Normalize score 0-1 within the group
+        max_conn = artist_entries[0]["connections"] if artist_entries else 1
+        if max_conn == 0:
+            max_conn = 1  # avoid division by zero
+        for entry in artist_entries:
+            entry["score"] = round(entry["connections"] / max_conn, 3)
+        genre_rankings[genre_id] = artist_entries
+
+    # Genre names: genre node id -> display name
+    genre_names: dict[str, str] = {gn["id"]: gn["name"] for gn in genre_nodes_list}
+
     # Genre summary
     genre_counter = defaultdict(int)
     for n in nodes.values():
@@ -413,6 +488,8 @@ async def build_artist_network(
         "top_genres": [{"genre": g, "count": c} for g, c in top_genres],
         "genre_nodes": genre_nodes_list,
         "genre_edges": genre_edges_list,
+        "genre_rankings": genre_rankings,
+        "genre_names": genre_names,
         "data_quality": data_quality,
         "metrics": {
             "total_nodes": len(nodes),
@@ -537,6 +614,8 @@ def _empty_result():
         "top_genres": [],
         "genre_nodes": [],
         "genre_edges": [],
+        "genre_rankings": {},
+        "genre_names": {},
         "data_quality": {"artists_without_genres": 0, "warning": None},
         "metrics": {
             "total_nodes": 0,
