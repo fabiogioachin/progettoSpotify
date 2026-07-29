@@ -12,8 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Dockerfiles live in docker/, build contexts stay ./backend and ./frontend
+      # (same split as docker/docker-compose.yml, and what the per-context
+      # .dockerignore files assume).
       - name: Build backend image
-        run: docker build -t spotify-intelligence-backend ./backend
+        run: docker build -t spotify-intelligence-backend -f docker/backend.Dockerfile ./backend
 
       - name: Build frontend image
-        run: docker build -t spotify-intelligence-frontend ./frontend
+        run: docker build -t spotify-intelligence-frontend -f docker/frontend.Dockerfile ./frontend

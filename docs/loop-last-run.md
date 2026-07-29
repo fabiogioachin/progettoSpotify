@@ -92,3 +92,98 @@ prenderà l'item 4 parta da dati veri e non da zero:
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-29 21:40 — `ITEM-DONE` — item 2 «`build.yml` punta a Dockerfile che non esistono»
+
+**Guardia** (riga integrale di output):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 9 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.069s su 9 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (resta a zero, questo run è un `ITEM-DONE`).
+
+### Cosa è stato fatto
+
+Il workflow «Build Docker Images» chiedeva a Docker di costruire due immagini a partire da
+`./backend` e `./frontend`, cartelle che non contengono nessun `Dockerfile`: **falliva a ogni push
+su master**. I due Dockerfile veri stanno in `docker/`.
+
+Corretti i due step di `.github/workflows/build.yml` aggiungendo `-f docker/backend.Dockerfile` e
+`-f docker/frontend.Dockerfile`, e **lasciando i context invariati** a `./backend` e `./frontend`.
+Quest'ultima parte è la scelta che contava, ed è stata presa guardando come il repo già costruisce
+le stesse immagini altrove, non a intuito:
+
+- `docker/docker-compose.yml:40-41` e `docker/docker-compose.prod.yml:38-39` dichiarano entrambi
+  `context: ../backend` con `dockerfile: ../docker/backend.Dockerfile` (idem per il frontend). Il
+  workflow ora fa la stessa identica cosa, espressa dalla radice del repo.
+- Esistono `backend/.dockerignore` e `frontend/.dockerignore` **separati**, con dentro voci come
+  `tests/`, `.venv/` da un lato e `node_modules/`, `dist/` dall'altro: sono scritti rispetto a quelle
+  due cartelle, il che conferma che il context inteso è la cartella e non la radice.
+
+Un context sbagliato non avrebbe dato errore di sintassi: avrebbe rotto le `COPY` dentro
+l'immagine, o si sarebbe portato dietro l'intero repo. Per questo è stato verificato a parte.
+
+Aggiunto sopra i due step un commento di tre righe che dice perché il Dockerfile e il context
+stanno in due posti diversi, così la prossima modifica non li riallinea «per pulizia».
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `verify_build_yml.py` — YAML + esistenza dei path citati | YAML carica, 4 path su 4 esistono | 0 |
+| `verify_contexts.py` — ogni `COPY` risolve dentro il context | 8 sorgenti su 8 OK, nessuna esclusa dal `.dockerignore` | 0 |
+| `cd frontend && npm run lint` | nessun errore | 0 |
+| `cd frontend && npm run build` | 2728 moduli, build in 3.88s | 0 |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **526 passati, 8 falliti** in 4m17s | 1 |
+
+Interprete: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe` (3.12.13).
+I due script di verifica sono usa-e-getta, scritti nello scratchpad di sessione e non versionati.
+
+Il primo criterio dell'item («ogni path citato in `build.yml` esiste nel repo; lo YAML si carica
+senza errori») è verde. Il secondo controllo non era richiesto dall'item ed è stato aggiunto
+perché il criterio richiesto non distingue un context giusto da uno sbagliato: entrambi i path
+esisterebbero comunque.
+
+`npm run build` non è un contorno: `docker/frontend.Dockerfile:10` esegue proprio quel comando
+**dentro** l'immagine, quindi se fosse rosso lo step di CI fallirebbe comunque, con i path corretti.
+
+### Gli 8 test rossi sono quelli di prima, e non sono di questo item
+
+Identici per numero, file e nome a quelli misurati al run precedente: 4 in `test_privacy.py`,
+4 in `test_temporal_patterns.py`, 526 passati in entrambi i giri. Questo run ha toccato **un solo
+file YAML sotto `.github/`**, che nessun test importa: nessuna regressione possibile, e infatti
+nessuna. Sono il mandato esplicito dell'item 4 e lì restano — un run, un item.
+
+### Limite dichiarato: la build vera non è stata eseguita
+
+`docker version` fallisce, il demone locale non è avviato:
+
+```
+failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the
+path is correct and if the daemon is running
+```
+
+Non è stato avviato Docker Desktop: sarebbe andato oltre il mandato dell'item, che già mette in
+conto questo limite. Quindi **la prova che le due immagini si costruiscono davvero arriverà solo
+al prossimo push**, come previsto dal testo dell'item. Ciò che è provato qui è tutto ciò che è
+provabile senza demone: i path esistono, lo YAML è valido, e ogni file che i Dockerfile copiano è
+raggiungibile dentro il context scelto.
+
+### Altre osservazioni, senza azione
+
+- **Discrepanza minore nel backlog**: l'item cita «righe 13 e 16», i due `docker build` stanno in
+  realtà alle righe 16 e 19. Il testo dell'item non è stato corretto — descrive la cosa giusta con
+  un numero di riga sbagliato, e ora quelle righe sono comunque cambiate.
+- **Contratto del repo**: `.claude/CLAUDE.md` riletto. Nessun `CLAUDE.md` in radice. Non concede
+  nulla di più ampio del prompt del loop.
+- **Nessun item nuovo creato**, nessuna modifica al backlog oltre allo stato dell'item 2.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere.

@@ -56,7 +56,14 @@ Cosa fare:
   è un item successivo; qui conta che i comandi siano eseguibili).
 - Nessun file di ambiente committato: `.venv/` e `node_modules/` sono già nel `.gitignore`.
 
-### 2. `[ ]` `build.yml` punta a Dockerfile che non esistono
+### 2. `[x]` `build.yml` punta a Dockerfile che non esistono
+
+> **Fatto il 2026-07-29.** Aggiunto `-f docker/backend.Dockerfile` e `-f docker/frontend.Dockerfile`
+> ai due step, lasciando i context `./backend` e `./frontend` come li usano i due compose file.
+> Verificato che ogni path citato dal workflow esiste e che ogni sorgente `COPY` dei Dockerfile
+> risolve dentro il context dichiarato senza essere esclusa dal `.dockerignore` di quel context.
+> Il demone Docker locale non gira, quindi la build vera non è stata eseguita: la prova arriva al
+> prossimo push. Dettaglio in `docs/loop-last-run.md`.
 
 `.github/workflows/build.yml` righe 13 e 16 fanno `docker build ./backend` e `docker build
 ./frontend`, ma non esistono `backend/Dockerfile` né `frontend/Dockerfile`: i Dockerfile veri sono
