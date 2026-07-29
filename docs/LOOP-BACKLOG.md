@@ -23,7 +23,13 @@ non lo sa chiudere, e resterà lì a bloccare la coda.
 
 ## Item
 
-### 1. `[ ]` Ricostruire gli ambienti di sviluppo (prerequisito di tutto il resto)
+### 1. `[x]` Ricostruire gli ambienti di sviluppo (prerequisito di tutto il resto)
+
+> **Fatto il 2026-07-29.** Venv backend su Python 3.12.13 e `npm ci` sul frontend.
+> `pytest --collect-only` raccoglie 534 test con zero errori di import (erano 185 con 19 errori),
+> `npm run lint` e `npm run build` escono entrambi con 0, `git status` è vuoto. Nessuna
+> configurazione pytest aggiunta: la condizione posta dal punto 4 non si è verificata, la suite
+> gira senza. Dettaglio in `docs/loop-last-run.md`.
 
 Oggi nel repo non esiste né `backend/.venv` né `frontend/node_modules`. Senza, **nessun item è
 verificabile**: 19 file di test su 30 non collezionano nemmeno (`ModuleNotFoundError: asyncpg`,
@@ -87,6 +93,12 @@ Cosa fare: eseguire la suite in locale col venv dell'item 1 (se i test vogliono 
 avviare solo quei due servizi con `docker-compose -f docker/docker-compose.yml up postgres redis -d`
 — è infrastruttura locale, non deploy). Poi aggiungere a `ci.yml` un job `backend-test` su Python
 3.12 che rispecchia ciò che ha funzionato in locale, servizi inclusi.
+
+> **Misurato il 2026-07-29** (dal giro dell'item 1, non corretto lì): `pytest -q` dà **526 passati
+> e 8 falliti**. Quattro in `test_privacy.py` sono inquinamento tra test — passano da soli e
+> falliscono solo dopo un altro `TestClient(app)`, per via dello scheduler globale in
+> `app/main.py:87`. Quattro in `test_temporal_patterns.py` falliscono anche in isolamento. Causa e
+> riferimenti precisi in `docs/loop-last-run.md`.
 
 **Verifica**: suite verde in locale, con comando, conteggio e interprete dichiarati nel run-log;
 job presente in `ci.yml` e YAML valido. Come per l'item 2, la prova CI vera arriva al prossimo
