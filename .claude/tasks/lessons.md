@@ -79,6 +79,12 @@ Lessons that affect future tasks. Target: under 15 entries.
 **Root cause**: MusicBrainz community tags include nationality, roles, decades, junk. These create false genre-similarity edges.
 **Action**: `_NON_GENRE_TAGS` blocklist (~100 entries) filters nationality, decades, roles, meta tags. Applied at fetch time in `musicbrainz_client.py`.
 
+### 2026-07-29 — [codebase] Module-level AsyncIOScheduler breaks a second `TestClient(app)`
+**Context**: `pytest -q` gives 526 passed / 8 failed. The 4 in `test_privacy.py` fail with `RuntimeError: Event loop is closed`, but each one **passes when run alone**.
+**What happened**: Every `with TestClient(app)` runs the app lifespan, which does `scheduler.start()` then `scheduler.shutdown(wait=False)` on exit. The first client in a file passes, every later one fails.
+**Root cause**: `scheduler = AsyncIOScheduler()` is instantiated at module scope (`app/main.py:87`), so it is a process-wide singleton. The second `TestClient` restarts that same object on a fresh event loop while APScheduler still holds a reference to the first, now-closed one. Nothing to do with `asyncio_mode` — these are sync tests with no async marker, so pytest-asyncio config cannot affect them.
+**Action**: Don't bind asyncio objects to module scope when the app lifespan starts them — build the scheduler inside `lifespan()`. Until then, a test file must not open more than one `TestClient(app)` context: share a single module-scoped client fixture. When a test passes alone but fails in the file, suspect a loop-bound global before suspecting the test.
+
 ### 2026-03-21 — [codebase] Falsy-zero bug: `not t.get("popularity")` treats 0 as missing
 **Context**: `popularity_cache.py` line 31 used truthiness check on a numeric field.
 **Root cause**: Python `not 0` is `True`.
