@@ -46,3 +46,8 @@ htmlcov/
 !.claude/skills/
 !.claude/tasks/
 !.claude/CLAUDE.md
+
+# Scratch e stato locale dei loop schedulati (contatore di loop_yield.py).
+# Senza questa riga la guardia sporca la working tree che il protocollo del loop
+# pretende pulita, e il run successivo la scambia per lavoro di qualcun altro.
+_local/
