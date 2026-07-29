@@ -187,3 +187,52 @@ raggiungibile dentro il context scelto.
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-29 22:33 — `NOOP-BUSY` — nessun item preso
+
+**Guardia** (riga integrale di output, exit code 3):
+
+```
+CEDI     1 sessione/i viva/e sulla repo (finestra 15min):
+         5c1a7c88-4fef-4973-b179-d982fefec1ef  ultimo evento 2026-07-29T22:27:27Z (6.2min fa)
+         scrivi NOOP-BUSY nel run-log: cedere non e' sparire
+         costo del controllo: 0.010s su 10 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **1** (era 0, azzerato dall'`ITEM-DONE` dell'item 2; primo run dello streak
+2026-07-29T22:33:56Z).
+
+### Perché il loop ha ceduto
+
+Il motivo dichiarato dalla guardia è **«sessione viva»**: un'altra sessione stava lavorando su
+questa working tree, con ultimo evento sei minuti prima del controllo. È il funzionamento normale
+del meccanismo di cortesia, non un guasto — per questo l'esito è `NOOP-BUSY` e non
+`NOOP-UNDECIDABLE`. Nessun item preso, nessun file di codice o di backlog toccato: l'unica scrittura
+di questo run è questa voce di registro.
+
+### Breaker
+
+**Non aperto.** Serve che siano vere entrambe le condizioni, e la prima non lo è: lo streak vale 1,
+la soglia è 3. Non è nemmeno il caso di `BREAKER: TRATTENUTO`, che riguarda una soglia raggiunta ma
+con troppo poco tempo trascorso: qui la soglia non è raggiunta affatto.
+
+### Conti con la guardia
+
+Nessuno dei due comandi di chiusura è stato eseguito, e in questo ramo è corretto così:
+`--confirm-progress` vale solo dopo un `ITEM-DONE`, `--confirm-escalation` solo se la guardia stampa
+una riga `ESCALATION` — questa ha stampato `CEDI`.
+
+### Escalation al vault
+
+Nessuna. Il canale verso Fabio si usa per il breaker aperto o per il capolinea, e non siamo in
+nessuno dei due casi. Il lock fra loop non è stato preso, perché non c'era nulla da scrivere in
+`Inbox.md`.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito. `git status --porcelain` era vuoto prima di questa
+voce di registro.
