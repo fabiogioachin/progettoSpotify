@@ -1,8 +1,6 @@
 # LOOP BACKLOG — progettoWrap
 
-LOOP HALTED
-
-> **Programma: cinque giri, poi checkpoint.** Il quinto item runnable è seguito da un
+> **Programma avviato il 2026-07-29: cinque giri, poi checkpoint.** Il quinto item runnable è seguito da un
 > item-checkpoint che rimette `LOOP HALTED` in testa a questo file e ferma tutto. A quel punto
 > si rivede il lavoro e, se convince, si riapre la coda togliendo il marcatore.
 > Il marcatore qui sopra lo togli tu quando vuoi far partire il programma.
