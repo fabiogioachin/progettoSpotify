@@ -1,15 +1,19 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { BarChart3, Music2, Sparkles, TrendingUp } from 'lucide-react'
+import { AlertTriangle, BarChart3, Music2, Sparkles, TrendingUp } from 'lucide-react'
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, serviceDown } = useAuth()
   const [connecting, setConnecting] = useState(false)
 
-  function handleLogin() {
+  async function handleLogin() {
     if (connecting) return
     setConnecting(true)
-    login() // redirect a Spotify — la pagina lascia il dominio, non serve reset
+    const started = await login()
+    // Se il redirect e' partito la pagina sta lasciando il dominio e il bottone
+    // resta com'e'. Se invece il backend non risponde restiamo qui: rimettiamo
+    // il bottone in chiaro, il messaggio lo mostra `serviceDown`.
+    if (!started) setConnecting(false)
   }
 
   return (
@@ -75,6 +79,21 @@ export default function LoginPage() {
             desc="Scopri nuovi artisti affini al tuo stile"
           />
         </div>
+
+        {/* Servizio non raggiungibile — visibile sia all'apertura sia dopo un
+            tentativo di connessione fallito */}
+        {serviceDown && (
+          <div
+            role="alert"
+            className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-6 flex items-start gap-2 text-left"
+          >
+            <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-amber-400 text-sm">
+              Il servizio non risponde. Non è possibile collegarsi a Spotify in questo momento —
+              riprova fra qualche istante.
+            </p>
+          </div>
+        )}
 
         {/* CTA */}
         <button

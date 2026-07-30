@@ -225,7 +225,17 @@ dove si è arrivati — non inventare una prova.
 ispezione: non forzarlo. Correggi il testo dell'item, spiega nel run-log cosa era sbagliato, e
 chiudilo per quello che è. Un item che descrive un difetto inesistente si chiude smontandolo.
 
-### I-1. `[ ]` Col backend spento il bottone di login porta a una pagina bianca
+### I-1. `[x]` Col backend spento il bottone di login porta a una pagina bianca
+
+> **Fatto il 2026-07-30.** Verificato **dal vivo** (mezzo 1), col backend spento e il server di
+> sviluppo attivo: la schermata di accesso ora mostra un avviso già all'apertura, e premere
+> «Connetti Spotify» **non porta più via dall'applicazione** — l'indirizzo resta `127.0.0.1:5173`,
+> l'interfaccia resta intera, il bottone torna in chiaro. Due file toccati: `AuthContext.jsx`
+> distingue «backend non risponde» da «sessione assente» ed espone `serviceDown`; `login()` verifica
+> che il backend risponda **prima** di lasciare la pagina, e la LoginPage mostra l'avviso.
+> Dettaglio in `docs/loop-last-run.md`. **Limite dichiarato**: il ramo felice (backend acceso →
+> il salto verso Spotify parte) non è provato dal vivo, perché richiederebbe credenziali Spotify
+> reali o un finto backend, entrambi vietati al loop; è verificato **sul codice**.
 
 L'unico percorso che un utente non autenticato può percorrere, ed è senza uscita. **Verificato dal
 vivo**, non dedotto: con il server di sviluppo attivo e il backend spento, `/auth/spotify/login`

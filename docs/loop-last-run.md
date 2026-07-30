@@ -943,3 +943,183 @@ transizione nuova, non una ripetizione di quella del primo programma.
 
 `no_progress_streak`: **0**, invariato. Nessuno streak aperto, nessun `BREAKER:` da scrivere o da
 togliere, nessuna riga `escalated:` pendente.
+
+---
+
+## 2026-07-30 16:44 UTC — `ITEM-DONE` — I-1 «Col backend spento il bottone di login porta a una pagina bianca»
+
+**Esito in una riga**: il primo item del secondo programma è chiuso. Col backend spento, la
+schermata di accesso ora **dice** che il servizio non risponde e il bottone **non porta più fuori
+dall'applicazione**. Verificato dal vivo, che per questo item era il mezzo migliore disponibile.
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 16 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.059s su 16 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 2 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, resta 0: questo run è un `ITEM-DONE`). Nessuno streak aperto,
+nessun timestamp di primo run da tenere.
+
+### Il Passo 0 in Bash: risolto, non aggirato
+
+Le cinque volte precedenti il comando della guardia è fallito in Bash ed è stato rieseguito in
+PowerShell. Stessa partenza anche stavolta — Git Bash mangia i backslash e cerca
+`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`, exit 2 — ma la soluzione non richiede di
+cambiare shell: **bastano i path con la barra in avanti**, quotati
+(`"C:/Users/fgioa/.claude/scripts/loop_yield.py"`). Windows accetta entrambi i separatori, ed è Bash
+a non sopravvivere solo al backslash. Al secondo tentativo, in Bash, la guardia ha risposto `LIBERO`.
+Come le altre volte, il primo tentativo **non** è un `NOOP-UNDECIDABLE`: la guardia non era partita.
+
+### Working tree sporca all'avvio: valutata, non un `NOOP-DIRTY`
+
+`git status --porcelain` a inizio run: ` M .claude/tasks/lessons.md`. Letto il diff invece di
+dedurlo dal nome: **una sola voce di lezione, chiusa**, scritta dalla sessione che ha riaperto la
+coda alle 13:40 UTC — quella che documenta che il frontend non ha un test runner e che i criteri
+dell'ispezione andavano corredati del mezzo di verifica. È meta-lavoro su questo loop, finito.
+Sovrapposizione con i file di questo item: **zero** (io tocco `frontend/src/`). La guardia dice
+`LIBERO`, quindi nessuna sessione in volo da proteggere, che è il rischio per cui `NOOP-DIRTY`
+esiste. Non messo in stage: l'`add` di questo run elenca path espliciti.
+
+### Cosa era rotto, e perché era rotto due volte
+
+Il finding descriveva un guasto solo, ma i punti di rottura erano due, in fila.
+
+**Primo, all'apertura della pagina.** `checkAuth` chiamava `/auth/me`, prendeva l'errore e lo
+scriveva in console (`console.error` e basta). L'utente vedeva una schermata di accesso **identica
+al caso normale**, senza nessun segnale che il servizio fosse giù.
+
+Il pezzo che rende la correzione pulita, e che il finding non diceva: **`/auth/me` risponde `200`
+anche all'utente anonimo**, con `{"authenticated": false}` (`backend/app/routers/auth.py:285-290`).
+Quindi su quell'indirizzo un errore **non è mai** «sessione assente»: è «il backend non ha
+risposto». Non serve indovinare dal codice di stato — la distinzione è netta per costruzione, e su
+questo poggia tutto il resto.
+
+**Secondo, al clic.** `login()` faceva `window.location.href = '/auth/spotify/login'` senza
+verificare niente. Quell'assegnazione porta il browser **fuori dalla SPA**: se nessuno serve
+l'indirizzo, non c'è più nessuna interfaccia a cui tornare, e infatti la pagina restava bianca.
+Misurato, non dedotto — col backend spento, attraverso il proxy di Vite:
+
+```
+GET http://127.0.0.1:5173/auth/spotify/login  ->  status=500 size=0
+```
+
+Zero byte di corpo: la pagina bianca è letteralmente quella risposta.
+
+### Cosa è stato fatto
+
+Due file, 49 righe aggiunte e 6 tolte. Nessun componente nuovo, nessuna dipendenza aggiunta.
+
+1. **`frontend/src/contexts/AuthContext.jsx`** — aggiunto lo stato `serviceDown`, acceso quando
+   `/auth/me` fallisce e spento quando risponde. E `login()` è diventata asincrona: **verifica che
+   il backend risponda prima di lasciare la pagina**, e ritorna `false` se non risponde, così il
+   chiamante può restare dov'è. Il perché sta scritto accanto al codice, altrimenti la prossima
+   modifica rimette il redirect diretto «perché è più semplice».
+2. **`frontend/src/pages/LoginPage.jsx`** — mostra l'avviso quando `serviceDown` è acceso, e rimette
+   il bottone in chiaro quando il tentativo non è partito. Una sola fonte di verità: il messaggio
+   dipende da `serviceDown`, non da uno stato locale duplicato che potrebbe divergere.
+
+Riquadro d'avviso: riusato il modello già presente nel progetto per gli avvisi in pagina
+(`bg-amber-500/10` con l'icona `AlertTriangle`, come `ArtistNetworkPage.jsx:73-76` e
+`PlaylistAnalyticsPage.jsx:98`), non inventato uno stile nuovo. Aggiunto `role="alert"` perché il
+messaggio compare dopo un'azione dell'utente e va annunciato, non solo disegnato.
+
+Testo mostrato: «Il servizio non risponde. Non è possibile collegarsi a Spotify in questo momento —
+riprova fra qualche istante.» In italiano, come vuole la convenzione del repo.
+
+### Verifiche eseguite — mezzo 1 (dal vivo) e mezzo 3 (meccanico)
+
+Il primo dei tre mezzi ammessi dalla sezione «Trovati dall'ispezione», che per questo item è quello
+buono: la schermata di accesso è l'unica pagina raggiungibile senza backend e senza login.
+
+Preparazione, verificata invece che assunta: porta **8001 non in ascolto** (backend davvero spento),
+server di sviluppo avviato sulla 5173, pagina aperta col browser della sessione.
+
+| Controllo | Esito | Exit |
+|---|---|---|
+| porta 8001 in ascolto? | **no** — scenario «backend spento» confermato | — |
+| `GET /auth/me` via proxy | **500**, quindi `serviceDown` si accende | — |
+| `GET /auth/spotify/login` via proxy | **500, corpo di 0 byte** — la pagina bianca | — |
+| **dal vivo**: testo della pagina all'apertura | avviso presente: «Il servizio non risponde…» | — |
+| **dal vivo**: clic su «Connetti Spotify» | indirizzo **invariato** (`127.0.0.1:5173`), interfaccia intera, avviso visibile | — |
+| **dal vivo**: console dopo il clic | `Login interrotto, backend non raggiungibile` — la verifica ha fermato il salto | — |
+| **dal vivo**: secondo clic di seguito | stesso esito, bottone di nuovo «Connetti Spotify» — nessuno stato bloccato | — |
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 49 entry PWA, build in 4.71s | **0** |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 319.65s | **0** |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). La suite backend è stata rieseguita per intero pur avendo toccato solo due file
+JSX: serve a dimostrare che non ho alterato nulla, non a scoprire regressioni che non possono
+esistere. Stesso numero del run precedente, 536, nessuna deriva.
+
+Il criterio dell'item è testuale — «premere «Connetti Spotify» lascia l'utente sulla schermata di
+accesso con un messaggio leggibile che dice che il servizio non risponde; nessuna pagina bianca» —
+ed è soddisfatto su tutti e tre i pezzi: resta sulla schermata, il messaggio c'è ed è leggibile,
+nessuna pagina bianca.
+
+### Il limite: il ramo felice non è provato dal vivo, ed è giusto dirlo
+
+Ho provato che **col backend spento** non si finisce più nel bianco. Non ho provato dal vivo che
+**col backend acceso** il salto verso Spotify parta ancora, e non potevo:
+
+- avviare il backend vero richiede `.env` con i secret Spotify — l'item 11 è `[BLOCKED_USER]`
+  apposta, e il vincolo di sicurezza del loop vieta di toccare quel file;
+- mettere in piedi un finto backend che risponda `200` su `/auth/me` sarebbe un mock, che il
+  protocollo del loop vieta per iscritto («se un servizio reale non è raggiungibile, fermati e
+  dichiaralo; non sostituirlo con un mock»).
+
+Resta il **mezzo 2, sul codice**, e il ragionamento è breve perché la modifica è piccola: sul ramo
+felice il codice fa esattamente ciò che faceva prima — `window.location.href =
+'/auth/spotify/login'` — preceduto da una chiamata a `/auth/me` che l'applicazione **emette già
+comunque** al caricamento della pagina. L'unico modo in cui la correzione potrebbe bloccare un login
+legittimo è che `/auth/me` fallisca con il backend acceso. Due controlli sul perché non succede:
+
+1. **Database giù non basta a farla fallire.** Per l'utente anonimo il gestore esce alla prima riga
+   (`auth.py:288-290`) senza eseguire nessuna query, e `get_db` (`database.py:21-23`) apre la
+   sessione ma SQLAlchemy non contatta il database finché non parte una query. Quindi un backend
+   acceso con il database rotto risponde `200` lo stesso, e il login parte.
+2. **Il limitatore di traffico**: un `429` farebbe fallire la verifica. Ma il limite è 120 richieste
+   al minuto per indirizzo, e chi apre la pagina e preme il bottone ne fa due. Se davvero uno fosse
+   limitato, il ritorno OAuth fallirebbe comunque: fermarsi prima è il comportamento giusto, non un
+   guasto nuovo.
+
+Timeout della verifica fissato a 8 secondi: un backend che ci mette di più è indistinguibile da uno
+spento, dal punto di vista di chi guarda lo schermo.
+
+### Osservazione, senza azione: la finestra fra la verifica e il salto
+
+Fra il `200` della verifica e il redirect passano millisecondi in cui il backend potrebbe cadere.
+In quel caso si tornerebbe alla pagina bianca. Non l'ho chiuso perché chiuderlo davvero vuol dire
+un'altra cosa — servire l'errore da dentro l'applicazione invece di lasciare il dominio — ed è una
+modifica di disegno che va oltre il mandato di questo item. La probabilità è quella di una finestra
+di millisecondi contro un backend spento, che è lo scenario del finding e ora è coperto.
+
+### Breaker
+
+**Non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi: questo run è un `ITEM-DONE`,
+quindi lo streak vale 0 contro una soglia di 3, e non esiste uno streak aperto di cui misurare la
+durata. Niente `BREAKER: TRATTENUTO` da scrivere — quel caso riguarda una soglia raggiunta con
+troppo poco tempo trascorso, e qui la soglia non è raggiunta affatto. Nessuna riga `escalated:`
+pendente da chiudere: il secondo programma non ne ha ancora aperta nessuna.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit, come prescritto. Il contatore della guardia era a
+**2 su 3**, ereditato dai fire a loop fermo: senza l'azzeramento il prossimo giro avrebbe emesso un
+allarme «backlog fermo» falso proprio mentre il loop ha ripreso ad avanzare.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea: qui non
+siamo in nessuno dei due, e restano otto finding più il checkpoint. Sarà il run del checkpoint a
+prendere la corsia `inbox` e a **riscrivere** la voce di capolinea — è una transizione nuova, non
+una ripetizione di quella del primo programma, che è stata rimossa alle 13:40 UTC. Niente da
+scrivere adesso, quindi prendere la corsia avrebbe solo tolto il giro ad altri loop.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere.
