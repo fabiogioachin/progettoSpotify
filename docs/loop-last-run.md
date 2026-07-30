@@ -530,3 +530,144 @@ scrivere in `Inbox.md`, quindi la corsia `inbox` non è stata occupata.
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-30 07:40 UTC — `ITEM-DONE` — item 5 «ISPEZIONE FRONTEND — primo giro da utente»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 13 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.074s su 13 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, resta 0: questo run è un `ITEM-DONE`).
+
+Il Passo 0 è stato eseguito **in PowerShell** dopo che il tentativo in Bash è fallito allo stesso
+modo dei due run precedenti: Git Bash mangia i backslash dei path Windows e ha cercato
+`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`, exit 2. **Non** è un `NOOP-UNDECIDABLE`:
+non era la guardia a non saper rispondere, era la shell a non averla mai avviata. È la terza volta
+di fila; la lezione è già a verbale in `.claude/tasks/lessons.md`.
+
+### Working tree pulita all'avvio
+
+`git status --porcelain` a inizio run: **vuoto**. Nessuna decisione da prendere su lavoro altrui,
+a differenza dei due run precedenti.
+
+### Cosa è stato fatto
+
+Giro di sola osservazione: **nessun file di codice modificato**, come impone l'item. Ispezionate
+tutte e 14 le rotte dichiarate in `App.jsx` e prodotti **9 finding** nella sezione «Trovati
+dall'ispezione» del backlog, ciascuno col suo criterio di verifica.
+
+### Modalità di ispezione, pagina per pagina
+
+Il protocollo chiede di dichiarare per ogni pagina se è stata guardata dal vivo o sul codice.
+
+| Rotta | Pagina | Modalità |
+|---|---|---|
+| `/` | LoginPage | **Dal vivo** — server di sviluppo su 5173, pagina caricata, testo e console letti |
+| `/auth/spotify/login` | (uscita verso Spotify) | **Dal vivo** — percorso col backend spento, 500 e pagina bianca |
+| `/dashboard` | DashboardPage | Codice |
+| `/profile` | ProfilePage | Codice |
+| `/discovery` | DiscoveryPage | Codice |
+| `/evolution` | TasteEvolutionPage | Codice |
+| `/temporal` | TemporalPage | Codice |
+| `/artists` | ArtistNetworkPage | Codice |
+| `/playlists` | PlaylistComparePage | Codice |
+| `/playlist-analytics` | PlaylistAnalyticsPage | Codice |
+| `/wrapped` | WrappedPage | Codice |
+| `/friends` e `/invite/:code` | FriendsPage | Codice |
+| `/privacy` | PrivacyPage | Codice |
+| `/admin` | AdminPage | Codice |
+| `*` | rimando alla radice | Codice |
+
+Il limite era previsto dall'item: senza `.env` il backend non parte, e il login Spotify reale è
+vietato, quindi le pagine protette non sono visibili dal browser. Confermato che il backend fosse
+davvero spento invece di darlo per scontato: la porta 8001 non è in ascolto, quindi il 500 è il
+proxy di Vite che non trova nessuno, cioè esattamente lo scenario «backend giù» che l'item chiedeva
+di provare.
+
+### Due delle quattro piste del censimento erano sbagliate
+
+Le piste del backlog erano ipotesi da confermare o smontare. Due non reggono, e vanno dette perché
+un giro successivo le prenderebbe per buone.
+
+1. **«`/privacy` e `/admin` non stanno nel menu — pagine fantasma?»** — **Falso.** Ci sono
+   entrambe, nel piè di pagina della barra laterale (`Sidebar.jsx:118-145`), separate dalle voci
+   principali da un bordo. `/admin` compare solo se `user.is_admin`, ed è la scelta giusta. Tutte e
+   14 le rotte sono raggiungibili dall'interfaccia. Verificato anche che non ci sia un buco di
+   accesso: `AdminPage.jsx:561-562` rimanda alla dashboard chi non è amministratore, quindi la
+   protezione non dipende solo dal menu.
+2. **«il Dashboard importa ancora `GenreTreemap`»** — vero come nome, **falso come sostanza**.
+   `GenreTreemap.jsx:54-70` disegna un `PieChart` con raggio interno al 45%: è già una ciambella.
+   Il punto B1 di `todo.md:17` chiede «donut chart al posto del treemap» ed è segnato da fare, ma la
+   modifica c'è già. È diventato il finding I-7, che è un rinominare, non un riscrivere.
+
+Le altre due piste sono confermate, e una va allargata parecchio:
+
+3. **Colori cablati** — il backlog ne nominava 2 (`StreakDisplay.jsx:102`, `GenreDNA.jsx:29`).
+   Sono **120, su 24 file**, mentre `lib/chartTheme.js` esiste e lo importano 7 grafici su 13.
+   Finding I-6.
+4. **«la LoginPage gestisce l'errore se il backend è giù?»** — **No**, ed è il finding più grave
+   del giro (I-1), l'unico verificato dal vivo dall'inizio alla fine.
+
+### I 9 finding, in breve
+
+| # | Cosa vede l'utente | Dove |
+|---|---|---|
+| I-1 | Backend giù: preme «Connetti Spotify» e finisce su una pagina bianca senza uscita | `AuthContext.jsx:31-34`, `LoginPage.jsx:86` |
+| I-2 | La scheda «Artisti unici» ricarica la dashboard invece di aprire la pagina artisti | `DashboardPage.jsx:174` |
+| I-3 | La scheda «Streak» porta in cima a `/temporal`, l'ancora promessa non esiste | `DashboardPage.jsx:148` |
+| I-4 | Esportazione dati e cancellazione account falliscono senza dire niente | `PrivacyPage.jsx:25,37-40` |
+| I-5 | Tre riquadri vuoti con un testo di «nessun dato» scritto e mai mostrato | `TasteEvolutionPage.jsx:75,78,81,244,285` |
+| I-6 | Cambiare il colore d'accento richiede di aprire 24 file | 24 file, `lib/chartTheme.js` |
+| I-7 | Un item di lavoro aperto chiede una modifica che il codice ha già | `GenreTreemap.jsx:54-70`, `todo.md:17` |
+| I-8 | Ogni indirizzo sbagliato scarica sulla dashboard, senza spiegazione | `App.jsx:146` |
+| I-9 | «0/25» in cima a ogni pagina prima che sia stata fatta una misura | `Header.jsx:8` |
+
+I-2 e I-8 si tengono per mano: è l'assenza di una pagina «non trovato» a rendere invisibile il
+collegamento rotto. Se ne fosse corretto uno solo, conviene I-8, perché fa emergere gli altri.
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | 0 |
+| `cd frontend && npm run build` | 2728 moduli, build in 4.00s, 49 entry PWA | 0 |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 319.34s | **0** |
+| `git status --porcelain` a fine ispezione | solo `docs/LOOP-BACKLOG.md` | 0 |
+| porta 8001 in ascolto? | **no** — conferma che il 500 è «backend spento» | — |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). Il criterio dell'item «nessun file di codice modificato in questo giro» è
+verificato dal `git status`: l'unico file toccato durante l'ispezione è il backlog, più questo
+run-log.
+
+La suite backend è stata rieseguita per intero anche se questo giro non tocca Python: serve a
+dimostrare che l'ispezione non ha alterato nulla, non a scoprire regressioni che non possono
+esistere.
+
+### Breaker
+
+**Non aperto.** Nessuna delle due condizioni: questo run è un `ITEM-DONE`, streak 0 contro soglia
+3. Nessun `BREAKER: TRATTENUTO` da scrivere, nessuna riga `escalated:` pendente da chiudere.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit: il contatore della guardia era a 1 su 3 e senza
+azzeramento arriverebbe a emettere un allarme «backlog fermo» falso mentre il loop sta avanzando.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea. Qui non
+siamo in nessuno dei due, ma **il prossimo run lo sarà**: resta solo l'item-checkpoint, che scrive
+`LOOP HALTED` e ferma il programma. Sarà quel run a prendere la corsia `inbox` e a scrivere la voce
+`progetto-wrap-dev-loop:capolinea`, come prescrive il Passo 7. Niente da scrivere adesso.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere.
