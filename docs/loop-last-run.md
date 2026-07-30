@@ -851,3 +851,56 @@ troverebbe non è ordinata per un programma nuovo. Il materiale già scritto e v
   la parte sulle 6 soppressioni `eslint-disable` da motivare;
 - i 2 errori `ruff` che tengono `backend-lint` rosso, se si vuole un semaforo di CI verde: non sono
   in nessun item, perché dedurne di nuovi è vietato al loop.
+
+---
+
+## 2026-07-30 13:33 UTC — `NOOP-HALTED` — nessun item preso
+
+**Esito in una riga**: il loop è fermo per decisione presa, non per guasto. Il marcatore
+`LOOP HALTED` è in testa a `docs/LOOP-BACKLOG.md` dal checkpoint delle 10:35 UTC, e finché resta lì
+ogni fire si limita a questa riga di verbale. Nessun file di codice toccato, nessun test eseguito,
+nessun item aperto.
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 15 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.078s su 15 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+Come le quattro volte precedenti, il Passo 0 è fallito in Bash prima di riuscire in PowerShell: Git
+Bash mangia i backslash del percorso non quotato e cerca un file inesistente
+(`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`, exit 2). **Non** è `NOOP-UNDECIDABLE`: la
+guardia non era proprio partita. Al secondo tentativo, con entrambi i percorsi fra virgolette e
+l'operatore di chiamata `&`, ha risposto `LIBERO`.
+
+**Item toccato**: nessuno. Il Passo 1 precede il Passo 4, quindi la coda non è stata nemmeno letta
+oltre l'intestazione.
+
+`no_progress_streak`: **0**, e resta 0 — **non incrementato di proposito**. Il contatore misura un
+loop che vuole lavorare e non ci riesce; questo loop non vuole lavorare, è al capolinea per
+programma. Incrementarlo porterebbe il breaker ad aprirsi fra tre fire, con un avviso di «blocco
+prolungato» su un fermo deliberato e già comunicato. È esattamente l'allarme falso che il Passo 6
+chiede di evitare, e su un fatto già a verbale nel canale giusto. Nessuno streak aperto, nessun
+timestamp di primo run da tenere.
+
+**Nessuna escalation, e non è una dimenticanza.** La voce di capolinea è stata consegnata una volta
+sola alla transizione (`escalated: progetto-wrap-dev-loop:capolinea @ 2026-07-30T10:35:00Z`), come
+prescrive il Passo 7; risulta presente nell'inbox all'avvio di questa sessione. I fire successivi
+escono in silenzio. Di conseguenza la corsia `inbox` del lock fra loop **non** è stata presa: non
+avendo nulla da scrivere su stato condiviso, prenderla avrebbe solo tolto il giro ad altri loop.
+
+### Da tenere d'occhio, per chi legge
+
+Il contatore della guardia è cosa diversa da `no_progress_streak` e continua a salire per conto suo:
+è a 1 su una soglia di 3. Su un loop fermo per scelta salirà comunque, e attorno al terzo fire la
+guardia emetterà una `ESCALATION` per «backlog fermo» che sarebbe fuori bersaglio — il backlog non è
+fermo, è chiuso. Il rimedio sta fuori dalla portata di questo loop, che non ha mandato per toccare
+`~/.claude/`: se la cosa infastidisce, la si toglie disattivando la voce di pianificazione finché la
+coda non riapre.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`, identico al valore
+annotato a fine del run precedente. A fine run: **identico**. Nessun push partito, come deve essere.
