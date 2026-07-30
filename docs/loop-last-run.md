@@ -973,6 +973,11 @@ cambiare shell: **bastano i path con la barra in avanti**, quotati
 a non sopravvivere solo al backslash. Al secondo tentativo, in Bash, la guardia ha risposto `LIBERO`.
 Come le altre volte, il primo tentativo **non** è un `NOOP-UNDECIDABLE`: la guardia non era partita.
 
+Da dire per intero, perché il merito non è di questo run: la via d'uscita era **già a verbale**, in
+`.claude/tasks/lessons.md:110`, scritta dal run dell'item 5 («se serve Bash, usare le forward slash,
+che Git Bash accetta»). Questo giro non l'ha scoperta, l'ha applicata — ed è la prova che quella
+lezione funziona. Il prossimo run può partire direttamente così e risparmiarsi il tentativo a vuoto.
+
 ### Working tree sporca all'avvio: valutata, non un `NOOP-DIRTY`
 
 `git status --porcelain` a inizio run: ` M .claude/tasks/lessons.md`. Letto il diff invece di
