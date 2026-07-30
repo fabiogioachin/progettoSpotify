@@ -1,22 +1,23 @@
 # LOOP BACKLOG — progettoWrap
 
-LOOP HALTED
-
-> **Fermato al checkpoint il 2026-07-30T10:35:00Z**, dopo i cinque giri del programma — non per un
-> guasto. I cinque item sono chiusi, nessun `FAILED`. Da qui ogni fire esce `NOOP-HALTED` in
-> silenzio: il loop riparte solo quando **tu** togli il marcatore qui sopra e gli dai lavoro nuovo.
-> Il materiale per il prossimo programma è già scritto: i **9 finding** dell'ispezione frontend
-> (sezione «Trovati dall'ispezione») e i 4 item della sezione «Dopo il checkpoint». Riepilogo del
-> giro in `docs/loop-last-run.md`.
-
-> **Programma avviato il 2026-07-29: cinque giri, poi checkpoint.** Il quinto item runnable è seguito da un
-> item-checkpoint che rimette `LOOP HALTED` in testa a questo file e ferma tutto. A quel punto
-> si rivede il lavoro e, se convince, si riapre la coda togliendo il marcatore.
-> Il marcatore qui sopra lo togli tu quando vuoi far partire il programma.
+> **Secondo programma, aperto il 2026-07-30 su richiesta di Fabio: i 9 finding dell'ispezione
+> frontend.** Il marcatore `LOOP HALTED` è stato tolto da qui. Il loop riparte da **I-1** e ne fa uno
+> per giro, nell'ordine in cui stanno nella sezione «Trovati dall'ispezione»; dopo I-9 incontra un
+> item-checkpoint che rimette `LOOP HALTED` in testa a questo file e ferma di nuovo tutto.
 >
-> Lista costruita il 2026-07-29 da un censimento del repo (ambienti, CI, componenti, piani in
-> `docs/` e `.claude/tasks/todo.md`). Ogni affermazione qui sotto è stata verificata sul codice
-> quel giorno, con il riferimento accanto.
+> I quattro item della sezione «Dopo il checkpoint» (7, 8, 9, 10) **non fanno parte di questo
+> programma**: il checkpoint li precede, quindi il loop non li raggiunge. Restano scritti lì per il
+> giro successivo.
+>
+> **Stato dei finding alla riapertura**: scritti dall'ispezione dello stesso 2026-07-30 e
+> ricontrollati a campione prima di riaprire — I-2, I-3, I-8 e I-9 sono ancora veri sul codice di
+> oggi, e nessun commit ha toccato `frontend/` dopo l'ispezione (l'ultimo è `c37c0f6`). Gli altri
+> cinque non sono stati ricontrollati: valgono per come li ha scritti l'ispezione.
+
+> **Primo programma, 2026-07-29 → 2026-07-30: chiuso.** Cinque item più un checkpoint, tutti `[x]`,
+> zero `FAILED`. Lista costruita il 2026-07-29 da un censimento del repo (ambienti, CI, componenti,
+> piani in `docs/` e `.claude/tasks/todo.md`), ogni affermazione verificata sul codice quel giorno.
+> Resta qui sotto come storia, non come lavoro da fare. Riepilogo in `docs/loop-last-run.md`.
 
 ## Come si legge
 
@@ -199,7 +200,30 @@ Questo giro non implementa niente. Fai solo questo:
 
 *Scritti dal giro di ispezione del 2026-07-30. Ordinati per quanto pesano sull'utente, non per
 quanto costa correggerli. Ognuno dice cosa si vede di sbagliato, dove, e come si verifica che è
-chiuso.*
+chiuso.* **Da qui prende il lavoro il secondo programma: un item per giro, dall'alto.**
+
+**Con che cosa si verifica, in questo repo.** Va detto prima di cominciare, perché diversi criteri
+qui sotto sono scritti come comportamenti osservabili e **il frontend non ha un test runner**:
+`frontend/package.json` espone solo `dev`, `build`, `preview`, `lint`. Non esiste `npm test`, e
+nessuno di questi item lo introduce. Quindi «verificato» qui significa una di tre cose, e il
+run-log deve dire **quale**, per ciascun item:
+
+1. **Dal vivo**, per ciò che si raggiunge senza backend e senza login — cioè la schermata di accesso
+   e gli errori che si producono spegnendo il backend. È il caso di **I-1**, ed è il modo migliore:
+   usalo dove è possibile.
+2. **Sul codice**, per tutto ciò che sta dietro l'autenticazione: **I-4** (pagina privacy), **I-5**,
+   e in parte I-2, I-3, I-8. Si mostra il punto corretto e si spiega perché chiude il difetto.
+   **Non** si scrive «verificato dal vivo» per una pagina che non si è potuta aprire.
+3. **Meccanicamente**: `cd frontend && npm run lint` e `npm run build`, entrambi a exit 0. Servono
+   **sempre**, e da soli non bastano per nessuno di questi item.
+
+Nessun test finto e nessuna verifica dichiarata ma non eseguita. Se un criterio non è raggiungibile
+con questi tre mezzi, l'onestà è dichiarare il limite nel run-log e chiudere l'item spiegando fin
+dove si è arrivati — non inventare una prova.
+
+**Se un finding risulta sbagliato**, come è già successo a due piste su quattro nel giro di
+ispezione: non forzarlo. Correggi il testo dell'item, spiega nel run-log cosa era sbagliato, e
+chiudilo per quello che è. Un item che descrive un difetto inesistente si chiude smontandolo.
 
 ### I-1. `[ ]` Col backend spento il bottone di login porta a una pagina bianca
 
@@ -328,9 +352,33 @@ plausibili, i dati mancanti si dichiarano mancanti.
 **Verifica**: finché non è arrivata una misura vera, l'indicatore è nascosto o dichiara di non
 avere ancora dati; non mostra uno zero che sembra misurato.
 
+### ✋ `[ ]` CHECKPOINT — i 9 finding sono chiusi: fermati qui
+
+Se stai leggendo questo item come «primo item non completato», i nove finding sopra sono chiusi o
+dichiarati `[FAILED]`. **Questo giro non implementa niente.** Fai solo questo:
+
+1. Scrivi la riga `LOOP HALTED` in testa a questo file, subito sotto il titolo.
+2. Marca questo item `[x]`.
+3. Scrivi nel run-log l'esito `CHECKPOINT` con il riepilogo del programma: quali finding chiusi,
+   quali `[FAILED]` e con che errore, quali si sono rivelati sbagliati e sono stati smontati, e per
+   ciascuno **con quale dei tre mezzi** è stato verificato.
+4. Manda la voce di capolinea nel canale Inbox del vault, come prescrive il Passo 7 del protocollo:
+   è una transizione nuova, quindi la voce va riscritta anche se ne esiste già una del programma
+   precedente.
+5. Committa i file toccati e termina.
+
+**Verifica**: `LOOP HALTED` presente in testa al file; run-log aggiornato; commit creato.
+
 ---
 
-## Dopo il checkpoint (si sbloccano togliendo il marcatore)
+## Dopo il checkpoint (non fanno parte del secondo programma)
+
+*Il checkpoint qui sopra li precede, quindi il loop non li raggiunge. Per farli lavorare servirà un
+terzo programma: spostarli sopra il checkpoint, o dare loro un checkpoint proprio.*
+
+> **Da correggere prima di prenderlo**: l'item 7 dà `npm run lint` per rosso, ma è **verde** da
+> tutti e cinque i giri del primo programma. Di quell'item resta viva solo la parte sulle 6
+> soppressioni `eslint-disable` da motivare.
 
 ### 7. `[ ]` Lint frontend pulito
 

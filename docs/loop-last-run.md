@@ -904,3 +904,42 @@ coda non riapre.
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`, identico al valore
 annotato a fine del run precedente. A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-30 13:40 UTC — `AZIONE UTENTE` — coda riaperta, non è un run del loop
+
+**Questa voce non descrive un fire.** È un intervento di Fabio, verbalizzato qui perché è il file
+che ogni run legge al Passo 3, e perché cambia da sotto i piedi lo stato che il run precedente
+aveva lasciato.
+
+**Cosa è cambiato**: `LOOP HALTED` è stato tolto da `docs/LOOP-BACKLOG.md`. Il secondo programma
+sono i **9 finding dell'ispezione frontend** (I-1 → I-9), uno per giro, seguiti da un item-checkpoint
+che rimette il marcatore e ferma di nuovo tutto. I quattro item della sezione «Dopo il checkpoint»
+restano **fuori** da questo programma: il checkpoint li precede, quindi il loop non li raggiunge.
+
+**Controllo prima di riaprire**: quattro finding su nove sono stati ricontrollati sul codice di oggi
+e sono ancora veri — I-2 (`DashboardPage.jsx:174` punta a `/artist-network`, rotta inesistente),
+I-3 (`link="/temporal#streak"` senza nessun `id="streak"` in tutto `frontend/src`), I-8
+(`App.jsx:146`, `path="*"` rimanda alla radice), I-9 (`Header.jsx:8`,
+`useState({ current: 0, max: 25, pct: 0 })`). Nessun commit ha toccato `frontend/` dopo l'ispezione,
+l'ultimo è `c37c0f6`. Gli altri cinque non sono stati ricontrollati.
+
+**Un vincolo che il programma precedente non aveva incontrato, ora scritto nel backlog**: il
+frontend **non ha un test runner**. `frontend/package.json` espone solo `dev`, `build`, `preview`,
+`lint` — non esiste `npm test`. Diversi criteri di verifica dei nove finding sono scritti come
+comportamenti osservabili, e nessuno di essi è meccanicamente provabile. La sezione «Trovati
+dall'ispezione» ora dichiara i tre mezzi ammessi (dal vivo senza backend · sul codice · lint e build
+a 0) e impone al run-log di dire, per ogni item, **quale** è stato usato. Un item verificabile solo
+con mezzi che non esistono si chiude dichiarando il limite, mai inventando la prova.
+
+**Inbox del vault**: la voce `progetto-wrap-dev-loop:capolinea` è stata **rimossa**, chiave e
+riga renderizzata, lasciando intatte le altre due. Diceva che il loop non sarebbe ripartito finché
+non gli fosse stato dato lavoro nuovo: da adesso è falsa, e sarebbe rimasta in cima a ogni sessione
+su entrambi i computer. La rimozione è dichiarata dal file stesso come azione umana, ed è stata
+fatta su istruzione di Fabio, sotto la corsia `inbox` del lock fra loop (`ACQUIRE_OK` → modifica →
+blocco JSON riconvalidato → `RELEASE_OK`). Al prossimo checkpoint la voce va **riscritta**: è una
+transizione nuova, non una ripetizione di quella del primo programma.
+
+`no_progress_streak`: **0**, invariato. Nessuno streak aperto, nessun `BREAKER:` da scrivere o da
+togliere, nessuna riga `escalated:` pendente.
