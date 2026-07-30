@@ -1274,3 +1274,205 @@ loop.
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere — questo repo non ha canale di
 pubblicazione automatica.
+
+---
+
+## 2026-07-30 22:45 UTC — `ITEM-DONE` — I-3 «Dashboard: la scheda "Streak" promette un dettaglio che non c'è»
+
+**Esito in una riga**: la scheda «Streak di ascolto» ora porta l'utente davanti alla sezione dello
+streak invece che in cima alla pagina. Il finding però descriveva **metà** del guasto, e correggere
+solo quella metà non avrebbe cambiato niente per l'utente: sotto sta la parte che conta di questo
+verbale.
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 19 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.076s su 19 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+Come a ogni giro, il Passo 0 è fallito in Bash prima di riuscire in PowerShell: Git Bash mangia i
+backslash del percorso e cerca un file inesistente
+(`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`, exit 2). **Non** è `NOOP-UNDECIDABLE`: la
+guardia non ha risposto «non so», non è proprio partita. È già a verbale in
+`.claude/tasks/lessons.md` (voce del 2026-07-30 sul tool Bash), verificato aprendo il file, non
+riportato dal run-log precedente.
+
+`no_progress_streak`: **0** — questo run è un `ITEM-DONE`, e il precedente (I-2, 19:34 UTC) pure,
+quindi non c'era nessuno streak aperto da azzerare.
+
+### Che cosa ho trovato che l'item non diceva
+
+L'item chiedeva una cosa sola: in `TemporalPage.jsx` manca un elemento con l'identificatore
+`streak`, quindi mettilo. È vero, e non basta.
+
+**Un salto fra pagine non porta all'ancora nemmeno quando l'ancora esiste.** `<Link to="/temporal#streak">`
+fa una `pushState`: cambia l'indirizzo nella barra e resta dov'è. Non è una navigazione al
+frammento — quella la fa il browser solo quando l'indirizzo arriva da fuori o da un `<a>` sulla
+stessa pagina. React-router ha un pezzo che se ne occupa, `ScrollRestoration`, ma vive solo nelle
+modalità con router a dati; qui c'è `BrowserRouter` dichiarativo (`App.jsx:154`), e nel frontend non
+compare da nessuna parte. Verificato: la ricerca di `scrollIntoView`, `scrollTo`, `scroll-behavior`
+e `scroll-margin` su tutto `frontend/` (escluso `node_modules`) dava **due sole occorrenze**,
+entrambe dentro `KPICard.jsx`.
+
+Quindi con il solo `id="streak"` la scheda avrebbe continuato a lasciare l'utente in cima alla
+pagina: **esattamente il difetto descritto dall'item, intatto**, e per giunta con l'aria di essere
+stato corretto.
+
+**Perché nessuno se n'era accorto**: le altre quattro ancore del frontend sono tutte *dentro la
+stessa pagina* (`#top-tracks` sulla dashboard, `#loyal-artists`, `#rising-artists`,
+`#persistent-tracks` su Evoluzione Gusto), e per quelle `KPICard.jsx:99-110` non usa affatto il
+router — chiama `scrollIntoView` a mano. `/temporal#streak` è **l'unica** fra pagine in tutto il
+frontend, quindi l'unica che passa per `<Link>`, quindi l'unica rotta.
+
+C'è anche una ragione per cui, provandola, il doppio guasto non si sarebbe distinto: senza l'id e
+senza il gestore il sintomo è identico — l'utente resta in cima alla pagina.
+
+### La correzione
+
+Tre file, due dei quali sono lo stesso rimedio visto da capi opposti.
+
+1. **`frontend/src/hooks/useHashScroll.js`** (nuovo): dopo ogni cambio di indirizzo con frammento,
+   cerca l'elemento e ci porta l'utente. **Riprova per 3 secondi** a intervalli di 100ms invece di
+   guardare una volta sola, perché al momento del cambio l'elemento non c'è ancora, e per due
+   motivi sovrapposti: `AnimatePresence mode="wait"` (`AppLayout.jsx:23`) monta la pagina di
+   destinazione **dopo** che quella precedente ha finito di uscire, e la sezione dello streak
+   compare solo quando la richiesta dati di `TemporalPage` si risolve. Un `getElementById` singolo
+   avrebbe trovato `null` e non avrebbe scorso mai — sarebbe stato un finto rimedio, cioè il guasto
+   di partenza travestito.
+2. **`frontend/src/components/layout/AppLayout.jsx`**: invoca il gestore. È il posto giusto perché
+   avvolge tutte le pagine protette, quindi vale per qualunque ancora fra pagine si scriverà in
+   futuro, non solo per questa.
+3. **`frontend/src/pages/TemporalPage.jsx:148`**: `id="streak"` sul blocco «Streak + Sessioni», più
+   `scroll-mt-20`. Il secondo non è cosmetico: l'intestazione è appiccicata in alto e alta 64px
+   (`Header.jsx:23`, `h-16`), quindi senza scostamento lo scorrimento infila il titolo della scheda
+   **sotto** l'intestazione e l'utente arriva su una scheda decapitata. `scroll-mt-20` vale 80px,
+   confermato nel CSS costruito: `.scroll-mt-20{scroll-margin-top:5rem}`.
+
+L'identificatore sta sul contenitore della griglia e non dentro `StreakDisplay` di proposito: quel
+componente restituisce `null` quando non c'è streak da mostrare (`StreakDisplay.jsx:14`), e un
+bersaglio che sparisce col dato è un'ancora che torna rotta al primo utente senza dati.
+
+### Verifica — con quale dei tre mezzi, per ciascuna cosa
+
+Il criterio dell'item («cliccare "Streak di ascolto" porta l'utente davanti alla sezione dello
+streak») è un comportamento osservabile su una pagina **dietro l'autenticazione**. Non è apribile
+dal vivo: senza `.env` il backend non parte, e il login Spotify vero è vietato al loop. Quindi
+**mezzo 2 (sul codice)** e **mezzo 3 (meccanicamente)**. Nessuna prova dal vivo dichiarata, perché
+nessuna è stata fatta.
+
+**Mezzo 3 — meccanicamente**, tutti eseguiti, tutti a exit 0:
+
+| Comando | Esito |
+|---|---|
+| `npm run lint` (in `frontend/`) | exit **0** |
+| `npm run build` (in `frontend/`) | exit **0**, 2729 moduli, costruito in 4.86s |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati**, 0 falliti, exit **0**, 318.97s, Python 3.12.13 |
+
+La suite backend è stata eseguita per intero pur avendo toccato solo file del frontend: non serve a
+scoprire regressioni che non possono esistere, serve a dimostrare che non ne ho introdotte.
+
+**Mezzo 2 — sul codice, ma meccanizzato dove si poteva.** Il criterio si spezza in due domande, e
+la prima è controllabile a macchina: *il bersaglio esiste?* Ho scritto
+`scratchpad/verify_anchors.py`, che estrae le 14 rotte da `App.jsx`, raccoglie ogni ancora interna
+del frontend e, per ciascuna, apre il file della pagina di destinazione e ci cerca l'identificatore.
+Controlla anche la seconda domanda — *qualcuno ci porta?* — verificando che il gestore sia importato
+e invocato in `AppLayout`.
+
+```
+Rotte lette da App.jsx: 14
+Ancore interne trovate: 6
+
+  [OK   ] DashboardPage.jsx          #top-tracks              (stessa pagina) — id="top-tracks" trovato in DashboardPage.jsx
+  [OK   ] DashboardPage.jsx          /temporal#streak         (fra pagine) — id="streak" trovato in TemporalPage.jsx
+  [OK   ] TasteEvolutionPage.jsx     #loyal-artists           (stessa pagina) — id="loyal-artists" trovato in TasteEvolutionPage.jsx
+  [OK   ] TasteEvolutionPage.jsx     #rising-artists          (stessa pagina) — id="rising-artists" trovato in TasteEvolutionPage.jsx
+  [OK   ] TasteEvolutionPage.jsx     #loyal-artists           (stessa pagina) — id="loyal-artists" trovato in TasteEvolutionPage.jsx
+  [OK   ] TasteEvolutionPage.jsx     #persistent-tracks       (stessa pagina) — id="persistent-tracks" trovato in TasteEvolutionPage.jsx
+
+  [OK   ] meccanismo di salto all'ancora — useHashScroll importato e invocato in AppLayout
+          ancore fra pagine che ne dipendono: 1
+
+Auto-prova (il controllo boccia lo stato di prima, promuove quello di adesso):
+  A prima del fix: ROTTO — id="streak" assente da TemporalPage.jsx
+  A dopo il fix:   OK — id="streak" trovato in TemporalPage.jsx
+  B senza il gestore: ROTTO / con il gestore: OK
+  auto-prova: PASSATA
+
+ESITO: VERDE — 0 ancore rotte su 6
+```
+
+Come nel giro precedente lo script porta un'**auto-prova**, perché un controllo che dicesse sempre
+«OK» passerebbe inosservato: rifà i due controlli contro lo stato di **prima** della correzione e
+pretende che li bocci entrambi. È la prova che il controllo distingue davvero i due stati, e insieme
+la misura del prima e del dopo.
+
+Al primo giro lo script è uscito **rosso su sé stesso**: leggeva `<Link to="/page#section">` scritto
+nel commento del gestore nuovo e lo trattava come un collegamento vero, verso una rotta `/page` che
+non esiste. Corretto togliendo i commenti prima di cercare — un esempio dentro un commento non è un
+collegamento — e non riscrivendo il commento, perché il difetto era nello strumento.
+
+**Il pacchetto costruito**, per chiudere il dubbio che la modifica sia nel sorgente ma non in ciò
+che gira: `TemporalPage-aQW-MAtB.js` contiene `id:"streak"` e `scroll-mt-20`,
+`DashboardPage-BA4JJ_oy.js` contiene `/temporal#streak`, `index-Czu8xiFN.js` (dove finisce
+`AppLayout`) contiene l'unica `scrollIntoView` del pacchetto principale, e il foglio di stile
+contiene `.scroll-mt-20{scroll-margin-top:5rem}`.
+
+**Che cosa resta non provato, e va detto.** Che lo scorrimento avvenga *davvero* nel browser non è
+dimostrato: richiederebbe di aprire `/temporal` autenticati, che è vietato al loop. Ciò che è
+dimostrato è che i tre pezzi necessari ci sono tutti e sono collegati fra loro — bersaglio,
+gestore, scostamento dall'intestazione — e che prima ne mancavano due. La finestra di 3 secondi è
+una scelta tarata sul comportamento osservato del codice (animazione di uscita 0.15s più il tempo
+della richiesta dati), non su una misura fatta nel browser.
+
+### Limite noto che non ho toccato
+
+Le quattro ancore *nella stessa pagina* passano per `KPICard.jsx:99-110`, che chiama
+`scrollIntoView` senza `scroll-margin`: anche loro finiscono sotto l'intestazione appiccicata, di
+64px. È un difetto vero ma **pre-esistente e fuori dall'item**, che parla della scheda «Streak».
+Dedurne un item nuovo è vietato al loop fuori dai giri di ispezione, quindi lo lascio qui a verbale
+e non nel backlog.
+
+### Working tree trovata sporca — e perché non è `NOOP-DIRTY`
+
+`git status --porcelain` a inizio run dava ` M .claude/tasks/lessons.md`: modifiche lasciate non
+committate dal run precedente. Non è il caso previsto dal Passo 3, che parla di «lavoro non tuo e
+non riconducibile al backlog»: il contenuto sono **lezioni del loop stesso** sugli item I-1 e sul
+giro di ispezione, cioè lavoro di questo loop nel file che questo loop tiene per convenzione di
+progetto. Poiché ho aggiunto la mia lezione allo stesso file, quelle righe entrano in questo commit.
+Lo dichiaro qui perché non sia scambiato per un allargamento di scope: sono righe che ho ereditato,
+non scritto.
+
+### Lezione catturata
+
+Aggiunta a `.claude/tasks/lessons.md`: *un'ancora fra pagine non funziona nemmeno quando l'id
+esiste*. Il nocciolo trasferibile non è react-router — è che leggere il codice **per pagine** invece
+che **per percorsi** fa vedere i due estremi e non il tratto in mezzo, e quando quel tratto è del
+framework non ha un file dove essere guardato.
+
+### Breaker
+
+**Non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi: `no_progress_streak` vale 0
+contro una soglia di 3, e non esiste uno streak aperto di cui misurare la durata. Niente
+`BREAKER: TRATTENUTO` da scrivere — quel caso riguarda una soglia raggiunta con troppo poco tempo
+trascorso, e qui la soglia non è raggiunta affatto. Nessuna riga `escalated:` pendente da chiudere.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit, come prescritto. Il contatore della guardia era a
+**1 su 3**: senza l'azzeramento continuerebbe a salire fino a un allarme «backlog fermo» falso,
+emesso proprio mentre il loop avanza.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea, e non
+siamo in nessuno dei due: restano sei finding (I-4 → I-9) più il checkpoint. Sarà il run del
+checkpoint a prendere la corsia `inbox` e a riscrivere la voce di capolinea. Prendere la corsia
+adesso toglierebbe solo il giro ad altri loop, senza niente da scrivere.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere — questo repo non ha canale di
+pubblicazione automatica.

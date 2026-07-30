@@ -144,8 +144,9 @@ export default function TemporalPage() {
               </SectionErrorBoundary>
             )}
 
-            {/* Streak + Sessions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Streak + Sessions — anchor target of the dashboard "Streak di ascolto" card.
+                scroll-mt clears the sticky h-16 header. */}
+            <div id="streak" className="scroll-mt-20 grid grid-cols-1 md:grid-cols-2 gap-4">
               <SectionErrorBoundary sectionName="StreakDisplay">
                 <StreakDisplay
                   streak={streak.max_streak || 0}

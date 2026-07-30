@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import { ThrottleBanner } from '../ui/ThrottleBanner'
+import { useHashScroll } from '../../hooks/useHashScroll'
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -12,6 +13,7 @@ const pageVariants = {
 
 export default function AppLayout({ children }) {
   const { pathname } = useLocation()
+  useHashScroll()
 
   return (
     <div className="min-h-screen bg-background">

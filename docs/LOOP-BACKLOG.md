@@ -286,7 +286,25 @@ utente autenticato rimanda alla dashboard. **Il clic ricarica la pagina su cui s
 
 **Verifica**: cliccare «Artisti unici» apre «Ecosistema Artisti».
 
-### I-3. `[ ]` Dashboard: la scheda «Streak» promette un dettaglio che non c'è
+### I-3. `[x]` Dashboard: la scheda «Streak» promette un dettaglio che non c'è
+
+> **Fatto il 2026-07-30.** Verificato **sul codice** (mezzo 2) e **meccanicamente** (mezzo 3): la
+> pagina sta dietro l'autenticazione, quindi non è apribile dal vivo senza `.env` e senza login
+> Spotify, entrambi vietati al loop.
+> **Il finding descriveva metà del guasto.** L'ancora mancante era vera, ma **aggiungerla non
+> sarebbe bastato**: react-router aggiorna l'indirizzo e basta, un salto fatto con `<Link>` non è
+> una navigazione al frammento, quindi il browser non scorre nemmeno quando l'id esiste. Con solo
+> l'id, la scheda avrebbe continuato a lasciare l'utente in cima alla pagina — cioè il difetto
+> descritto dall'item, intatto. Corretti entrambi i pezzi: `TemporalPage.jsx:148` ha ora
+> `id="streak"` (più `scroll-mt-20`, che scosta lo scorrimento dall'intestazione appiccicata alta
+> 64px), e il nuovo `hooks/useHashScroll.js`, invocato da `AppLayout.jsx`, porta l'utente
+> all'ancora dopo il cambio di indirizzo. Riprova per 3 secondi perché al momento del cambio la
+> sezione **non c'è ancora**: la pagina di destinazione monta dopo l'animazione di uscita e la
+> sezione compare quando la sua richiesta dati si risolve.
+> **Perché le altre ancore funzionavano lo stesso**: sono tutte nella stessa pagina, e per quelle
+> `KPICard.jsx:99-110` chiama `scrollIntoView` da sé senza passare per il router. `/temporal#streak`
+> era **l'unica** fra pagine, quindi l'unica scoperta.
+> Dettaglio in `docs/loop-last-run.md`.
 
 `DashboardPage.jsx:148` punta a `/temporal#streak`, e il suggerimento dice «Vai ai Pattern
 Temporali per i dettagli». La pagina è quella giusta, ma **l'ancora non esiste**: in
