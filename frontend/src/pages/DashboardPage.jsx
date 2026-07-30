@@ -171,7 +171,7 @@ export default function DashboardPage() {
                 icon={Users}
                 delay={300}
                 tooltip="Artisti distinti estratti dai tuoi brani più ascoltati nel periodo selezionato"
-                link="/artist-network"
+                link="/artists"
               />
             )}
           </StaggerItem>

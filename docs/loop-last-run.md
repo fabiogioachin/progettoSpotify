@@ -1128,3 +1128,149 @@ scrivere adesso, quindi prendere la corsia avrebbe solo tolto il giro ad altri l
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-30 19:34 UTC — `ITEM-DONE` — I-2 «Dashboard: la scheda «Artisti unici» non porta da nessuna parte»
+
+**Esito in una riga**: la scheda puntava a una rotta che non esiste e il clic ricaricava la pagina
+su cui l'utente era già; ora apre «Ecosistema Artisti». Una riga cambiata, più una verifica che
+copre **tutti** i collegamenti interni del frontend e non solo quello dell'item.
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 17 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.051s su 17 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, resta 0: questo run è un `ITEM-DONE`). Nessuno streak aperto,
+nessun timestamp di primo run da tenere.
+
+### Il Passo 0 è partito al primo colpo, e vale la pena dirlo
+
+Le prime cinque volte il comando della guardia falliva in Bash e andava rieseguito in PowerShell; il
+run precedente ha applicato la via d'uscita già a verbale in `.claude/tasks/lessons.md:110` — path
+con la barra in avanti, quotati. Questo run è partito **direttamente così**, primo tentativo, exit 0,
+nessun tentativo a vuoto. La lezione ha smesso di costare un giro a nessuno: è chiusa nei fatti, non
+solo scritta.
+
+### Working tree sporca all'avvio: valutata, non un `NOOP-DIRTY`
+
+`git status --porcelain` a inizio run: ` M .claude/tasks/lessons.md`. Letto il diff invece di
+dedurlo dal nome, come le altre volte. Sono **due aggiunte chiuse**: il fratello in Bash della
+lezione sulle here-string di PowerShell (un payload lungo di prosa non passa mai per il quoting di
+una shell, su nessuna delle due) e la lezione sul frontend che non ha un test runner. Le ha scritte
+la sessione che ha riaperto la coda; documentano questo stesso loop, non codice a metà.
+Sovrapposizione con i file di questo item: **zero** — io tocco `frontend/src/pages/` e `docs/`. La
+guardia dice `LIBERO`, quindi nessuna sessione in volo da proteggere, che è il rischio per cui
+`NOOP-DIRTY` esiste. Non messo in stage: l'`add` di questo run elenca path espliciti.
+
+### Cosa era rotto
+
+`DashboardPage.jsx:174` passava `link="/artist-network"` alla scheda «Artisti unici». Quella rotta
+**non è dichiarata**: `App.jsx` ne dichiara 13 statiche più `/invite/:code`, e la pagina degli
+artisti sta su `/artists` (riga 91), come del resto già fa il menu laterale
+(`Sidebar.jsx:37`, etichetta «Ecosistema Artisti»).
+
+Il meccanismo, perché conta per capire cosa vedeva l'utente. `KPICard` con un `link` che non comincia
+per `#` rende un `<Link to={link}>` di React Router (`KPICard.jsx:112`) e aggiunge cursore a manina e
+alone al passaggio del mouse (riga 41): la scheda **promette** un salto. Al clic il router non trova
+nessuna rotta corrispondente, cade nel catch-all `path="*"` (`App.jsx:146`) che rimanda alla radice,
+e la radice per un utente autenticato rimanda alla dashboard (`App.jsx:40`). Risultato: **il clic
+ricarica la pagina su cui sei già**, senza nessun messaggio. È anche il motivo per cui il difetto era
+invisibile — che è precisamente ciò che descrive I-8, ancora aperto.
+
+Da tenere distinto, perché il nome inganna: `artist-network` **esiste** nel progetto, ma come
+indirizzo dell'API (`ArtistNetworkPage.jsx:12`, `/api/v1/artist-network`). Non è una rotta del
+browser, e confondere le due cose è probabilmente l'origine dello sbaglio.
+
+### Cosa è stato fatto
+
+**Una riga**: `link="/artist-network"` → `link="/artists"`. Nient'altro — nessun componente nuovo,
+nessuna dipendenza, nessun file aggiunto. `git diff --stat`: 1 file, 1 inserzione, 1 cancellazione.
+
+Non ho toccato il catch-all: rendere visibile un indirizzo sbagliato è l'item I-8, e un run fa un
+item solo.
+
+### Verifiche eseguite — mezzo 2 (sul codice) e mezzo 3 (meccanico)
+
+Il criterio dell'item è «cliccare «Artisti unici» apre «Ecosistema Artisti»», ed è un comportamento
+osservabile su una pagina che **sta dietro l'autenticazione**. Dal vivo non è raggiungibile: servono
+`.env` con i secret Spotify (item 11, `[BLOCKED_USER]`) e un login Spotify reale, entrambi vietati al
+loop. Quindi mezzo 2 e mezzo 3, dichiarati come tali — «verificato dal vivo» qui sarebbe una prova
+inventata.
+
+| Controllo | Esito | Exit |
+|---|---|---|
+| `verify_routes.py` — auto-prova del controllo | `resolves('/artist-network')` = **False**, `resolves('/artists')` = **True** | — |
+| `verify_routes.py` — **tutti** i target di navigazione interna | **21 su 21 risolvono**, nessuno rotto | **0** |
+| pacchetto costruito: il pezzo della dashboard | `link:"/artists"` | — |
+| pacchetto costruito: residui di `artist-network` | **solo** `ArtistNetworkPage-*.js`, cioè l'indirizzo dell'API | — |
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 49 entry PWA, build in 4.56s | **0** |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 331.26s | **0** |
+
+Interprete: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe` (Python
+3.12.13). `verify_routes.py` è usa-e-getta, nello scratchpad di sessione, **non versionato** — come
+`verify_build_yml.py` e `verify_ci.py` dei giri precedenti.
+
+**Perché ho verificato più di quanto l'item chiedesse.** Il criterio riguarda una scheda sola, ma il
+difetto è di una classe: un collegamento interno che non corrisponde a nessuna rotta non dà **nessun
+errore**, né a chi scrive né a chi naviga — sparisce dentro il catch-all. Controllare solo la riga
+corretta avrebbe lasciato aperta la domanda che conta, cioè se ce ne fossero altri. Lo script estrae
+le rotte da `App.jsx` e le confronta con ogni `link=`, `to=`, `href:` e `navigate(` che punti a un
+percorso interno: **21 target, uno solo rotto, ed era questo**. Ora zero.
+
+Lo script porta anche un'**auto-prova**, perché un controllo che dice sempre «OK» passerebbe
+inosservato: verifica che il resolver bocci il valore di prima e promuova quello di adesso. È la
+prova che il controllo distingue davvero i due stati, e insieme la misura del prima e del dopo.
+
+Il pacchetto costruito chiude il cerchio sul dubbio residuo — che la modifica sia nel sorgente ma non
+in ciò che gira: nel pezzo della dashboard c'è `link:"/artists"`, e l'unica occorrenza di
+`artist-network` rimasta in tutto il pacchetto è l'indirizzo dell'API, che è giusto ci sia.
+
+Il ramo felice — che `/artists` renda davvero «Ecosistema Artisti» — è verificato sul codice per
+composizione: `App.jsx:91` monta `ArtistNetworkPage` su quella rotta, e `ArtistNetworkPage.jsx:31`
+ha per titolo esattamente «Ecosistema Artisti». Sono le due metà del criterio dell'item.
+
+La suite backend è stata rieseguita per intero pur avendo toccato **una riga di JSX**: non serve a
+scoprire regressioni che non possono esistere, serve a dimostrare che non ho alterato nulla.
+
+### Osservazione, senza azione: il `/temporal#streak` compare come «OK» ma non lo è del tutto
+
+Lo script segna `DashboardPage.jsx:148 link=/temporal#streak` come risolto, e per quanto riguarda la
+**rotta** è vero: `/temporal` esiste. L'ancora `#streak` invece no, ed è esattamente il finding I-3,
+il prossimo della coda. Lo scrivo perché un giro futuro che rileggesse solo la tabella qui sopra
+potrebbe concludere che I-3 è già chiuso: non lo è. Lo script confronta percorsi, non ancore — un
+controllo delle ancore sarebbe il mezzo giusto per I-3, e sarà quel giro a farlo.
+
+### Breaker
+
+**Non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi: questo run è un `ITEM-DONE`,
+quindi lo streak vale 0 contro una soglia di 3, e non esiste uno streak aperto di cui misurare la
+durata. Niente `BREAKER: TRATTENUTO` da scrivere — quel caso riguarda una soglia raggiunta con
+troppo poco tempo trascorso, e qui la soglia non è raggiunta affatto. Nessuna riga `escalated:`
+pendente da chiudere: il secondo programma non ne ha ancora aperta nessuna.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit, come prescritto. Il contatore della guardia era a
+**1 su 3**: senza l'azzeramento continuerebbe a salire e finirebbe per emettere un allarme «backlog
+fermo» falso proprio mentre il loop sta avanzando.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea: qui non
+siamo in nessuno dei due, e restano sette finding (I-3 → I-9) più il checkpoint. Sarà il run del
+checkpoint a prendere la corsia `inbox` e a **riscrivere** la voce di capolinea — è una transizione
+nuova, non una ripetizione di quella del primo programma, che è stata rimossa alle 13:40 UTC del
+2026-07-30. Niente da scrivere adesso, quindi prendere la corsia avrebbe solo tolto il giro ad altri
+loop.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere — questo repo non ha canale di
+pubblicazione automatica.

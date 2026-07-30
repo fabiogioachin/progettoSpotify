@@ -266,7 +266,15 @@ vede una pagina sana, preme il bottone, e finisce nel vuoto. Il bottone intanto 
 **Verifica**: col backend spento, premere «Connetti Spotify» lascia l'utente sulla schermata di
 accesso con un messaggio leggibile che dice che il servizio non risponde; nessuna pagina bianca.
 
-### I-2. `[ ]` Dashboard: la scheda «Artisti unici» non porta da nessuna parte
+### I-2. `[x]` Dashboard: la scheda «Artisti unici» non porta da nessuna parte
+
+> **Fatto il 2026-07-30.** Verificato **sul codice** (mezzo 2) e **meccanicamente** (mezzo 3): la
+> pagina sta dietro l'autenticazione, quindi non è apribile dal vivo senza `.env` e senza login
+> Spotify, entrambi vietati al loop. Una riga cambiata in `DashboardPage.jsx:174`,
+> `/artist-network` → `/artists`. Oltre al criterio dell'item ho verificato **tutti** i 21 target di
+> navigazione interna del frontend contro le rotte dichiarate in `App.jsx`: `/artist-network` era
+> **l'unico rotto**, e ora nessuno lo è. La prova arriva anche dal pacchetto costruito, dove il
+> pezzo della dashboard porta `link:"/artists"`. Dettaglio in `docs/loop-last-run.md`.
 
 `DashboardPage.jsx:174` punta a `/artist-network`, ma quella rotta **non esiste**: la pagina degli
 artisti sta su `/artists` (`App.jsx:91`, ed è così anche nel menu, `Sidebar.jsx:37`). L'unica altra
