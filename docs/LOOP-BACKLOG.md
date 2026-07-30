@@ -98,7 +98,18 @@ Se invece nel frattempo qualcuno lo importa, non toccarlo: marca `[BLOCKED_USER]
 
 **Verifica**: ricerca di `EmptyState` su `frontend/src` senza risultati; `npm run build` verde.
 
-### 4. `[ ]` La CI non esegue i test backend
+### 4. `[x]` La CI non esegue i test backend
+
+> **Fatto il 2026-07-30.** Suite verde in locale: **536 passati, 0 falliti, exit 0** con
+> `backend\.venv\Scripts\python.exe -m pytest -q` (Python 3.12.13). Job `backend-test` aggiunto a
+> `ci.yml`, **senza servizi**: la suite è stata rieseguita con `DATABASE_URL` e `REDIS_URL` puntati
+> a porte chiuse e ha dato di nuovo 536 passati, quindi Postgres e Redis non servono in CI.
+> Gli 8 rossi erano due guasti distinti, nessuno dei due nel codice di produzione dei test:
+> lo scheduler globale (corretto in `app/main.py`) e quattro test con date di calendario cablate a
+> marzo 2026, ormai fuori dalla finestra di 30 giorni del servizio. Dettaglio in
+> `docs/loop-last-run.md`. **Limite**: `backend-lint` era già rosso prima di questo giro (2 errori
+> ruff pre-esistenti), quindi la CI nel complesso resta rossa finché non si sistemano — vedi
+> run-log.
 
 `.github/workflows/ci.yml` ha solo lint (backend ruff, frontend eslint+build). I 30 file di test
 backend non girano mai automaticamente. Dipende dall'item 1: prima di mettere la suite in CI, va

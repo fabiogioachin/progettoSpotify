@@ -84,7 +84,12 @@ else:
 
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler()
+# Creato dentro lifespan(), non qui: AsyncIOScheduler si lega all'event loop su cui
+# viene avviato, e un oggetto di modulo sopravvive al loop che lo ha creato. Con due
+# cicli di vita nello stesso processo (ogni TestClient(app) usato come context manager
+# ne esegue uno) il secondo start() ripartirebbe sul loop del primo, ormai chiuso.
+# Resta un attributo di modulo perche' /health/detailed e admin.list_jobs lo leggono.
+scheduler: AsyncIOScheduler | None = None
 
 
 async def _warmup_genre_cache():
@@ -747,6 +752,10 @@ async def lifespan(app: FastAPI):
             "SECURITY: cookie_secure=False su ambiente non-localhost. Impostare COOKIE_SECURE=true in produzione."
         )
 
+    # Uno scheduler nuovo per ogni ciclo di vita, legato al loop che lo ospita.
+    global scheduler
+    scheduler = AsyncIOScheduler()
+
     # APScheduler: sync ascolti recenti ogni 30 minuti
     # jitter=60 adds random 0-60s delay to prevent thundering herd on restart
     scheduler.add_job(
@@ -792,6 +801,7 @@ async def lifespan(app: FastAPI):
     yield
 
     scheduler.shutdown(wait=False)
+    scheduler = None
     logger.info("APScheduler arrestato")
     await close_redis()
     logger.info("Redis chiuso")
@@ -999,9 +1009,9 @@ async def health_detailed(request: Request):
         active_users = -1
         total_users = -1
 
-    # APScheduler jobs
+    # APScheduler jobs — scheduler e' None fuori dal lifespan
     jobs_info = []
-    for job in scheduler.get_jobs():
+    for job in scheduler.get_jobs() if scheduler else []:
         jobs_info.append(
             {
                 "id": job.id,

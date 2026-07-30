@@ -23,6 +23,28 @@ jobs:
           cd backend
           ruff check app/
 
+  backend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Nessun servizio Postgres/Redis: la suite non ne apre nessuno. Verificato
+    # eseguendola con DATABASE_URL e REDIS_URL puntati a porte chiuse — 536 test
+    # passati lo stesso. I test che toccano il DB usano AsyncMock, e il lifespan
+    # dell'app tollera l'assenza di entrambi. Aggiungere servizi qui darebbe la
+    # falsa impressione che servano.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: |
+          cd backend
+          pytest -q
+
   frontend-lint-build:
     runs-on: ubuntu-latest
     steps:

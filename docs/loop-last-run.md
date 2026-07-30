@@ -378,3 +378,155 @@ scrivere in `Inbox.md`, quindi la corsia `inbox` non è stata occupata.
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-30 04:53 UTC — `ITEM-DONE` — item 4 «La CI non esegue i test backend»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 12 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.080s su 12 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, resta 0: questo run è un `ITEM-DONE`).
+
+Il comando del Passo 0 è stato eseguito **in PowerShell**, non in Bash, per la ragione già
+registrata al run precedente: Git Bash mangia i backslash dei path Windows e lo script non parte
+nemmeno. Il primo tentativo in Bash è fallito allo stesso modo (exit 2, file inesistente) e **non**
+è un `NOOP-UNDECIDABLE`: non era la guardia a non saper rispondere, era la shell a non averla mai
+avviata.
+
+### Working tree sporca all'avvio: valutata, non un `NOOP-DIRTY`
+
+`git status --porcelain` a inizio run: ` M .claude/tasks/lessons.md`. Stessa decisione del run
+precedente, con una ragione in più. Il file contiene **due** voci di lezione, entrambe chiuse ed
+entrambe sul funzionamento di questo loop: l'hook di fine turno che committa il run-log, e la
+here-string PowerShell che ha spezzato il commit dell'item 3. La seconda l'ha scritta la sessione
+dell'item 3 documentando un guaio proprio suo. È meta-lavoro sul loop, finito, e la sovrapposizione
+con i file di questo item è **zero**. La guardia dice `LIBERO`, quindi nessun lavoro in volo da
+proteggere — che è il rischio per cui `NOOP-DIRTY` esiste. Non messo in stage: l'`add` elenca path
+espliciti.
+
+### Gli 8 rossi erano due guasti distinti, e nessuno dei due era «i test sono sbagliati a caso»
+
+Il backlog li dava per due gruppi, ed è vero, ma la causa del secondo gruppo non era quella
+ipotizzata («plausibile una sola causa comune legata al fuso orario»). Non è il fuso orario.
+
+**Gruppo A — `test_privacy.py`, 4 rossi: lo scheduler globale.** Confermata la diagnosi del run
+dell'item 1. `scheduler = AsyncIOScheduler()` stava a livello di modulo (`app/main.py:87`): un
+oggetto solo per processo, avviato dal lifespan. Ogni `TestClient(app)` usato come context manager
+esegue un ciclo di vita completo, quindi il secondo riavviava **lo stesso** oggetto su un event loop
+nuovo mentre APScheduler teneva ancora il riferimento al primo, ormai chiuso — `RuntimeError: Event
+loop is closed`.
+
+Applicata la **correzione strutturale**, non quella di ripiego lato test: lo scheduler ora nasce
+dentro `lifespan()`, così ogni ciclo di vita ha il suo, coerente col loop che lo ospita. Resta un
+attributo di modulo perché due endpoint lo leggono — `/health/detailed` (`app/main.py`) e
+`admin.list_jobs` (`app/routers/admin.py:159`, import lazy) — e ora vale `None` fuori dal lifespan,
+quindi entrambi hanno la guardia. Il perché è scritto accanto alla dichiarazione, così la prossima
+modifica non lo riporta a livello di modulo «per pulizia».
+
+Questo non è solo un guaio di test: uno scheduler legato a un loop morto è un rischio reale a ogni
+riavvio in-process dell'app.
+
+**Gruppo B — `test_temporal_patterns.py`, 4 rossi: date di calendario cablate, scadute.** I quattro
+test fissavano `datetime(2026, 3, 25, ...)`. `compute_temporal_patterns` scarta gli ascolti più
+vecchi della sua finestra (`temporal_patterns.py:106`, `days=30` di default): il 25 marzo, oggi, è
+**127 giorni fa**, quindi ogni play veniva filtrato e la pipeline restituiva `_empty_result()`. Da
+lì tutti gli `assert 0 == 2`. Il servizio è corretto; erano i test a marcire. Prova che il discrimine
+è la data e non altro: **tutti** i test dello stesso file che usano `datetime.now()` passavano già.
+
+Corretti rendendo le date relative a ora (`_recent_day`, `_recent_weekday`), il che tiene i test
+dentro la finestra di default senza cambiare cosa verificano. `_recent_weekday` risale al massimo di
+8 giorni, quindi il giorno della settimana resta quello voluto qualunque sia oggi. Tutto in UTC,
+niente ora legale: nessuna dipendenza dall'orologio oltre a «che giorno è oggi».
+
+Aggiunta `TestTimeWindowCutoff` (2 test) che **fissa il taglio** dei 30 giorni sui due lati: è la
+regressione vera, perché quel comportamento è ciò che ha divorato in silenzio quattro test facendoli
+sembrare un calcolo rotto invece che un input fuori intervallo.
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `pytest tests/test_privacy.py tests/test_temporal_patterns.py -q` (prima) | **8 falliti, 21 passati** | 1 |
+| `pytest tests/test_privacy.py -q` (dopo fix scheduler) | 7 passati | 0 |
+| `pytest tests/test_temporal_patterns.py -q` (dopo fix date) | 24 passati | 0 |
+| `pytest -q` — **suite completa** | **536 passati, 0 falliti** in 318.72s | **0** |
+| `pytest -q` con `DATABASE_URL`/`REDIS_URL` su porte chiuse | **536 passati** in 257.04s | **0** |
+| `python verify_ci.py` — YAML + struttura del job | 7 controlli su 7 OK | 0 |
+| `ruff check app/main.py app/routers/admin.py` | 1 errore, **pre-esistente** (vedi sotto) | 1 |
+| `cd frontend && npm run lint` | nessun errore | 0 |
+| `cd frontend && npm run build` | 49 entry PWA, build ok | 0 |
+
+Interprete: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe` (Python
+3.12.13). Erano 534 test raccolti, ora 536: i 2 in più sono `TestTimeWindowCutoff`.
+`verify_ci.py` è usa-e-getta, nello scratchpad di sessione, non versionato.
+
+### Il job `backend-test`, e perché **senza** servizi
+
+L'item metteva in conto di dover avviare Postgres e Redis. **Non servono**, e non l'ho dedotto dal
+codice: ho rieseguito la suite intera con `DATABASE_URL` e `REDIS_URL` puntati a porte chiuse
+(`127.0.0.1:5599` e `:6699`). Stesso risultato, 536 passati. I test che toccano il DB usano
+`AsyncMock` e il lifespan tollera l'assenza di entrambi.
+
+Il controllo serviva davvero: su questa macchina **la porta 5432 è in ascolto**, quindi un run
+locale «verde» non avrebbe distinto una suite che ignora il DB da una che ci si appoggia in
+silenzio. Con i servizi veri spenti la distinzione è provata. Il perché è scritto come commento
+dentro il job, altrimenti il prossimo che legge aggiunge un blocco `services:` che non serve.
+
+Il job rispecchia ciò che ha funzionato in locale: Python 3.12, `pip install -r requirements-dev.txt`,
+`pytest -q`, più `timeout-minutes: 15` perché la suite gira in 4-5 minuti e un job appeso non deve
+bruciare minuti. Job indipendente dagli altri due: segnale più leggibile.
+
+### Finding che riguarda l'esito dell'item: `backend-lint` era **già rosso**
+
+Non l'ho toccato — non è questo l'item — ma va detto perché cambia cosa vedrà l'utente al prossimo
+push. `ruff check app/`, il comando esatto che esegue il job `backend-lint` di `ci.yml`, **fallisce
+con 2 errori**:
+
+- `app/main.py:721` — `F841 Local variable 'synced' is assigned to but never used`
+- `app/routers/auth.py:363` — `F841 Local variable 'sync_ok' is assigned to but never used`
+
+**Sono pre-esistenti, non miei**, e l'ho verificato invece di affermarlo: `auth.py` non l'ho aperto
+in scrittura, e sulla copia di `main.py` estratta da `HEAD` ruff dà lo stesso errore alla riga 716
+(le mie 5 righe di commento lo spostano a 721). Conseguenza pratica: la CI **resta rossa nel
+complesso** finché non si sistemano, ma il job `backend-test` è indipendente e riporterà il proprio
+esito a parte, quindi lo scopo dell'item — i test girano in CI — è raggiunto lo stesso. La decisione
+se aprire un item è di Fabio: un giro, un item, e dedurne di nuovi è vietato.
+
+Nota minore, stessa famiglia: `ruff format app/ --check` segnala 10 file da riformattare, `main.py`
+incluso **già a HEAD**. Nessun job di CI lo esegue, quindi non fa da gate; e non ho aggiunto deriva.
+
+### Osservazione, senza azione: `_empty_result()` non ha la chiave `first_play_date`
+
+`temporal_patterns.py:314-340` restituisce 12 chiavi, il ramo pieno ne restituisce 13:
+`first_play_date` manca solo nel ramo vuoto. Chi consuma la risposta con zero ascolti riceve una
+chiave assente invece di `None`. Nessun test lo copre — `test_all_expected_keys_present` usa date
+recenti e non passa mai di lì. Non l'ho corretto: non rende rosso nulla e non è l'item. Lo scrivo
+perché è il tipo di incoerenza che un giro successivo scambia per un bug del frontend.
+
+### Breaker
+
+**Non aperto.** Nessuna delle due condizioni: questo run è un `ITEM-DONE`, streak 0 contro soglia 3.
+Nessun `BREAKER: TRATTENUTO` da scrivere, nessuna riga `escalated:` pendente da chiudere.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit, come prescritto: il contatore della guardia era a
+1 su 3 e senza l'azzeramento arriverebbe a emettere un allarme «backlog fermo» falso mentre il loop
+sta avanzando.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea: qui non
+siamo in nessuno dei due, e restano l'ispezione frontend (item 5) e il checkpoint. Niente da
+scrivere in `Inbox.md`, quindi la corsia `inbox` non è stata occupata.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere.

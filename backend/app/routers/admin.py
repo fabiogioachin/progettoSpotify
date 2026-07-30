@@ -159,7 +159,8 @@ async def list_jobs(
     from app.main import scheduler  # lazy import to avoid circular
 
     jobs = []
-    for job in scheduler.get_jobs():
+    # scheduler e' None fuori dal lifespan (creato all'avvio, azzerato allo shutdown)
+    for job in scheduler.get_jobs() if scheduler else []:
         jobs.append(
             {
                 "id": job.id,

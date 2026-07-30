@@ -76,6 +76,28 @@ async def _passthrough_retry(fn, **kw):
     return await fn(**kw)
 
 
+def _recent_day(days_ago: int, hour: int = 10) -> datetime:
+    """UTC datetime `days_ago` days in the past, at a fixed hour.
+
+    Relative to now on purpose. `compute_temporal_patterns` drops plays older
+    than its `days` window (default 30), so a hardcoded calendar date makes a
+    test pass the day it is written and fail silently once the wall clock moves
+    past the cutoff — the whole pipeline then returns `_empty_result()` and every
+    assertion reads 0. Pinned by TestTimeWindowCutoff below.
+    """
+    base = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return base.replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
+def _recent_weekday(weekday: int, hour: int = 10) -> datetime:
+    """Most recent past date falling on `weekday` (0=Mon), at a fixed UTC hour.
+
+    At most 8 days back, so always inside the default 30-day window.
+    """
+    anchor = _recent_day(1, hour=hour)
+    return anchor - timedelta(days=(anchor.weekday() - weekday) % 7)
+
+
 # ---------------------------------------------------------------------------
 # _compute_streak (pure function)
 # ---------------------------------------------------------------------------
@@ -189,7 +211,7 @@ class TestHourlyDistribution:
     @pytest.mark.asyncio
     async def test_plays_bucketed_to_correct_hour(self):
         """Plays at hour 14 and 15 end up in the correct heatmap columns."""
-        base = datetime(2026, 3, 25, 14, 0, tzinfo=timezone.utc)  # Wednesday
+        base = _recent_day(3, hour=14)
         items = [
             _make_api_item(base, track_id="a"),
             _make_api_item(base + timedelta(minutes=5), track_id="b"),
@@ -202,7 +224,7 @@ class TestHourlyDistribution:
             result = await compute_temporal_patterns(client, db=None)
 
         hm = result["heatmap"]["data"]
-        weekday = base.weekday()  # Wednesday = 2
+        weekday = base.weekday()
         assert hm[weekday][14] == 2  # two plays at hour 14
         assert hm[weekday][15] == 1  # one play at hour 15
 
@@ -215,8 +237,8 @@ class TestDayOfWeekBucketing:
     @pytest.mark.asyncio
     async def test_weekday_vs_weekend_counts(self):
         """Plays on a Wednesday are weekday; plays on Saturday are weekend."""
-        wed = datetime(2026, 3, 25, 10, 0, tzinfo=timezone.utc)  # Wednesday
-        sat = datetime(2026, 3, 28, 10, 0, tzinfo=timezone.utc)  # Saturday
+        wed = _recent_weekday(2)  # Wednesday
+        sat = _recent_weekday(5)  # Saturday
         items = [
             _make_api_item(wed, track_id="a"),
             _make_api_item(wed + timedelta(minutes=5), track_id="b"),
@@ -240,7 +262,7 @@ class TestStreakInPipeline:
     @pytest.mark.asyncio
     async def test_consecutive_days_streak(self):
         """3 plays on 3 consecutive days → max_streak=3."""
-        base = datetime(2026, 3, 25, 10, 0, tzinfo=timezone.utc)
+        base = _recent_day(5)
         items = [
             _make_api_item(base, track_id="a"),
             _make_api_item(base + timedelta(days=1), track_id="b"),
@@ -258,7 +280,7 @@ class TestStreakInPipeline:
     @pytest.mark.asyncio
     async def test_gap_in_streak(self):
         """Plays on day 1, 2, then day 5 → max_streak=2."""
-        base = datetime(2026, 3, 25, 10, 0, tzinfo=timezone.utc)
+        base = _recent_day(6)
         items = [
             _make_api_item(base, track_id="a"),
             _make_api_item(base + timedelta(days=1), track_id="b"),
@@ -291,6 +313,43 @@ class TestDailyMinutes:
 
         # daily_minutes requires DB
         assert result["daily_minutes"] == []
+
+
+# ---------------------------------------------------------------------------
+# Time window cutoff
+# ---------------------------------------------------------------------------
+
+class TestTimeWindowCutoff:
+    """Pins the `days` cutoff, the reason test dates must stay relative to now.
+
+    Without these, a play older than the window is dropped and the pipeline
+    returns an all-zero result that looks like a broken computation instead of
+    an out-of-range input.
+    """
+
+    @pytest.mark.asyncio
+    async def test_play_older_than_window_is_dropped(self):
+        old = datetime.now(timezone.utc) - timedelta(days=45)
+        client = _mock_client([_make_api_item(old, track_id="old")])
+
+        with patch("app.services.temporal_patterns.retry_with_backoff",
+                    side_effect=_passthrough_retry):
+            result = await compute_temporal_patterns(client, db=None, days=30)
+
+        assert result["total_plays"] == 0
+        assert result["streak"]["max_streak"] == 0
+
+    @pytest.mark.asyncio
+    async def test_play_inside_window_is_kept(self):
+        recent = datetime.now(timezone.utc) - timedelta(days=10)
+        client = _mock_client([_make_api_item(recent, track_id="recent")])
+
+        with patch("app.services.temporal_patterns.retry_with_backoff",
+                    side_effect=_passthrough_retry):
+            result = await compute_temporal_patterns(client, db=None, days=30)
+
+        assert result["total_plays"] == 1
+        assert result["streak"]["max_streak"] == 1
 
 
 # ---------------------------------------------------------------------------
