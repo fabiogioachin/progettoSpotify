@@ -236,3 +236,145 @@ nessuno dei due casi. Il lock fra loop non è stato preso, perché non c'era nul
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito. `git status --porcelain` era vuoto prima di questa
 voce di registro.
+
+---
+
+## 2026-07-30 03:41 — `ITEM-DONE` — item 3 «Componente morto: `EmptyState.jsx`»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 11 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.071s su 11 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 2 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 1, portato a zero da questo `ITEM-DONE`; lo streak apertosi col
+`NOOP-BUSY` del 2026-07-29T22:33:56Z è chiuso).
+
+### Nota di metodo: il path della guardia va passato a PowerShell, non a Bash
+
+Il comando del Passo 0 eseguito nella shell Bash è **fallito senza eseguire nulla**: Git Bash ha
+mangiato i backslash e ha cercato
+`C:\Users\fgioa\Desktop\PRO\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`, exit 2. Non era la
+guardia a dire «non so rispondere» — era la shell a non aver mai avviato lo script, quindi **non**
+è un caso di `NOOP-UNDECIDABLE`. Rieseguito in PowerShell con l'operatore `&` e i path quotati, ha
+risposto `LIBERO`. Vale la regola globale: su Windows mai path Windows nudi dentro Bash.
+
+### Working tree sporca all'avvio: valutata, non un `NOOP-DIRTY`
+
+`git status --porcelain` a inizio run non era vuoto: ` M .claude/tasks/lessons.md`. Il Passo 3
+prevede `NOOP-DIRTY` per «lavoro non tuo e non riconducibile al backlog», e le due eccezioni note
+(stato della guardia sotto `_local\`, run-log) non coprono questo file. Non mi sono fermato, e la
+ragione va scritta perché è una decisione, non una svista:
+
+- **Cosa contiene**: una sola voce di lezione, completa e chiusa, che documenta il comportamento di
+  questo stesso loop — l'hook globale di fine turno committa il run-log che il loop, nei rami che
+  cedono, lascia scoperto. È meta-lavoro sul loop, non codice a metà.
+- **Chi l'ha scritta**: la sessione interattiva che aveva causato il `NOOP-BUSY` precedente. La
+  guardia di questo run dice `LIBERO`, quindi quella sessione è finita: non c'è lavoro in volo da
+  proteggere, che è il rischio per cui `NOOP-DIRTY` esiste.
+- **Sovrapposizione con questo item**: **zero**. Io ho toccato `frontend/src/components/ui/`,
+  `docs/LAUNCH-PLAN.md`, `docs/LOOP-BACKLOG.md`, `docs/loop-last-run.md`. Il file non è stato
+  aperto in scrittura né messo in stage: l'`add` di questo run elenca path espliciti.
+
+Fermarsi qui avrebbe bruciato un giro e portato lo streak a 2 per una voce di documentazione già
+finita. Prevedibile che l'hook di fine turno la committi a parte, come già accaduto in `91937b2`.
+
+### Cosa è stato fatto
+
+`frontend/src/components/ui/EmptyState.jsx` era definito, esportato e **importato da nessuno**.
+Rimosso il file, e annotata la cosa in `LAUNCH-PLAN.md`.
+
+Prima di cancellare ho riverificato gli import come chiede l'item, allargando la ricerca a tutto il
+repo e non solo a `frontend/src`. `EmptyState` compariva in 5 posti, nessuno dei quali un import:
+la propria definizione, il backlog, `.claude/CLAUDE.md:116`, `docs/RESTRUCTURING-PLAN.md` (Phase 3,
+che lo aveva pianificato) e `.claude/skills/react-spotify-patterns/SKILL.md:116`. Nessuno importa,
+quindi non è scattata la condizione di `[BLOCKED_USER]` prevista dall'item.
+
+### Perché era morto: non dimenticato, ma superato da una convenzione
+
+Il pezzo che l'item non diceva, e che cambia l'annotazione da scrivere.
+`.claude/skills/react-spotify-patterns/SKILL.md:116` **vieta esplicitamente** l'empty state dentro
+i chart: i chart restituiscono `null` senza dati e il genitore decide la visibilità. Combacia con la
+convenzione di `.claude/CLAUDE.md` («Empty sections: hide rather than showing "nessun dato
+disponibile"»). Il componente nasce dalla Phase 3 di `RESTRUCTURING-PLAN.md:188`, che voleva un
+empty state per sette chart; poi la scelta si è ribaltata, e il file è rimasto lì.
+
+Non ho preso la cosa dai documenti: l'ho verificata sul codice. I chart escono con `null` quando i
+dati mancano — `AudioRadar.jsx:28`, `GenreTreemap.jsx:37`, `MoodScatter.jsx:24`,
+`TrendTimeline.jsx:25`, `ListeningHeatmap.jsx:97`, `ArtistNetwork.jsx:420`, `OverlapHeatmap.jsx:27`,
+`PlaylistComparison.jsx:24`, `TasteOverlapBar.jsx:24`, `StreakDisplay.jsx:14`.
+
+### Correzione al testo dell'item: l'annotazione richiesta era falsa
+
+L'item chiedeva di annotare che «gli empty state sono implementati per-pagina, non col componente
+condiviso». **Non è vero, e non l'ho scritto.** In tutto `frontend/src` esiste **un solo** messaggio
+testuale di «nessun dato», in `AdminPage.jsx:442`. Non c'è un empty state per pagina: la scelta di
+prodotto è non mostrare nulla e nascondere la sezione. Scrivere la frase dell'item avrebbe messo a
+verbale nel piano di lancio un'affermazione che il codice smentisce, ed è esattamente il tipo di
+documento che un giro successivo prende per buono.
+
+In `LAUNCH-PLAN.md` ho quindi scritto la versione vera, con i riferimenti al codice qui sopra, più
+il fatto che la metà «error boundaries» della voce è invece piena per davvero: `SectionErrorBoundary`
+avvolge le sezioni di **9 pagine** (96 occorrenze su 10 file, `SectionErrorBoundary.jsx` incluso).
+La voce `- [x] Empty states + error boundaries` alla riga 15 non è stata declassata — è vera, ma
+andava spiegata: ora rimanda alla nota.
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| ricerca `EmptyState` su `frontend/src` | **nessun risultato** | — |
+| `cd frontend && npm run lint` | nessun errore | 0 |
+| `cd frontend && npm run build` | 2728 moduli, build in 4.26s, 49 entry PWA | 0 |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **526 passati, 8 falliti** in 4m19s | 1 |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). I due criteri di verifica dell'item sono entrambi verdi.
+
+Gli 8 rossi sono **gli stessi di sempre**, identici per numero, file e nome ai due run precedenti:
+4 in `test_privacy.py`, 4 in `test_temporal_patterns.py`, 526 passati in tutti e tre i giri. Questo
+run ha cancellato un componente React che nessuno importava e ha toccato due file markdown: nessun
+test Python li carica, nessuna regressione possibile, e infatti nessuna. Restano il mandato
+dell'item 4.
+
+### Due riferimenti pendenti che **non** ho toccato, e perché
+
+La cancellazione lascia due documenti che citano un file ora inesistente. Non li ho corretti perché
+stanno sotto un divieto esplicito del `CLAUDE.md` globale — non modificare `CLAUDE.md`, file di
+skill, agent o command senza richiesta esplicita — e il Passo 2 dice che il vincolo più restrittivo
+vince. Li segnalo perché la decisione è di Fabio, non mia:
+
+1. **`.claude/CLAUDE.md:116`** — «EmptyState component for charts with no data». Ora è **falso** su
+   due fronti: il componente non esiste più, e i chart non usavano quel pattern nemmeno prima.
+2. **`.claude/skills/react-spotify-patterns/SKILL.md:116`** — «Non usare `EmptyState` nei chart».
+   L'istruzione resta giusta nella sostanza (non aggiungere empty state ai chart), ma nomina un file
+   cancellato.
+
+`docs/RESTRUCTURING-PLAN.md` lo lascio invece **per scelta**, non per divieto: è un piano concluso
+che descrive cosa si era deciso allora, e riscriverlo sarebbe falsificare un registro storico. La
+nota in `LAUNCH-PLAN.md` dice esplicitamente che quelle righe restano come traccia.
+
+### Breaker
+
+**Non aperto.** Nessuna delle due condizioni è in piedi: questo run è un `ITEM-DONE`, quindi lo
+streak è 0 contro una soglia di 3. Nessun `BREAKER: TRATTENUTO` da scrivere, e nessuna riga
+`escalated:` pendente da chiudere — il run precedente non ne aveva aperta nessuna.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit, come prescritto: serve ad azzerare il contatore
+della guardia, che era a 2 su 3 e al prossimo giro avrebbe emesso un allarme «backlog fermo» falso
+proprio mentre il loop stava avanzando.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea: qui non
+siamo in nessuno dei due, e restano da fare l'item 4, l'ispezione frontend e il checkpoint. Nulla da
+scrivere in `Inbox.md`, quindi la corsia `inbox` non è stata occupata.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere.

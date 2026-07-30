@@ -12,7 +12,7 @@ Primo lancio dell'app tra 5-20 amici con account Spotify Premium. L'app è funzi
 - [x] Auth invite-gated con PKCE + HMAC state
 - [x] Rate limit 4 livelli (API, user quota, Spotify throttle, budget priority)
 - [x] PWA installabile
-- [x] Empty states + error boundaries
+- [x] Empty states + error boundaries — vedi nota sotto
 - [x] Admin dashboard
 - [x] Onboarding flow
 - [x] Privacy/GDPR (export + delete)
@@ -20,6 +20,30 @@ Primo lancio dell'app tra 5-20 amici con account Spotify Premium. L'app è funzi
 - [x] API v1 versioning con redirect 308
 - [x] Data retention policy
 - [x] Background jobs staggerati multi-user
+
+### Nota sugli empty state (aggiornata il 2026-07-30)
+
+Gli empty state **non** passano da un componente condiviso: una sezione senza dati **si nasconde**.
+Il chart restituisce `null` e il genitore decide se mostrare o no il blocco — è la convenzione
+scritta in `.claude/CLAUDE.md` («Empty sections: hide rather than showing "nessun dato
+disponibile"») e in `.claude/skills/react-spotify-patterns/SKILL.md:116`, che vieta esplicitamente
+l'empty state dentro i chart. Il comportamento è nel codice: `AudioRadar.jsx:28`,
+`GenreTreemap.jsx:37`, `MoodScatter.jsx:24`, `TrendTimeline.jsx:25`, `ListeningHeatmap.jsx:97`,
+`ArtistNetwork.jsx:420`, `OverlapHeatmap.jsx:27`, `PlaylistComparison.jsx:24`,
+`TasteOverlapBar.jsx:24`, `StreakDisplay.jsx:14`.
+
+Un messaggio testuale di «nessun dato» esiste in **un solo punto** di tutto il frontend
+(`AdminPage.jsx:442`). Quindi la voce qui sopra non va letta come «ogni pagina ha il suo empty
+state»: la scelta di prodotto è l'opposto, cioè non mostrare nulla.
+
+`components/ui/EmptyState.jsx`, previsto dalla Phase 3 di `RESTRUCTURING-PLAN.md:188`, è stato
+creato e **mai importato da nessuno**: la convenzione è cambiata dopo. Rimosso il 2026-07-30 dal
+loop di sviluppo (item 3 di `LOOP-BACKLOG.md`). Le righe di `RESTRUCTURING-PLAN.md` che lo citano
+restano come traccia storica di ciò che era stato pianificato allora.
+
+La metà «error boundaries» della voce è invece piena: `SectionErrorBoundary` avvolge le sezioni di
+9 pagine (`DashboardPage`, `ProfilePage`, `TemporalPage`, `ArtistNetworkPage`, `DiscoveryPage`,
+`TasteEvolutionPage`, `PlaylistAnalyticsPage`, `PlaylistComparePage`, `FriendsPage`).
 
 ---
 

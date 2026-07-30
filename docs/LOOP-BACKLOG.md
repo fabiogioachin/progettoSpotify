@@ -78,7 +78,15 @@ context giusto, coerenti con come i compose file li usano.
 dell'item 1, o strumento equivalente). La prova CI vera arriverà solo al prossimo push
 dell'utente: dichiaralo nel run-log come limite.
 
-### 3. `[ ]` Componente morto: `EmptyState.jsx`
+### 3. `[x]` Componente morto: `EmptyState.jsx`
+
+> **Fatto il 2026-07-30.** Import riverificati: zero, il file citava solo se stesso. Rimosso.
+> `EmptyState` non compare più in `frontend/src`, `npm run lint` e `npm run build` escono 0.
+> **Correzione al testo dell'item**: l'annotazione chiesta («empty state implementati per-pagina»)
+> sarebbe stata falsa — in tutto il frontend esiste **un solo** messaggio testuale di «nessun dato»
+> (`AdminPage.jsx:442`). La convenzione vera è l'opposto: la sezione senza dati **si nasconde**, il
+> chart restituisce `null` e il genitore decide. In `LAUNCH-PLAN.md` è stata scritta quella, con i
+> riferimenti al codice. Dettaglio in `docs/loop-last-run.md`.
 
 `frontend/src/components/ui/EmptyState.jsx` è definito ed esportato ma ha **zero import** in tutto
 `frontend/src` — unico componente non referenziato su 48. Intanto `docs/LAUNCH-PLAN.md:15` marca
