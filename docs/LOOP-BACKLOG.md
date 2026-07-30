@@ -1,5 +1,14 @@
 # LOOP BACKLOG — progettoWrap
 
+LOOP HALTED
+
+> **Fermato al checkpoint il 2026-07-30T10:35:00Z**, dopo i cinque giri del programma — non per un
+> guasto. I cinque item sono chiusi, nessun `FAILED`. Da qui ogni fire esce `NOOP-HALTED` in
+> silenzio: il loop riparte solo quando **tu** togli il marcatore qui sopra e gli dai lavoro nuovo.
+> Il materiale per il prossimo programma è già scritto: i **9 finding** dell'ispezione frontend
+> (sezione «Trovati dall'ispezione») e i 4 item della sezione «Dopo il checkpoint». Riepilogo del
+> giro in `docs/loop-last-run.md`.
+
 > **Programma avviato il 2026-07-29: cinque giri, poi checkpoint.** Il quinto item runnable è seguito da un
 > item-checkpoint che rimette `LOOP HALTED` in testa a questo file e ferma tutto. A quel punto
 > si rivede il lavoro e, se convince, si riapre la coda togliendo il marcatore.
@@ -165,7 +174,13 @@ usata per ciascuna pagina.
 verifica; nessun file di codice modificato in questo giro; run-log con l'elenco delle pagine
 ispezionate e come.
 
-### ✋ `[ ]` CHECKPOINT — quinto giro completato: fermati qui
+### ✋ `[x]` CHECKPOINT — quinto giro completato: fermati qui
+
+> **Eseguito il 2026-07-30T10:35:00Z.** `LOOP HALTED` scritto in testa al file, nessun file di
+> codice toccato. I cinque item del programma sono chiusi, **zero `FAILED`**, e nessun
+> `BLOCKED_USER` nuovo oltre ai tre già in lista (11, 12, 13). L'ispezione del quinto giro ha
+> prodotto **9 finding**, tutti ancora aperti. Voce di capolinea scritta nel canale Inbox del
+> vault. Riepilogo completo in `docs/loop-last-run.md`.
 
 Se stai leggendo questo item come «primo item non completato», i cinque item sopra sono chiusi.
 Questo giro non implementa niente. Fai solo questo:

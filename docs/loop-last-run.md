@@ -549,7 +549,14 @@ Il Passo 0 è stato eseguito **in PowerShell** dopo che il tentativo in Bash è 
 modo dei due run precedenti: Git Bash mangia i backslash dei path Windows e ha cercato
 `...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`, exit 2. **Non** è un `NOOP-UNDECIDABLE`:
 non era la guardia a non saper rispondere, era la shell a non averla mai avviata. È la terza volta
-di fila; la lezione è già a verbale in `.claude/tasks/lessons.md`.
+di fila.
+
+> **Correzione, scritta in fase di finalize dopo il commit `b1c83db`.** Qui c'era scritto che «la
+> lezione è già a verbale in `.claude/tasks/lessons.md`». **Era falso**, e l'ho ripreso dal run-log
+> dell'item 4 invece di aprire `lessons.md` e cercarla: in quel file c'era la lezione sulla
+> here-string di `git commit`, un guasto diverso dello stesso run. La lezione mancante è stata
+> scritta adesso, insieme a una seconda su questo errore di metodo — un run-log racconta cosa un run
+> ha creduto di fare, non lo stato di un altro file.
 
 ### Working tree pulita all'avvio
 
@@ -671,3 +678,176 @@ siamo in nessuno dei due, ma **il prossimo run lo sarà**: resta solo l'item-che
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-30 10:35 UTC — `CHECKPOINT` — item-checkpoint «quinto giro completato: fermati qui»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 14 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.078s su 14 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, resta 0: questo run chiude il suo item e committa, quindi
+produce un avanzamento reale). Nessuno streak aperto, quindi nessun timestamp di primo run da
+tenere.
+
+Il Passo 0 è stato eseguito **in PowerShell** dopo il consueto fallimento in Bash, quarta volta di
+fila: Git Bash mangia i backslash e cerca `...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`,
+exit 2. **Non** è `NOOP-UNDECIDABLE` — la guardia non è mai stata avviata. La lezione è a verbale in
+`.claude/tasks/lessons.md` (verificato aprendo il file, non dedotto da questo run-log: è
+esattamente l'errore di metodo che il run precedente ha dovuto correggere dopo il commit).
+
+### Working tree sporca all'avvio: valutata, non un `NOOP-DIRTY`
+
+`git status --porcelain` a inizio run: ` M .claude/tasks/lessons.md` e ` M docs/loop-last-run.md`.
+Il secondo è un'eccezione dichiarata dal Passo 3. Il primo no, quindi la decisione va motivata.
+
+Letto il diff invece di dedurlo dal nome: sono **due voci di lezione chiuse**, scritte dal run
+precedente in fase di finalize dopo il commit `b1c83db` — il tool Bash che mangia i path Windows, e
+il metodo sbagliato di verificare una lezione sul run-log invece che sulla lezione. Entrambe
+documentano questo stesso loop. Il diff di `docs/loop-last-run.md` è la correzione corrispondente
+all'entry dell'item 5. Nessun codice, nessun lavoro a metà, e la guardia dice `LIBERO`: nessuna
+sessione in volo da proteggere, che è il rischio per cui `NOOP-DIRTY` esiste.
+
+**Li ho committati insieme ai miei**, a differenza dei run 3 e 4 che li avevano lasciati scoperti.
+La ragione è che questo è l'ultimo run del programma: lasciarli lì significherebbe lasciare la
+working tree sporca per sempre, dato che da adesso ogni fire esce `NOOP-HALTED` senza committare
+nulla. L'hook di fine turno non è una garanzia su cui contare per chiudere un programma.
+
+### Cosa è stato fatto
+
+Le quattro azioni che l'item-checkpoint prescrive, e nient'altro. **Nessun file di codice toccato**,
+nessun item nuovo dedotto.
+
+1. `LOOP HALTED` scritto in testa a `docs/LOOP-BACKLOG.md`, subito sotto il titolo, con un cappello
+   che dice **perché** il loop è fermo: checkpoint di fine programma, non guasto. Senza quella
+   distinzione un marcatore nudo si legge come un'avaria.
+2. L'item-checkpoint marcato `[x]` con il riepilogo del programma accanto.
+3. Questa voce di run-log.
+4. Commit dei soli file toccati.
+
+### Riepilogo del programma: cinque giri, cinque item chiusi, zero falliti
+
+| Item | Esito | Cosa ha prodotto |
+|---|---|---|
+| 1. Ricostruire gli ambienti | `[x]` | venv 3.12.13 + `npm ci`; da 185 test con 19 errori di import a 534 raccolti, 0 errori |
+| 2. `build.yml` e i Dockerfile | `[x]` | `-f docker/*.Dockerfile` sui due step; la CI di build non falliva più a ogni push |
+| 3. `EmptyState.jsx` morto | `[x]` | file rimosso; e **smentita** l'annotazione che l'item chiedeva di scrivere, perché falsa |
+| 4. La CI non esegue i test backend | `[x]` | 8 rossi corretti (scheduler globale + date cablate), suite **536 passati / 0 falliti**, job `backend-test` in `ci.yml` |
+| 5. Ispezione frontend | `[x]` | 14 rotte ispezionate, **9 finding** scritti nel backlog |
+
+- **`FAILED`**: nessuno. Nessun item ha esaurito i 3 tentativi di fix.
+- **`BLOCKED_USER` nuovi**: nessuno. Restano i tre già in lista al momento del censimento — 11
+  (`.env` con i secret Spotify), 12 (deploy sul VPS), 13 (Extended Quota). Il loop non li ha
+  toccati, come deve.
+- **Finding dell'ispezione**: **9**, da I-1 a I-9, tutti ancora `[ ]`. Il più grave è I-1, l'unico
+  verificato dal vivo dall'inizio alla fine: col backend spento il bottone di login porta a una
+  pagina bianca senza uscita.
+
+Due correzioni al backlog stesso meritano di sopravvivere al programma, perché un giro futuro
+partirebbe da un'informazione falsa: l'item 3 chiedeva di annotare empty state «implementati
+per-pagina» che **non esistono** (la convenzione vera è nascondere la sezione), e il punto B1 di
+`.claude/tasks/todo.md` chiede una ciambella che `GenreTreemap.jsx` **già disegna** — finding I-7.
+
+### Verifiche eseguite
+
+I due criteri dell'item-checkpoint, più il controllo che il giro non abbia toccato codice.
+
+| Controllo | Esito | Exit |
+|---|---|---|
+| `LOOP HALTED` in testa a `LOOP-BACKLOG.md` | presente, riga 3, subito sotto il titolo | — |
+| run-log aggiornato | questa voce | — |
+| commit creato | sì, vedi sotto | 0 |
+| `git status --porcelain` dopo il commit | **vuoto** | 0 |
+| file di codice modificati in questo run | **nessuno**: 3 file, tutti markdown | — |
+
+**Nessuna suite eseguita, e la ragione è che non ce n'è una da eseguire.** Questo run tocca tre
+file markdown: nessun test Python li importa, nessuna build frontend li include. Rieseguire
+`pytest` (5 minuti) avrebbe prodotto un numero senza contenuto informativo — non dimostrerebbe
+niente su un cambiamento che non esiste. L'ultima misura vera resta quella del run precedente,
+**536 passati / 0 falliti, exit 0**, sullo stesso albero di codice, che questo run non ha alterato.
+
+### Il limite che il programma lascia aperto, e che vale più di tutto il resto
+
+Tre item su cinque hanno una verifica che si chiude **solo al prossimo push di Fabio**, e va detto
+in chiaro invece di lasciarlo sparso in tre voci di registro:
+
+- l'item 2 (Dockerfile) non è mai stato provato con una build vera — il demone Docker locale non
+  gira su questa macchina;
+- l'item 4 mette il job `backend-test` in CI, ma la CI non l'ha ancora eseguito;
+- e soprattutto: **`backend-lint` era già rosso prima del programma** e lo è ancora, per 2 errori
+  `ruff` pre-esistenti (`app/main.py:721` e `app/routers/auth.py:363`, `F841` su variabili
+  assegnate e non usate). Nessun item del programma li copriva e dedurne uno era vietato. Quindi al
+  prossimo push **la CI risulterà rossa nel complesso**, pur essendo ora verde su ciò che il
+  programma ha corretto. Chi guarda il semaforo senza leggere questo registro concluderebbe che il
+  loop ha rotto qualcosa.
+
+### Breaker
+
+**Non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi: lo streak vale 0 contro una
+soglia di 3, e non esiste uno streak aperto di cui misurare la durata. Niente `BREAKER:
+TRATTENUTO` da scrivere — quel caso riguarda una soglia raggiunta con troppo poco tempo trascorso,
+e qui la soglia non è raggiunta affatto. Nessuna riga `escalated:` pendente da chiudere: il
+programma non ne ha mai aperta una.
+
+Da distinguere con cura: la voce scritta in `Inbox.md` da questo run **non** è un breaker. È il
+capolinea, che è l'altra delle due cose che il Passo 7 fa arrivare a Fabio, e nasce da una
+decisione presa — il programma è finito — non da un blocco.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit. Il contatore della guardia era a 1 su 3 e questo
+fire ha prodotto un commit, che è precisamente ciò che quel contatore misura («fire senza progresso
+confermato»).
+
+Va però scritta la conseguenza, perché è il tipo di cosa che si scopre come falso allarme fra tre
+giorni. Da adesso ogni fire esce `NOOP-HALTED` **senza** confermare progresso: dopo tre fire —
+circa nove ore — la guardia emetterà un allarme «backlog fermo». Quell'allarme sarà **vero nella
+sostanza e ridondante nel canale**: il loop è fermo per scelta, e Fabio l'ha già saputo dalla voce
+di capolinea. Chi lo riceve deve leggerlo come conferma dell'halt, non come guasto nuovo.
+
+### Escalation al vault: capolinea consegnato
+
+Questa volta il canale verso Fabio si apre, ed è il caso «capolinea» del Passo 7: `LOOP HALTED`
+l'ho scritto io, quindi da adesso il loop è invisibile a meno che qualcuno non lo dica.
+
+- **Corsia `inbox` presa** prima della scrittura e **rilasciata subito dopo**:
+  `acquire` → `decision: ACQUIRE_OK (exit 0)`, `note: nessun lock globale presente`;
+  `release` → `decision: RELEASE_OK (exit 0)`. È l'unica scrittura di questo run su stato condiviso
+  con gli altri loop della macchina.
+- **Voce scritta** in `Knowledge/Ecosystem/Inbox.md`, chiave `progetto-wrap-dev-loop:capolinea`,
+  `loop_id: progetto-wrap-dev-loop`, `first_seen` = `last_seen` = `2026-07-30T10:35:00Z`. Aggiornati
+  entrambi i punti del file, l'elenco leggibile e il blocco JSON.
+- **Consegna verificata**, non assunta: il blocco JSON è stato riletto e riparsato dopo la modifica,
+  e contiene 3 chiavi — la mia più le due preesistenti (`human:suite-sync-disabilitato-personale`,
+  `polymarket-dev-loop:capolinea`), **intatte**. Nessuna voce di altri loop toccata.
+- Nessun `ESCALATION-UNDELIVERED` e nessun `ESCALATION-DEFERRED`: il file era raggiungibile e la
+  corsia libera. Nessun ripiego su `pending-vault-notes/`, che il Passo 7 vieta.
+
+`escalated: progetto-wrap-dev-loop:capolinea @ 2026-07-30T10:35:00Z`. Si scrive **una volta sola**,
+alla transizione: i fire successivi escono `NOOP-HALTED` in silenzio e non devono riscriverla.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere — questo repo non ha canale di
+pubblicazione automatica.
+
+### Per chi riapre la coda
+
+Togliere `LOOP HALTED` da `docs/LOOP-BACKLOG.md` basta a far ripartire il loop, ma la coda che
+troverebbe non è ordinata per un programma nuovo. Il materiale già scritto e verificato è:
+
+- i **9 finding** dell'ispezione, in sezione «Trovati dall'ispezione», ognuno col suo criterio di
+  verifica. Se se ne prende uno solo, **I-8** (pagina «non trovato») conviene più di I-2: è
+  l'assenza della pagina d'errore a rendere invisibile il collegamento rotto;
+- i **4 item** della sezione «Dopo il checkpoint» (7 lint frontend, 8 allineare `LAUNCH-PLAN`,
+  9 script di backup, 10 `HEALTH-REPORT` scaduto). L'item 7 va corretto prima di essere preso:
+  dà `npm run lint` per rosso, ed è **verde** da tutti e cinque i giri del programma — resta solo
+  la parte sulle 6 soppressioni `eslint-disable` da motivare;
+- i 2 errori `ruff` che tengono `backend-lint` rosso, se si vuole un semaforo di CI verde: non sono
+  in nessun item, perché dedurne di nuovi è vietato al loop.
