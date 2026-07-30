@@ -196,6 +196,20 @@ Questo giro non implementa niente. Fai solo questo:
 
 ---
 
+## PROGRAMMA: i nove finding dell'ispezione frontend -- STATO: ATTIVO
+
+Marcatore scritto da Fabio il 2026-07-30, insieme a quello del programma successivo. **Oggi è
+inerte**: il launcher di questo loop legge ancora la lista piatta dell'intero file, quindi il
+comportamento non cambia di una riga rispetto a ieri, e il freno resta l'item-checkpoint in fondo a
+questa sezione. I marcatori esistono perché il terreno sia pronto quando la successione automatica
+verrà estesa anche a questo loop — cosa che avverrà dopo che il tracer sarà verde sul loop
+PolyMarket. **Quando quel momento arriva, l'item-checkpoint qui sotto va tolto**: con le sezioni
+attive il capolinea è la sezione senza item, e un checkpoint che scrive il cartello di stop
+impedirebbe per sempre la successione.
+
+Il programma è il lavoro sui nove finding dell'ispezione frontend del 2026-07-30, uno per giro,
+dall'alto.
+
 ## Trovati dall'ispezione
 
 *Scritti dal giro di ispezione del 2026-07-30. Ordinati per quanto pesano sull'utente, non per
@@ -381,10 +395,21 @@ dichiarati `[FAILED]`. **Questo giro non implementa niente.** Fai solo questo:
 
 ---
 
+## PROGRAMMA: lint, piano di lancio, backup e health report -- STATO: APPROVATO-IN-CODA
+
+Il terzo programma, approvato da Fabio il 2026-07-30: i quattro item qui sotto (7, 8, 9, 10), nello
+stesso ordine. Gli item 11, 12 e 13 stanno dentro questa sezione ma sono `BLOCKED_USER`, e il loop
+li salta senza toccarli.
+
+Come il marcatore del programma precedente, **oggi è inerte**: finché il launcher di questo loop non
+legge le sezioni-programma, il passaggio da un programma all'altro resta manuale — l'item-checkpoint
+scrive il cartello di stop e sei tu a toglierlo.
+
 ## Dopo il checkpoint (non fanno parte del secondo programma)
 
-*Il checkpoint qui sopra li precede, quindi il loop non li raggiunge. Per farli lavorare servirà un
-terzo programma: spostarli sopra il checkpoint, o dare loro un checkpoint proprio.*
+*Finché il checkpoint dell'ispezione è al suo posto, il loop non arriva fin qui: il checkpoint lo
+precede e ferma tutto. Diventeranno il lavoro del giro successivo — automaticamente, il giorno in
+cui la successione sarà cablata anche su questo loop.*
 
 > **Da correggere prima di prenderlo**: l'item 7 dà `npm run lint` per rosso, ma è **verde** da
 > tutti e cinque i giri del primo programma. Di quell'item resta viva solo la parte sulle 6
