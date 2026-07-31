@@ -1916,3 +1916,84 @@ senza avere niente da scrivere.
 
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere.
+
+---
+
+## 2026-07-31 22:33 UTC — `NOOP-BUSY` — nessun item preso
+
+**Guardia** (riga integrale di output, exit code 3):
+
+```
+CEDI     2 sessione/i viva/e sulla repo (finestra 15min):
+         538ef3ac-f98b-4a71-b3db-e519d6e64d2e  ultimo evento 2026-07-31T22:30:05Z (3.2min fa)
+         db8683a4-663a-4e7d-a06a-54f97de9c95d  ultimo evento 2026-07-31T22:28:42Z (4.6min fa)
+         scrivi NOOP-BUSY nel run-log: cedere non e' sparire
+         costo del controllo: 0.008s su 29 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **1** (era 0, azzerato dall'`ITEM-DONE` di I-6; primo run dello streak
+2026-07-31T22:33:31Z).
+
+### Perché il loop ha ceduto
+
+Il motivo dichiarato dalla guardia è **«sessione viva»**, e sono due: entrambe con l'ultimo evento a
+tre-cinque minuti dal controllo, quindi lavoro in corso e non code residue. È il funzionamento
+normale del meccanismo di cortesia, non un guasto — per questo l'esito è `NOOP-BUSY` e non
+`NOOP-UNDECIDABLE`. Nessuna delle due è questa sessione, il cui identificativo è
+`e62d5712-d3b3-4487-aee9-ab37cb2ae7ba`: verificato invece di darlo per scontato, perché una guardia
+che contasse sé stessa cederebbe per sempre.
+
+Nessun item preso, nessun file di codice o di backlog toccato: l'unica scrittura di questo run è
+questa voce di registro. Restano aperti i finding I-7, I-8, I-9 e l'item-checkpoint.
+
+### Il fallimento in Bash si risolve quotando il path, non cambiando shell
+
+Sesta volta di fila che il Passo 0 fallisce in Bash, ma stavolta con un esito diverso che vale la
+pena mettere a verbale, perché la lezione a verbale in `.claude/tasks/lessons.md` dice «rieseguilo in
+PowerShell» e c'è una via più corta.
+
+Il comando fallisce così:
+
+```
+can't open file 'C:\Users\fgioa\Desktop\PRO\progettoWrap\Usersfgioa.claudescriptsloop_yield.py'
+```
+
+La causa non è la shell in sé: è che nel testo del Passo 0 **il path dell'interprete è quotato e
+quello dello script no**. Git Bash tratta i backslash del secondo come sequenze di escape e li mangia,
+lasciando `Usersfgioa.claudescriptsloop_yield.py`, che poi risolve come relativo alla cartella
+corrente. Quotando anche il secondo path lo stesso comando gira in Bash al primo colpo, ed è
+esattamente ciò che prescrive la regola globale — mai path Windows nudi dentro Bash. **Non** è un
+`NOOP-UNDECIDABLE` in nessuna delle due varianti: la guardia non è mai stata avviata, e quando lo è
+stata ha risposto.
+
+Non ho aggiornato `lessons.md` perché questo ramo non deve toccare nulla oltre al run-log, e c'è
+un'altra sessione viva sulla stessa working tree. La correzione alla lezione resta qui.
+
+### Breaker
+
+**Non aperto.** Servono entrambe le condizioni e la prima non è soddisfatta: lo streak vale 1, la
+soglia è 3. Non è nemmeno il caso di `BREAKER: TRATTENUTO`, che riguarda una soglia **raggiunta** ma
+con troppo poco tempo trascorso: qui non è raggiunta affatto. Nessuna riga `escalated:` pendente da
+chiudere — il run precedente non ne aveva aperta nessuna.
+
+### Conti con la guardia
+
+Nessuno dei due comandi di chiusura eseguito, e in questo ramo è corretto: `--confirm-progress` vale
+solo dopo un `ITEM-DONE`, `--confirm-escalation` solo se la guardia stampa una riga `ESCALATION`.
+Questa ha stampato `CEDI`.
+
+Il contatore della guardia — che è suo e indipendente da quello del Passo 6 — è a **1 su 3**, azzerato
+dal `--confirm-progress` del run di I-6. Con questo run senza progresso salirà, ed è giusto così.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker aperto o capolinea, e non
+siamo in nessuno dei due. Prendere la corsia `inbox` senza avere niente da scrivere toglierebbe il
+giro ad altri loop della macchina.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito. `git status --porcelain` era **vuoto** prima di questa
+voce di registro.
