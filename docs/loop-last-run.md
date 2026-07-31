@@ -1476,3 +1476,131 @@ adesso toglierebbe solo il giro ad altri loop, senza niente da scrivere.
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere — questo repo non ha canale di
 pubblicazione automatica.
+
+---
+
+## 2026-07-31 03:39 — `ITEM-DONE` — item I-4 «Privacy: esportazione e cancellazione dell'account falliscono in silenzio»
+
+**Guardia** (riga integrale di output):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 21 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.082s su 21 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, questo run è un `ITEM-DONE`, resta 0).
+
+### Il difetto
+
+Nella pagina della privacy le due azioni che contano — scaricare i propri dati e cancellare il
+proprio account — fallivano senza dire niente. Non è un dettaglio di stile: la cancellazione è
+irreversibile, e in caso di errore la finestra di conferma **si chiudeva**, cioè faceva esattamente
+il gesto che fa quando l'operazione riesce. Un utente che aveva appena chiesto di cancellare tutto
+vedeva sparire la finestra e non aveva modo di sapere se il suo account ci fosse ancora.
+
+Il commento nel codice diceva «ci pensa l'intercettore delle chiamate», ed era vero a metà: quello
+di `lib/api.js` gestisce solo la sessione scaduta e il troppo-traffico. Su un errore 500 o con la
+rete caduta rifiuta la chiamata e non tocca l'interfaccia — quindi il ramo più probabile era anche
+quello scoperto.
+
+### Cosa è stato fatto
+
+**Un solo file**: `frontend/src/pages/PrivacyPage.jsx`.
+
+- Due stati nuovi (`exportError`, `deleteError`) e un riquadro d'avviso per ciascuno, con lo stesso
+  aspetto già usato dalla schermata di accesso (`role="alert"`, bordo ambra, icona `AlertTriangle`):
+  la pagina non introduce un linguaggio visivo nuovo.
+- Il ramo d'errore della cancellazione **non chiude più la finestra**. Rimette il bottone in chiaro
+  e scrive il messaggio dentro la finestra, che resta aperta.
+- Chiudere la finestra torna a essere un gesto solo dell'utente (`closeConfirm`, che azzera anche il
+  messaggio), sia dal bottone «Annulla» sia dal fondo scuro.
+- I messaggi dicono **in che stato sono rimasti i dati** — «Nessun file è stato scaricato», «Il tuo
+  account e i tuoi dati sono ancora al loro posto». È la sola cosa che l'utente non può verificare
+  da sé, ed è quella che gli dice se deve riprovare.
+- Il testo distingue «il servizio non risponde» (nessuna risposta HTTP) da un errore restituito dal
+  server, di cui riporta la causa. La causa viene stampata **solo se è una stringa**: sulle risposte
+  scaricate come blob non è leggibile e FastAPI usa una lista sugli errori di validazione, quindi
+  senza il controllo di tipo l'utente si sarebbe visto un `[object Object]`.
+
+### Con quale mezzo ho verificato, e cosa resta non provato
+
+**Mezzo 2 (sul codice) e mezzo 3 (meccanicamente).** Non dal vivo: la pagina sta dietro
+l'autenticazione, e aprirla richiederebbe `.env` e un login Spotify reale, entrambi vietati al loop.
+Il limite non è una scoperta di oggi — è scritto nella lezione del 2026-07-30 che nominava proprio
+questo item come esempio di criterio non raggiungibile con gli strumenti del repo.
+
+La prova più forte che ho potuto produrre è **strutturale, sul pacchetto costruito**, non sul solo
+sorgente. Nel `PrivacyPage` compilato il ramo d'errore della cancellazione è:
+
+```
+catch(t){x(j(t,"l'eliminazione","Il tuo account e i tuoi dati sono ancora al loro posto.")),s(!1)}
+```
+
+Cioè: scrive il messaggio e rimette il bottone in chiaro. La chiusura della finestra non c'è più —
+è finita in una funzione separata (`f=()=>{n(!1),x(null)}`) che solo l'utente invoca. Questo chiude
+il secondo criterio dell'item («la finestra non si chiude su errore») con una prova che non dipende
+dal fatto che io abbia letto bene il sorgente.
+
+**Cosa resta non provato, e va detto**: che i due riquadri appaiano *davvero* sullo schermo con le
+chiamate che rispondono errore. Richiederebbe di aprire la pagina da autenticati. Ciò che è
+dimostrato è che entrambi i rami d'errore compongono il messaggio, lo mettono in uno stato che il
+JSX rende, e che il ramo della cancellazione non fa più il gesto del successo.
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 2729 moduli, build in 4.90s, 49 entry PWA | **0** |
+| pacchetto costruito: ramo d'errore della cancellazione | messaggio presente, **chiusura della finestra assente** | — |
+| pacchetto costruito: ramo d'errore dell'esportazione | `"Nessun file è stato scaricato."` presente | — |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 319.76s | **0** |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). La suite backend non poteva essere toccata da una modifica a un file `.jsx` — la
+eseguo lo stesso, come i giri precedenti, perché «nessun effetto atteso» e «nessun effetto» sono due
+affermazioni diverse e solo la seconda è una prova. Stesso conteggio dei due giri precedenti.
+
+Nota su una falsa pista, per chi rileggerà: il primo controllo sul pacchetto dava «stringa assente»
+per i messaggi **con lettere accentate**, e presente per tutti gli altri. Non era un difetto del
+codice: è `Get-Content` di PowerShell 5.1 che legge un file UTF-8 come ANSI, quindi la `è` non
+coincideva mai. Riletto con `File.ReadAllText` ed encoding esplicito, tutte le stringhe risultano
+presenti — ed è così che vanno fatti i controlli sul pacchetto in questo repo.
+
+### Nota a verbale, fuori dall'item
+
+Ho controllato se lo stesso schema — ramo d'errore vuoto che si affida all'intercettore — vivesse
+altrove: restano due casi, `PlaylistComparePage.jsx:96` (errori di una richiesta ripetuta a
+intervalli) e `SlideOutro.jsx:61` (che ha un ramo di ripiego subito sotto). Entrambi sembrano
+deliberati e nessuno dei due riguarda un'azione irreversibile. **Non ne deduco item nuovi**: fuori
+dai giri di ispezione è vietato, e lo lascio qui a verbale.
+
+### Inciampo, su una lezione già scritta
+
+Il primo comando del run, la guardia di cortesia, è fallito con
+`can't open file '...Usersfgioa.claudescriptsloop_yield.py'`: il tool Bash aveva mangiato i
+backslash del path Windows. È **esattamente** la lezione del 2026-07-30 già in `lessons.md`, che
+avevo a disposizione. Rifatto in PowerShell, è partito al primo colpo. Non aggiungo una lezione
+doppia: quella esistente è giusta, il difetto è stato non applicarla partendo dal tool sbagliato.
+
+### Lezione catturata
+
+Aggiunta a `.claude/tasks/lessons.md`: *un `catch` vuoto che delega a un intercettore condiviso
+copre solo ciò che quell'intercettore copre*. Il nocciolo trasferibile è duplice — un intercettore
+condiviso è un contratto **parziale**, e un ramo d'errore non deve mai riusare **il gesto del
+successo** (chiudere, redirigere, azzerare), perché quel gesto è già il vocabolario del «fatto».
+
+### Breaker
+
+**Non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi: `no_progress_streak` vale 0
+contro una soglia di 3, e non esiste uno streak aperto di cui misurare la durata. Nessun
+`BREAKER: TRATTENUTO` da scrivere — quel caso riguarda una soglia raggiunta con troppo poco tempo
+trascorso, e qui la soglia non è raggiunta affatto. Nessuna riga `escalated:` pendente da chiudere.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea, e non
+siamo in nessuno dei due: restano cinque finding (I-5 → I-9) più il checkpoint. Sarà il run del
+checkpoint a prendere la corsia `inbox` e a scrivere la voce di capolinea. Prendere la corsia adesso
+toglierebbe solo il giro ad altri loop, senza niente da scrivere.

@@ -1,15 +1,33 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Shield, Download, Trash2, Database } from 'lucide-react'
+import { Shield, Download, Trash2, Database, AlertTriangle } from 'lucide-react'
 import api from '../lib/api'
+
+// L'intercettore di `api` copre solo sessione scaduta e troppo-traffico: su un 500
+// o sulla rete caduta non fa nulla. Qui il messaggio lo componiamo noi, e deve dire
+// anche in che stato sono rimasti i dati — e' l'unica cosa che l'utente non puo'
+// dedurre da solo.
+function errorMessage(err, azione, statoDeiDati) {
+  if (!err.response) {
+    return `Il servizio non risponde: ${azione} non è andata a buon fine. ${statoDeiDati} Riprova fra qualche istante.`
+  }
+  // `detail` non e' sempre una stringa: sulle risposte scaricate come blob non
+  // e' leggibile affatto, e FastAPI usa una lista sugli errori di validazione.
+  const detail = err.response.data?.detail
+  const causa = typeof detail === 'string' ? detail : `errore ${err.response.status}`
+  return `Non è stato possibile completare ${azione} (${causa}). ${statoDeiDati}`
+}
 
 export default function PrivacyPage() {
   const [deleting, setDeleting] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
 
   const handleExport = async () => {
     setExporting(true)
+    setExportError(null)
     try {
       const response = await api.get('/api/v1/me/data/export', {
         responseType: 'blob',
@@ -22,8 +40,10 @@ export default function PrivacyPage() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
-    } catch {
-      // axios interceptor handles 401/429
+    } catch (err) {
+      setExportError(
+        errorMessage(err, "l'esportazione", 'Nessun file è stato scaricato.')
+      )
     } finally {
       setExporting(false)
     }
@@ -31,13 +51,23 @@ export default function PrivacyPage() {
 
   const handleDelete = async () => {
     setDeleting(true)
+    setDeleteError(null)
     try {
       await api.delete('/api/v1/me/data')
       window.location.href = '/'
-    } catch {
+    } catch (err) {
+      // La finestra resta aperta: chiuderla qui direbbe all'utente che l'account
+      // e' stato cancellato, mentre e' ancora al suo posto.
+      setDeleteError(
+        errorMessage(err, "l'eliminazione", 'Il tuo account e i tuoi dati sono ancora al loro posto.')
+      )
       setDeleting(false)
-      setShowConfirm(false)
     }
+  }
+
+  const closeConfirm = () => {
+    setShowConfirm(false)
+    setDeleteError(null)
   }
 
   const sections = [
@@ -148,6 +178,16 @@ export default function PrivacyPage() {
             Elimina il mio account
           </button>
         </div>
+
+        {exportError && (
+          <div
+            role="alert"
+            className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-start gap-2"
+          >
+            <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-amber-400 text-sm">{exportError}</p>
+          </div>
+        )}
       </motion.div>
 
       {/* Confirmation modal */}
@@ -155,7 +195,7 @@ export default function PrivacyPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/60"
-            onClick={() => !deleting && setShowConfirm(false)}
+            onClick={() => !deleting && closeConfirm()}
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -170,9 +210,20 @@ export default function PrivacyPage() {
               Sei sicuro? Questa azione è irreversibile. Tutti i tuoi dati
               verranno eliminati permanentemente.
             </p>
+
+            {deleteError && (
+              <div
+                role="alert"
+                className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-6 flex items-start gap-2"
+              >
+                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-amber-400 text-sm">{deleteError}</p>
+              </div>
+            )}
+
             <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setShowConfirm(false)}
+                onClick={closeConfirm}
                 disabled={deleting}
                 className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary rounded-lg hover:bg-surface-hover transition-colors duration-200 disabled:opacity-50"
               >

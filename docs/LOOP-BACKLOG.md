@@ -318,7 +318,18 @@ Sulla stessa pagina, le due schede che puntano a un'ancora interna funzionano
 **Verifica**: cliccare «Streak di ascolto» porta l'utente davanti alla sezione dello streak, non in
 cima alla pagina.
 
-### I-4. `[ ]` Privacy: esportazione e cancellazione dell'account falliscono in silenzio
+### I-4. `[x]` Privacy: esportazione e cancellazione dell'account falliscono in silenzio
+
+> **Fatto il 2026-07-31.** Verificato **sul codice** (mezzo 2) e **meccanicamente** (mezzo 3): la
+> pagina sta dietro l'autenticazione, quindi non è apribile dal vivo senza `.env` e senza login
+> Spotify, entrambi vietati al loop — limite già previsto dalla lezione del 2026-07-30 su questo
+> stesso item. Un solo file toccato, `PrivacyPage.jsx`: entrambe le azioni ora compongono un
+> messaggio visibile (riquadro `role="alert"`, lo stesso della LoginPage), e la finestra di conferma
+> **resta aperta** sull'errore. Il messaggio dice anche **in che stato sono rimasti i dati** —
+> «nessun file è stato scaricato», «il tuo account e i tuoi dati sono ancora al loro posto» — che è
+> la sola cosa che l'utente non può dedurre da solo. Prova strutturale dal pacchetto costruito: il
+> `catch` della cancellazione contiene il messaggio e il ripristino del bottone, e **non** contiene
+> più la chiusura della finestra. Dettaglio in `docs/loop-last-run.md`.
 
 Il posto peggiore dove tacere. In `PrivacyPage.jsx` entrambe le azioni ingoiano l'errore senza
 dire niente:
