@@ -1879,15 +1879,31 @@ insieme, perché nessuna delle tre da sola basterebbe:
 3. **Il Passo 7 elenca cosa questo loop escalation: due cose sole**, il breaker aperto e il
    capolinea. Non siamo in nessuno dei due — restano I-7, I-8, I-9 e il checkpoint.
 
-Ho comunque eseguito `--confirm-escalation`, che è ciò che il Passo 6 prescrive **una volta scritta
-la riga nel run-log**: senza, lo stesso allarme verrebbe ripetuto a ogni giro. La riga è scritta qui
+Ho comunque **eseguito** `--confirm-escalation`, che è ciò che il Passo 6 prescrive una volta scritta
+la riga nel run-log: senza, lo stesso allarme verrebbe ripetuto a ogni giro. La riga è scritta qui
 sopra, per intero, com'è uscita.
 
 ### Conti con la guardia
 
-Entrambi i comandi eseguiti, `--confirm-progress` **dopo** il commit come prescritto. Il contatore
-della guardia era a 3 su 3: senza l'azzeramento continuerebbe a emettere un allarme «backlog fermo»
-falso mentre il loop sta avanzando.
+> **Aggiunto dopo il commit `a3d3c92`**, perché l'esito del secondo comando non era prevedibile prima
+> di eseguirlo e vale la pena che resti a verbale.
+
+Entrambi i comandi eseguiti, `--confirm-progress` **dopo** il commit come prescritto:
+
+| Comando | Risposta della guardia | Exit |
+|---|---|---|
+| `--confirm-progress` | `CONFERMATO progresso registrato: contatore azzerato` | 0 |
+| `--confirm-escalation` | `NOTA nessun avviso in sospeso da confermare: nulla da fare` | 0 |
+
+Il contatore della guardia era a 3 su 3: senza l'azzeramento continuerebbe a emettere un allarme
+«backlog fermo» falso mentre il loop sta avanzando.
+
+**I due comandi non sono indipendenti, e conviene saperlo.** `--confirm-progress` ha azzerato il
+contatore, e così facendo ha **già** estinto l'avviso in sospeso: quando `--confirm-escalation` è
+arrivato non c'era più niente da confermare. Non è un errore ed è l'ordine giusto — il Passo 6 chiede
+il progresso dopo il commit — ma significa che su un run che chiude un item il secondo comando è un
+non-fare. Torna a servire davvero solo quando la guardia grida su un run **senza** progresso, dove
+non c'è nessun azzeramento a precederlo.
 
 ### Escalation al vault
 
