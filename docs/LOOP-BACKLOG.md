@@ -346,7 +346,22 @@ dire niente:
 **Verifica**: con le due chiamate che rispondono errore, entrambe le azioni mostrano un messaggio
 visibile; la finestra di conferma della cancellazione **non** si chiude su errore.
 
-### I-5. `[ ]` Evoluzione Gusto: tre messaggi di «nessun dato» scritti e mai mostrati
+### I-5. `[x]` Evoluzione Gusto: tre messaggi di «nessun dato» scritti e mai mostrati
+
+> **Fatto il 2026-07-31.** Verificato **sul codice** (mezzo 2) e **meccanicamente** (mezzo 3): la
+> pagina sta dietro l'autenticazione, quindi non è apribile dal vivo senza `.env` e senza login
+> Spotify, entrambi vietati al loop. Un solo file toccato, `TasteEvolutionPage.jsx`: `emptyText`
+> entra nella firma di `ArtistColumn` e il ramo vuoto lo mostra, al posto del `null`.
+> **Delle due strade concesse dall'item ho preso la prima — mostrare il testo — e la seconda
+> sarebbe stata un peggioramento.** Nascondere le colonne vuote romperebbe tre delle quattro schede
+> in cima alla pagina: `KPICard.jsx:105` salta con `getElementById(...)?.scrollIntoView()`, quindi
+> se l'ancora non esiste **il clic non fa niente, in silenzio**. Le schede «Fedeltà» e «Artisti
+> Fedeli» puntano a `#loyal-artists`, «Turnover» a `#rising-artists`, e sparirebbero **proprio
+> quando** quelle schede segnano 0 — compresa «Artisti Fedeli», il cui suggerimento dice «Clicca per
+> vederli». Sarebbe stato il difetto I-3 daccapo: un riquadro muto scambiato con un collegamento
+> morto. Prova strutturale dal pacchetto costruito: la firma minificata è `{...,emptyText:p,...}` e
+> il ramo vuoto è `n.length===0?p&&jsx("p",{...children:p})`, dov'era `null`. Dettaglio in
+> `docs/loop-last-run.md`.
 
 `TasteEvolutionPage.jsx` passa alle tre colonne un testo per il caso vuoto — «Nessun nuovo
 artista», «Nessun artista fedele», «Nessun artista in calo» (righe 75, 78, 81) — ma il componente

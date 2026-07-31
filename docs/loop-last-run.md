@@ -1604,3 +1604,112 @@ Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o c
 siamo in nessuno dei due: restano cinque finding (I-5 → I-9) più il checkpoint. Sarà il run del
 checkpoint a prendere la corsia `inbox` e a scrivere la voce di capolinea. Prendere la corsia adesso
 toglierebbe solo il giro ad altri loop, senza niente da scrivere.
+
+---
+
+## 2026-07-31 04:41 UTC — `ITEM-DONE` — item I-5 «Evoluzione Gusto: tre messaggi di "nessun dato" scritti e mai mostrati»
+
+**Guardia di cortesia**, riga integrale di output:
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 23 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.066s su 23 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (azzerato da questo `ITEM-DONE`).
+
+Stato di partenza: working tree pulita, nessun `LOOP HALTED`, riferimento remoto
+`8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+
+### Cosa era rotto
+
+Il difetto era vero sul codice di oggi, nei tre punti che l'ispezione aveva indicato: le tre colonne
+ricevevano `emptyText` (righe 75, 78, 81), la firma di `ArtistColumn` non lo elencava (riga 244), e
+il ramo vuoto rendeva `null` (riga 285). Chi non ha dati vedeva tre riquadri con titolo, contatore a
+zero e sotto il vuoto.
+
+### La scelta, che è il punto di questo giro
+
+L'item lasciava due strade — «o il testo compare, o il parametro sparisce e la colonna vuota viene
+nascosta» — e diceva che andava deciso. **Ho preso la prima, e la seconda sarebbe stata un
+peggioramento**, non una scelta di gusto equivalente.
+
+Nascondere le colonne vuote romperebbe tre delle quattro schede in cima alla pagina.
+`KPICard.jsx:105` esegue il salto con `document.getElementById(link.slice(1))?.scrollIntoView(...)`:
+l'incatenamento opzionale vuol dire che **se l'ancora non esiste il clic non fa assolutamente
+niente, senza dire niente**. Le schede «Fedeltà» e «Artisti Fedeli» puntano a `#loyal-artists`,
+«Turnover» punta a `#rising-artists`. E la coincidenza è esatta: quelle ancore sparirebbero **nello
+stesso identico caso** in cui le schede che ci puntano segnano 0 — compresa «Artisti Fedeli», il cui
+suggerimento dice «Clicca per vederli». Si sarebbe scambiato un riquadro muto con un collegamento
+morto, cioè il difetto I-3 daccapo, appena chiuso due giri fa.
+
+Sulla convenzione del progetto («le sezioni senza dati si nascondono», `.claude/CLAUDE.md`): non è
+violata. Quella regola parla del segnaposto generico «nessun dato disponibile» — di cui in tutto il
+frontend esiste un solo esemplare, `AdminPage.jsx:442`. Qui i tre testi sono affermazioni specifiche
+sull'ascolto dell'utente, e per giunta il contatore nell'intestazione della colonna mostra `0`
+comunque (riga 259): il riquadro non spariva nemmeno prima, era solo muto.
+
+### Cosa ho cambiato
+
+Un solo file, `frontend/src/pages/TasteEvolutionPage.jsx`, due righe:
+
+- riga 244 — `emptyText` entra nella firma di `ArtistColumn`;
+- riga 285 — il ramo vuoto rende un paragrafo (`text-text-muted text-sm text-center py-8`) invece di
+  `null`, con la guardia `emptyText &&`: se un chiamante non passa il testo il comportamento resta
+  quello di prima, cioè niente. Stesso stile di guardia già usato lì per `tooltip`.
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 2729 moduli, build in 4.98s, 49 entry PWA | **0** |
+| pacchetto: firma di `ArtistColumn` | `function w({id:t,title:N,icon:u,iconColor:v,artists:n,emptyText:p,tooltip:a})` | — |
+| pacchetto: ramo vuoto | `n.length===0?p&&e.jsx("p",{className:"text-text-muted text-sm text-center py-8",children:p})` | — |
+| pacchetto: i tre chiamanti | `emptyText:"Nessun nuovo artista"` / `"…fedele"` / `"…in calo"` | — |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 319.63s | **0** |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). Stesso conteggio dei tre giri precedenti. La suite non poteva essere toccata da
+una modifica a un `.jsx`; la eseguo lo stesso perché «nessun effetto atteso» e «nessun effetto» sono
+due affermazioni diverse, e solo la seconda è una prova.
+
+**Nota su come si legge la prova strutturale, qui.** La presenza delle tre stringhe nel pacchetto
+**non dimostra niente**: c'erano già prima della modifica, passate come proprietà morte. La catena
+che conta è un'altra, ed è quella misurata sopra — la firma lega `emptyText` a `p`, il ramo vuoto
+rende `p`, e i tre chiamanti lo riempiono. Dov'era `null` ora c'è il paragrafo. Nessun parametro
+inutilizzato resta, che è esattamente il secondo corno del criterio dell'item.
+
+**Cosa resta non provato, e va detto**: che i tre testi appaiano davvero sullo schermo a un utente
+senza dati. Richiederebbe di aprire la pagina da autenticati — cioè `.env` e login Spotify reale,
+entrambi vietati al loop (item 11, `BLOCKED_USER`). È il limite già dichiarato dal preambolo della
+sezione per gli item dietro l'autenticazione.
+
+### Nota a verbale, fuori dall'item
+
+La terza colonna, «In Calo» (riga 81), è l'unica delle tre senza `id`. Non è un difetto oggi, perché
+nessuna scheda ci punta, ed è un'asimmetria non una promessa rotta. **Non ne deduco un item nuovo**:
+fuori dai giri di ispezione è vietato, e lo lascio qui a verbale.
+
+### Lezione catturata
+
+Aggiunta a `.claude/tasks/lessons.md`: *quando un item offre «mostra» oppure «nascondi», la scelta
+la decidono i collegamenti che entrano in quel punto, non lo stile*. Il nocciolo trasferibile è che
+un'ancora è un contratto con chi ci punta: nasconderne il bersaglio non toglie il collegamento, lo
+rende muto — e il salto fatto con `?.scrollIntoView()` fallisce senza errore, quindi la rottura non
+si vede né in console né in build.
+
+### Breaker
+
+**Non aperto.** Nessuna delle due condizioni del Passo 6 è in piedi: `no_progress_streak` vale 0
+contro una soglia di 3, e non esiste uno streak aperto di cui misurare la durata. Nessun
+`BREAKER: TRATTENUTO` da scrivere — quel caso riguarda una soglia raggiunta con troppo poco tempo
+trascorso, e qui la soglia non è raggiunta affatto. Nessuna riga `escalated:` pendente da chiudere.
+
+### Escalation al vault
+
+Nessuna, e nessun lock preso. Il canale verso Fabio si apre solo per breaker o capolinea, e non
+siamo in nessuno dei due: restano quattro finding (I-6 → I-9) più il checkpoint. Sarà il run del
+checkpoint a prendere la corsia `inbox` e a scrivere la voce di capolinea. Prendere la corsia adesso
+toglierebbe il giro ad altri loop senza avere niente da scrivere.

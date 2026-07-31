@@ -241,7 +241,7 @@ export default function TasteEvolutionPage() {
   )
 }
 
-function ArtistColumn({ id, title, icon: Icon, iconColor, artists, tooltip }) {
+function ArtistColumn({ id, title, icon: Icon, iconColor, artists, emptyText, tooltip }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const hoverTimer = useRef(null)
@@ -282,7 +282,9 @@ function ArtistColumn({ id, title, icon: Icon, iconColor, artists, tooltip }) {
         </div>,
         document.body
       )}
-      {artists.length === 0 ? null : (
+      {artists.length === 0 ? (
+        emptyText && <p className="text-text-muted text-sm text-center py-8">{emptyText}</p>
+      ) : (
         <StaggerContainer className="space-y-2 max-h-80 overflow-y-auto">
           {artists.map((artist) => (
             <StaggerItem key={artist.id}>
