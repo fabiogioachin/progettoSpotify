@@ -376,7 +376,33 @@ l'altra.
 **Verifica**: o il testo compare, o il parametro sparisce e la colonna vuota viene nascosta. In
 nessun caso restano riquadri vuoti con un parametro inutilizzato.
 
-### I-6. `[ ]` La palette è centralizzata solo a metà: 120 colori cablati in 24 file
+### I-6. `[x]` La palette è centralizzata solo a metà: 120 colori cablati in 24 file
+
+> **Fatto il 2026-07-31.** Verificato **meccanicamente** (mezzo 3) e con una prova eseguita, non
+> dedotta: cambiata la sola riga `indigo` di `palette.js` e ricostruito il pacchetto, il vecchio
+> accento `#6366f1` scende a **zero occorrenze** e il nuovo ne occupa **16**. Prima della correzione
+> ne restavano **2**.
+>
+> **Il grosso del lavoro non l'ha scritto questo giro: era già sul disco, non committato** — 28 file
+> modificati più `frontend/src/lib/palette.js` nuovo, lasciati da chi ha occupato il repo mentre tre
+> fire del loop cedevano. L'ho verificato riga per riga invece di fidarmi: ogni sostituzione
+> conserva il colore esatto di prima (`withAlpha('#6366f1', 0.15)` rende `rgba(99, 102, 241, 0.15)`,
+> `toRgb('#1DB954')` rende le stesse componenti `{29, 185, 84}` che la mappa di calore aveva
+> cablate), quindi è un trasloco di colori, non un ridisegno.
+>
+> **Quel lavoro però non chiudeva l'item**, ed è il pezzo che ha aggiunto questo giro: due copie
+> dell'accento vivevano **fuori da `src/`**, dove il censimento dei 120 non era arrivato —
+> `index.html:7` (la barra del browser sul telefono) e `vite.config.js:13-14` (`theme_color` e
+> `background_color` dell'app installabile). Erano esattamente il caso che l'item descrive, «chi ne
+> dimentica uno lascia una pagina scoordinata». Ora `vite.config.js` legge la palette e riempie i
+> segnaposto di `index.html` in compilazione; il pacchetto costruito esce **identico a prima**
+> (`theme-color` resta `#6366f1`), quindi nessun cambiamento visibile, solo la fonte unica.
+>
+> **Osservazione, senza azione**: restano **123 classi colore di serie Tailwind** (`text-amber-400`,
+> `text-red-400`…) in 22 file. Non sono i 120 dell'item — quelli erano colori esadecimali scritti a
+> mano, e oggi ne resta **zero** fuori da `palette.js` — e non toccano il criterio dell'accento. Sono
+> quasi tutti colori di stato (errore, avviso). Li segnalo perché è la metà di palette che resta
+> davvero fuori, ma dedurne un item nuovo è vietato: la decisione è di Fabio.
 
 Esiste `lib/chartTheme.js` che dichiara i colori, ma **lo importano 7 dei 13 grafici**. Nel resto
 del frontend ci sono **120 colori scritti a mano su 24 file**, e fra questi l'indaco `#6366f1` che

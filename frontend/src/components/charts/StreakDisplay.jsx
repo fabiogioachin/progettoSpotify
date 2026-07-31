@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion'
 import { Flame, Star, Trophy, Award, Crown } from 'lucide-react'
+import { FLAME_INNER, FLAME_OUTER, GRID_COLOR } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -51,13 +53,13 @@ export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays =
           >
             <defs>
               <linearGradient id="flameGradient" x1="50" y1="120" x2="50" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#f59e0b" />
-                <stop offset="50%" stopColor="#f97316" />
-                <stop offset="100%" stopColor="#ef4444" />
+                <stop offset="0%" stopColor={FLAME_OUTER[0]} />
+                <stop offset="50%" stopColor={FLAME_OUTER[1]} />
+                <stop offset="100%" stopColor={FLAME_OUTER[2]} />
               </linearGradient>
               <linearGradient id="flameInner" x1="50" y1="120" x2="50" y2="30" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#fbbf24" />
-                <stop offset="100%" stopColor="#f59e0b" />
+                <stop offset="0%" stopColor={FLAME_INNER[0]} />
+                <stop offset="100%" stopColor={FLAME_INNER[1]} />
               </linearGradient>
             </defs>
             {/* Outer flame */}
@@ -89,7 +91,7 @@ export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays =
               cy={ringSize / 2}
               r={radius}
               fill="none"
-              stroke="#282828"
+              stroke={GRID_COLOR}
               strokeWidth={strokeWidth}
             />
             {/* Progress arc */}
@@ -99,7 +101,7 @@ export default function StreakDisplay({ streak = 0, uniqueDays = 0, activeDays =
               cy={ringSize / 2}
               r={radius}
               fill="none"
-              stroke="#6366f1"
+              stroke={COLORS.accent}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
               strokeDasharray={circumference}

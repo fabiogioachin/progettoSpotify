@@ -18,7 +18,8 @@ import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer
 import api from '../lib/api'
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { usePlaylistCompare } from '../hooks/usePlaylistCompare'
-import { PLAYLIST_COLORS, TOOLTIP_STYLE } from '../lib/chartTheme'
+import { AXIS_LINE, AXIS_TICK_COLOR, GRID_COLOR, LEGEND_STYLE, PLAYLIST_COLORS, TOOLTIP_STYLE, UNCATEGORIZED_COLOR } from '../lib/chartTheme'
+import { COLORS, HUES } from '../lib/palette'
 import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 /** Map backend phase strings to Italian user-facing labels */
@@ -262,7 +263,7 @@ export default function PlaylistComparePage() {
                       <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
                         <motion.div
                           className="h-full rounded-full"
-                          style={{ backgroundColor: isWaiting ? '#f59e0b' : '#6366f1' }}
+                          style={{ backgroundColor: isWaiting ? HUES.amber : COLORS.accent }}
                           initial={{ width: 0 }}
                           animate={{ width: `${progress.percent}%` }}
                           transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -401,22 +402,22 @@ export default function PlaylistComparePage() {
                     </h3>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={popData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                         <XAxis
                           dataKey="name"
-                          tick={{ fill: '#b3b3b3', fontSize: 11 }}
-                          axisLine={{ stroke: '#282828' }}
+                          tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
+                          axisLine={AXIS_LINE}
                         />
                         <YAxis
                           domain={[0, 100]}
-                          tick={{ fill: '#b3b3b3', fontSize: 12 }}
-                          axisLine={{ stroke: '#282828' }}
+                          tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+                          axisLine={AXIS_LINE}
                         />
                         <Tooltip {...TOOLTIP_STYLE} />
-                        <Bar dataKey="Pop. media" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={1200} />
-                        <Bar dataKey="Pop. min" fill="#4b5563" radius={[4, 4, 0, 0]} animationDuration={1200} animationBegin={200} />
-                        <Bar dataKey="Pop. max" fill="#10b981" radius={[4, 4, 0, 0]} animationDuration={1200} animationBegin={400} />
-                        <Legend wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }} />
+                        <Bar dataKey="Pop. media" fill={COLORS.accent} radius={[4, 4, 0, 0]} animationDuration={1200} />
+                        <Bar dataKey="Pop. min" fill={UNCATEGORIZED_COLOR} radius={[4, 4, 0, 0]} animationDuration={1200} animationBegin={200} />
+                        <Bar dataKey="Pop. max" fill={HUES.emerald} radius={[4, 4, 0, 0]} animationDuration={1200} animationBegin={400} />
+                        <Legend wrapperStyle={LEGEND_STYLE} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -430,26 +431,26 @@ export default function PlaylistComparePage() {
                       </h3>
                       <ResponsiveContainer width="100%" height={400}>
                         <BarChart data={genreData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+                          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                           <XAxis
                             type="number"
                             domain={[0, 'auto']}
-                            tick={{ fill: '#b3b3b3', fontSize: 12 }}
-                            axisLine={{ stroke: '#282828' }}
+                            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+                            axisLine={AXIS_LINE}
                             tickFormatter={(v) => `${v}%`}
                           />
                           <YAxis
                             type="category"
                             dataKey="genre"
-                            tick={{ fill: '#b3b3b3', fontSize: 11 }}
-                            axisLine={{ stroke: '#282828' }}
+                            tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
+                            axisLine={AXIS_LINE}
                             width={75}
                           />
                           <Tooltip
                             {...TOOLTIP_STYLE}
                             formatter={(val) => [`${val}%`, '']}
                           />
-                          <Legend wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }} />
+                          <Legend wrapperStyle={LEGEND_STYLE} />
                           {genreBarNames.map((name, idx) => (
                             <Bar
                               key={name}

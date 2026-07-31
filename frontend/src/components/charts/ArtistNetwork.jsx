@@ -1,9 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
-
-const CLUSTER_COLORS = [
-  '#6366f1', '#1DB954', '#f59e0b', '#ec4899', '#06b6d4',
-  '#8b5cf6', '#ef4444', '#10b981', '#f97316', '#14b8a6',
-]
+import { CLUSTER_COLORS } from '../../lib/chartTheme'
+import { COLORS, NEUTRALS } from '../../lib/palette'
 
 const VB_W = 960
 const VB_H = 540
@@ -455,7 +452,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                     y1={positions[si].y}
                     x2={positions[ti].x}
                     y2={positions[ti].y}
-                    stroke="#ffffff"
+                    stroke={NEUTRALS.white}
                     strokeOpacity={opacity}
                     strokeWidth={0.4}
                   />
@@ -477,7 +474,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                     y1={positions[si].y}
                     x2={positions[ti].x}
                     y2={positions[ti].y}
-                    stroke="#ffffff"
+                    stroke={NEUTRALS.white}
                     strokeOpacity={opacity}
                     strokeWidth={0.5 + (edge.weight || 0) * 1.5}
                   />
@@ -487,7 +484,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
               {/* Layer 3: Artist nodes + labels — sized by play_count + connections */}
               {nodes.map((node, i) => {
                 if (!positions[i]) return null
-                const color = clusterColorMap[node.id] || '#6366f1'
+                const color = clusterColorMap[node.id] || COLORS.accent
                 const conn = node.connections || 0
                 const plays = node.play_count || 0
                 const connNorm = Math.min(1, conn / 36)
@@ -520,7 +517,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                       x={positions[i].x}
                       y={positions[i].y - r - 3}
                       textAnchor="middle"
-                      fill="#ffffff"
+                      fill={NEUTRALS.white}
                       fillOpacity={labelOpacity}
                       fontSize={11}
                       fontFamily="Inter, sans-serif"
@@ -537,7 +534,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                       x={positions[i].x}
                       y={positions[i].y - r - 3}
                       textAnchor="middle"
-                      fill="#e0e0e0"
+                      fill={NEUTRALS.gray200}
                       fillOpacity={labelOpacity}
                       fontSize={10}
                       fontFamily="Inter, sans-serif"
@@ -566,7 +563,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                       r={r}
                       fill={color}
                       fillOpacity={fillOpacity}
-                      stroke={showStroke ? '#ffffff' : 'none'}
+                      stroke={showStroke ? NEUTRALS.white : 'none'}
                       strokeWidth={showStroke ? 1.5 : 0}
                       className="artist-node cursor-pointer"
                       role="button"
@@ -637,7 +634,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                       y={pos.y + 1}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      fill="#ffffff"
+                      fill={NEUTRALS.white}
                       fontSize={r > 32 ? 12 : 10}
                       fontFamily="Inter, sans-serif"
                       fontWeight={600}
@@ -650,7 +647,7 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
                       x={pos.x}
                       y={pos.y + (r > 32 ? 15 : 13)}
                       textAnchor="middle"
-                      fill="#ffffff"
+                      fill={NEUTRALS.white}
                       fillOpacity={0.5}
                       fontSize={8}
                       fontFamily="Inter, sans-serif"

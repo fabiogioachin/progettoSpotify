@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { PLAYLIST_COLORS, RADAR_LABELS, TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { AXIS_LINE, AXIS_TICK_COLOR, GRID_COLOR, LEGEND_STYLE, PLAYLIST_COLORS, RADAR_LABELS, TOOLTIP_STYLE } from '../../lib/chartTheme'
 
 export default function PlaylistComparison({ comparisons, playlistNames = {}, loading = false }) {
   if (loading) {
@@ -46,23 +46,23 @@ export default function PlaylistComparison({ comparisons, playlistNames = {}, lo
       </h3>
       <ResponsiveContainer width="100%" height={400}>
         <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             dataKey="feature"
-            tick={{ fill: '#b3b3b3', fontSize: 11 }}
-            axisLine={{ stroke: '#282828' }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
+            axisLine={AXIS_LINE}
           />
           <YAxis
             domain={[0, 100]}
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+            axisLine={AXIS_LINE}
             tickFormatter={(v) => `${v}%`}
           />
           <Tooltip
             {...TOOLTIP_STYLE}
             formatter={(val) => [`${val}%`, '']}
           />
-          <Legend wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }} />
+          <Legend wrapperStyle={LEGEND_STYLE} />
           {barNames.map((name, idx) => (
             <Bar
               key={name}

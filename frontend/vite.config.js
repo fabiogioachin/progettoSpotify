@@ -1,17 +1,36 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { COLORS } from './src/lib/palette.js'
+
+/**
+ * `index.html` è un file statico: da solo non può leggere `palette.js`. Questo innesto
+ * sostituisce i segnaposto col colore vero al momento della compilazione, così anche la
+ * barra del browser segue la palette invece di una copia scritta a mano — che è
+ * esattamente il pezzo che si dimentica quando si cambia il colore d'accento.
+ */
+function palettePlaceholders() {
+  return {
+    name: 'palette-placeholders',
+    transformIndexHtml(html) {
+      return html
+        .replaceAll('__COLOR_ACCENT__', COLORS.accent)
+        .replaceAll('__COLOR_BACKGROUND__', COLORS.background)
+    },
+  }
+}
 
 export default defineConfig({
   plugins: [
     react(),
+    palettePlaceholders(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
         name: 'Wrap',
         short_name: 'Wrap',
-        theme_color: '#6366f1',
-        background_color: '#121212',
+        theme_color: COLORS.accent,
+        background_color: COLORS.background,
         display: 'standalone',
         start_url: '/',
         icons: [

@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Download, Share2, X } from 'lucide-react'
+import { COLORS } from '../../lib/palette'
 
 export default function ShareCardRenderer({ children, filename = 'my-music-card', onClose }) {
   const cardRef = useRef(null)
@@ -18,7 +19,7 @@ export default function ShareCardRenderer({ children, filename = 'my-music-card'
     try {
       const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: '#121212',
+        backgroundColor: COLORS.background,
         scale: 2,
         useCORS: true,
       })
@@ -38,7 +39,7 @@ export default function ShareCardRenderer({ children, filename = 'my-music-card'
     let canvas
     try {
       const html2canvas = (await import('html2canvas')).default
-      canvas = await html2canvas(cardRef.current, { backgroundColor: '#121212', scale: 2, useCORS: true })
+      canvas = await html2canvas(cardRef.current, { backgroundColor: COLORS.background, scale: 2, useCORS: true })
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
       if (!blob) {
         handleDownload()

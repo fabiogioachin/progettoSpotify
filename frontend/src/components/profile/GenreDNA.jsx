@@ -1,5 +1,6 @@
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
-import { GRID_COLOR } from '../../lib/chartTheme'
+import { AXIS_TICK_COLOR, GRID_COLOR } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 
 function truncateGenre(genre, maxLen = 12) {
   if (!genre) return ''
@@ -25,12 +26,12 @@ export default function GenreDNA({ topGenres = [] }) {
           <PolarGrid stroke={GRID_COLOR} />
           <PolarAngleAxis
             dataKey="genre"
-            tick={{ fill: '#b3b3b3', fontSize: 11 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
           />
           <Radar
             dataKey="value"
-            stroke="#6366f1"
-            fill="#6366f1"
+            stroke={COLORS.accent}
+            fill={COLORS.accent}
             fillOpacity={0.3}
             strokeWidth={2}
           />

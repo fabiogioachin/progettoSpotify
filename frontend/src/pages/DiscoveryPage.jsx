@@ -7,7 +7,8 @@ import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer
 import { useSpotifyData } from '../hooks/useSpotifyData'
 import { useAudioAnalysis } from '../hooks/useAudioAnalysis'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { TOOLTIP_STYLE } from '../lib/chartTheme'
+import { AXIS_LINE, AXIS_TICK_COLOR, GRID_COLOR, TOOLTIP_STYLE } from '../lib/chartTheme'
+import { COLORS } from '../lib/palette'
 import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 
 export default function DiscoveryPage() {
@@ -298,21 +299,21 @@ function PopularityDistribution({ data }) {
       </p>
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             dataKey="range"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+            axisLine={AXIS_LINE}
           />
           <YAxis
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+            axisLine={AXIS_LINE}
           />
           <Tooltip
             {...TOOLTIP_STYLE}
             formatter={(val) => [`${val} brani`, 'Conteggio']}
           />
-          <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={1500} />
+          <Bar dataKey="count" fill={COLORS.accent} radius={[4, 4, 0, 0]} animationDuration={1500} />
         </BarChart>
       </ResponsiveContainer>
     </div>

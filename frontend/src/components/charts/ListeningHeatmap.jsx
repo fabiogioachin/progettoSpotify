@@ -1,20 +1,17 @@
 import { useMemo, useState } from 'react'
+import { HEATMAP_GRADIENT, HEATMAP_RAMP } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 
 /**
  * Interpolates between color stops based on a normalized value [0, 1].
- * Stops: green (#1DB954) -> amber (#f59e0b) -> red (#ef4444) -> purple (#a855f7)
+ * Le fermate sono quelle di HEATMAP_GRADIENT: verde -> ambra -> rosso -> viola.
  */
 function getColor(value, max) {
   if (max === 0 || value === 0) return 'rgba(255, 255, 255, 0.05)'
 
   const t = value / max // normalized 0..1
 
-  const stops = [
-    { pos: 0, r: 29, g: 185, b: 84 },    // #1DB954
-    { pos: 0.33, r: 245, g: 158, b: 11 }, // #f59e0b
-    { pos: 0.66, r: 239, g: 68, b: 68 },  // #ef4444
-    { pos: 1, r: 168, g: 85, b: 247 },    // #a855f7
-  ]
+  const stops = HEATMAP_RAMP
 
   let low = stops[0]
   let high = stops[stops.length - 1]
@@ -174,8 +171,8 @@ export default function ListeningHeatmap({ data = [], dayLabels = [], hourLabels
           <div
             className="fixed pointer-events-none z-50 px-3 py-2 rounded-lg text-xs"
             style={{
-              backgroundColor: '#181818',
-              border: '1px solid #3e3e3e',
+              backgroundColor: COLORS.surface,
+              border: `1px solid ${COLORS.borderHover}`,
               left: tooltip.x,
               top: tooltip.y - 8,
               transform: 'translate(-50%, -100%)',
@@ -195,7 +192,7 @@ export default function ListeningHeatmap({ data = [], dayLabels = [], hourLabels
         <div
           className="h-3 w-48 rounded-full"
           style={{
-            background: 'linear-gradient(to right, #1DB954, #f59e0b, #ef4444, #a855f7)',
+            background: `linear-gradient(to right, ${HEATMAP_GRADIENT.join(', ')})`,
           }}
         />
         <span className="text-text-muted text-xs">Molti</span>

@@ -8,7 +8,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { FEATURE_COLORS, TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
+import { AXIS_TICK_COLOR, FEATURE_COLORS, GRID_COLOR, LEGEND_STYLE, TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 import { FEATURE_LABELS } from '../../lib/constants'
 
 export default function TrendTimeline({ trends, dailyMinutes, title = 'Trend Temporale', loading = false, temporalRange }) {
@@ -65,12 +66,12 @@ function FeatureTrend({ trends, title }) {
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             dataKey="name"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
             axisLine={{ stroke: GRID_COLOR }}
           />
           <YAxis
             domain={[0, 1]}
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
             axisLine={{ stroke: GRID_COLOR }}
             tickFormatter={(v) => `${Math.round(v * 100)}%`}
           />
@@ -83,7 +84,7 @@ function FeatureTrend({ trends, title }) {
           />
           <Legend
             formatter={(val) => FEATURE_LABELS[val] || val}
-            wrapperStyle={{ color: '#b3b3b3', fontSize: 12 }}
+            wrapperStyle={LEGEND_STYLE}
           />
           {activeKeys.map((key) => (
             <Area
@@ -126,19 +127,19 @@ function ListeningTimeTrend({ dailyMinutes, temporalRange }) {
         <AreaChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           <defs>
             <linearGradient id="gradient-listening" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
-              <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+              <stop offset="5%" stopColor={COLORS.accent} stopOpacity={0.4} />
+              <stop offset="95%" stopColor={COLORS.accent} stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             dataKey="date"
-            tick={{ fill: '#b3b3b3', fontSize: 11 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
             axisLine={{ stroke: GRID_COLOR }}
             interval="preserveStartEnd"
           />
           <YAxis
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
             axisLine={{ stroke: GRID_COLOR }}
             tickFormatter={(v) => `${Math.round(v)} min`}
           />
@@ -152,7 +153,7 @@ function ListeningTimeTrend({ dailyMinutes, temporalRange }) {
           <Area
             type="monotone"
             dataKey="minuti"
-            stroke="#6366f1"
+            stroke={COLORS.accent}
             fill="url(#gradient-listening)"
             strokeWidth={2}
             animationDuration={1500}

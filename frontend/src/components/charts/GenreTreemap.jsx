@@ -1,13 +1,5 @@
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
-import { TOOLTIP_STYLE } from '../../lib/chartTheme'
-
-const GENRE_COLORS = [
-  '#6366f1', '#818cf8', '#a5b4fc',
-  '#10b981', '#34d399', '#6ee7b7',
-  '#f59e0b', '#fbbf24', '#fcd34d',
-  '#ec4899', '#f472b6', '#f9a8d4',
-  '#06b6d4', '#22d3ee', '#67e8f9',
-]
+import { GENRE_COLORS, TOOLTIP_STYLE } from '../../lib/chartTheme'
 
 const CustomTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null
@@ -17,8 +9,8 @@ const CustomTooltip = ({ active, payload }) => {
       ...TOOLTIP_STYLE.contentStyle,
       padding: '8px 12px',
     }}>
-      <span style={{ color: '#b3b3b3', fontWeight: 600 }}>{name}</span>
-      <span style={{ color: '#FFFFFF', marginLeft: 8 }}>{value}%</span>
+      <span style={TOOLTIP_STYLE.labelStyle}>{name}</span>
+      <span style={{ color: TOOLTIP_STYLE.contentStyle.color, marginLeft: 8 }}>{value}%</span>
     </div>
   )
 }

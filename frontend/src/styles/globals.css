@@ -2,18 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* I valori arrivano da src/lib/palette.js attraverso tailwind.config.js: `theme()` li
+   risolve durante la compilazione, quindi qui non c'è nessun colore da tenere allineato. */
 :root {
-  --color-background: #121212;
-  --color-surface: #181818;
-  --color-surface-hover: #282828;
-  --color-border: #282828;
-  --color-border-hover: #3e3e3e;
-  --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
-  --color-spotify: #1DB954;
-  --color-text-primary: #FFFFFF;
-  --color-text-secondary: #b3b3b3;
-  --color-text-muted: #8a8a8a;
+  --color-background: theme('colors.background');
+  --color-surface: theme('colors.surface');
+  --color-surface-hover: theme('colors.surface-hover');
+  --color-border: theme('colors.border');
+  --color-border-hover: theme('colors.border-hover');
+  --color-accent: theme('colors.accent');
+  --color-accent-hover: theme('colors.accent-hover');
+  --color-spotify: theme('colors.spotify');
+  --color-text-primary: theme('colors.text-primary');
+  --color-text-secondary: theme('colors.text-secondary');
+  --color-text-muted: theme('colors.text-muted');
 }
 
 * {
@@ -52,7 +54,7 @@ body {
 
 /* Gradient text utility */
 .gradient-text {
-  background: linear-gradient(135deg, #6366f1, #818cf8, #a5b4fc);
+  background: linear-gradient(135deg, theme('colors.accent'), theme('colors.accent-hover'), theme('colors.accent-pale'));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -76,7 +78,7 @@ body {
 
 .audio-bar {
   animation: audioWave 1.2s ease-in-out infinite;
-  background: linear-gradient(to top, #1DB954, #6366f1);
+  background: linear-gradient(to top, theme('colors.spotify'), theme('colors.accent'));
   border-radius: 2px;
 }
 

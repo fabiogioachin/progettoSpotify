@@ -1,3 +1,5 @@
+import { HUES } from '../../lib/palette'
+
 export default function ProfileShareCard({ personality, metrics, userName }) {
   if (!personality || !metrics) return null
 
@@ -13,7 +15,7 @@ export default function ProfileShareCard({ personality, metrics, userName }) {
     <div
       className="w-[380px] rounded-2xl overflow-hidden"
       style={{
-        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+        background: `linear-gradient(135deg, ${HUES.indigoDeep}, ${HUES.violetDeep})`,
         padding: '32px 28px',
       }}
     >

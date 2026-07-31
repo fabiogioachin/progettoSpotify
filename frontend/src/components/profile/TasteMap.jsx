@@ -1,9 +1,7 @@
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Map } from 'lucide-react'
-
-const GENRE_COLORS = [
-  '#6366f1', '#1DB954', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'
-]
+import { AXIS_LINE, AXIS_TICK_COLOR, GRID_COLOR, TASTE_MAP_COLORS, UNCATEGORIZED_COLOR } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 
 export default function TasteMap({ points = [], varianceExplained = [], featureMode, genreGroups = {} }) {
   if (featureMode === 'insufficient' || points.length < 3) {
@@ -18,10 +16,10 @@ export default function TasteMap({ points = [], varianceExplained = [], featureM
 
   const genreColorMap = {}
   topGenres.forEach((genre, i) => {
-    genreColorMap[genre] = GENRE_COLORS[i]
+    genreColorMap[genre] = TASTE_MAP_COLORS[i]
   })
 
-  const getColor = (point) => genreColorMap[point.primary_genre] || '#4b5563'
+  const getColor = (point) => genreColorMap[point.primary_genre] || UNCATEGORIZED_COLOR
 
   const getSize = (point) => {
     const pop = point.popularity || 0
@@ -54,22 +52,22 @@ export default function TasteMap({ points = [], varianceExplained = [], featureM
       )}
       <ResponsiveContainer width="100%" height={360}>
         <ScatterChart margin={{ top: 10, right: 20, bottom: 30, left: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
           <XAxis
             type="number"
             dataKey="x"
             name={`Componente 1 (${pc1Var}%)`}
-            tick={{ fill: '#b3b3b3', fontSize: 11 }}
-            axisLine={{ stroke: '#282828' }}
-            label={{ value: `Componente 1 (${pc1Var}%)`, position: 'insideBottom', offset: -20, fill: '#8a8a8a', fontSize: 11 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
+            axisLine={AXIS_LINE}
+            label={{ value: `Componente 1 (${pc1Var}%)`, position: 'insideBottom', offset: -20, fill: COLORS.textMuted, fontSize: 11 }}
           />
           <YAxis
             type="number"
             dataKey="y"
             name={`Componente 2 (${pc2Var}%)`}
-            tick={{ fill: '#b3b3b3', fontSize: 11 }}
-            axisLine={{ stroke: '#282828' }}
-            label={{ value: `Componente 2 (${pc2Var}%)`, angle: -90, position: 'insideLeft', fill: '#8a8a8a', fontSize: 11 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }}
+            axisLine={AXIS_LINE}
+            label={{ value: `Componente 2 (${pc2Var}%)`, angle: -90, position: 'insideLeft', fill: COLORS.textMuted, fontSize: 11 }}
           />
           <Tooltip
             content={({ payload }) => {
@@ -86,7 +84,7 @@ export default function TasteMap({ points = [], varianceExplained = [], featureM
               )
             }}
           />
-          <Scatter data={chartData} fill="#6366f1">
+          <Scatter data={chartData} fill={COLORS.accent}>
             {chartData.map((point, idx) => (
               <Cell
                 key={point.id || idx}
@@ -102,7 +100,7 @@ export default function TasteMap({ points = [], varianceExplained = [], featureM
         <div className="flex flex-wrap gap-3 mt-3">
           {topGenres.map((genre, i) => (
             <div key={genre} className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GENRE_COLORS[i] }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TASTE_MAP_COLORS[i] }} />
               <span className="text-text-muted text-xs">{genre}</span>
             </div>
           ))}

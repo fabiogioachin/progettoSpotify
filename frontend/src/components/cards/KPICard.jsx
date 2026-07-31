@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAnimatedValue } from '../../hooks/useAnimatedValue'
+import { COLORS } from '../../lib/palette'
 
 export default function KPICard({ title, value, suffix = '', trend, icon: Icon, delay = 0, tooltip, link }) {
   const [showTooltip, setShowTooltip] = useState(false)
@@ -81,7 +82,7 @@ export default function KPICard({ title, value, suffix = '', trend, icon: Icon, 
             backgroundColor: 'rgba(40, 40, 40, 0.95)',
             backdropFilter: 'blur(8px)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            color: '#b3b3b3',
+            color: COLORS.textSecondary,
             fontSize: '12px',
             lineHeight: '1.4',
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',

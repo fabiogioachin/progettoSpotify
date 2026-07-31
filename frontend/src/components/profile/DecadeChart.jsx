@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts'
-import { TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { AXIS_TICK_COLOR, TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { COLORS, withAlpha } from '../../lib/palette'
 
 export default function DecadeChart({ decadeDistribution = {} }) {
   const data = Object.entries(decadeDistribution)
@@ -17,7 +18,7 @@ export default function DecadeChart({ decadeDistribution = {} }) {
           <YAxis
             type="category"
             dataKey="decade"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
             width={50}
             axisLine={false}
             tickLine={false}
@@ -29,7 +30,7 @@ export default function DecadeChart({ decadeDistribution = {} }) {
           />
           <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={24}>
             {data.map((_, index) => (
-              <Cell key={index} fill={`rgba(99, 102, 241, ${0.5 + (index / data.length) * 0.5})`} />
+              <Cell key={index} fill={withAlpha(COLORS.accent, 0.5 + (index / data.length) * 0.5)} />
             ))}
           </Bar>
         </BarChart>

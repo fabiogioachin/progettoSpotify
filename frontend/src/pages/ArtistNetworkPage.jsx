@@ -7,6 +7,8 @@ import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { Users, GitBranch, Waypoints, BarChart3, RefreshCw, Music, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
+import { CLUSTER_COLORS } from '../lib/chartTheme'
+import { COLORS } from '../lib/palette'
 
 export default function ArtistNetworkPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/v1/artist-network')
@@ -171,11 +173,6 @@ export default function ArtistNetworkPage() {
   )
 }
 
-const CLUSTER_COLORS = [
-  '#6366f1', '#1DB954', '#f59e0b', '#ec4899', '#06b6d4',
-  '#8b5cf6', '#ef4444', '#10b981', '#f97316', '#14b8a6',
-]
-
 function CerchieSection({ genreRankings, genreNames, genreNodes }) {
   // Build genre node color map (cluster -> color)
   const genreColorMap = {}
@@ -207,7 +204,7 @@ function CerchieSection({ genreRankings, genreNames, genreNodes }) {
       <StaggerContainer className="space-y-3">
         {sortedEntries.map(([genreId, artists]) => {
           const name = genreNames[genreId] || genreId
-          const color = genreColorMap[genreId] || '#6366f1'
+          const color = genreColorMap[genreId] || COLORS.accent
           const isOpen = !!expanded[genreId]
 
           return (

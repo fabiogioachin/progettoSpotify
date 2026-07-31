@@ -1,4 +1,6 @@
 import { Play } from 'lucide-react'
+import { FEATURE_COLORS } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 
 export default function TrackCard({ track, index }) {
   const energy = track.features?.energy ?? 0
@@ -29,7 +31,7 @@ export default function TrackCard({ track, index }) {
         )}
         {/* Green play overlay on hover */}
         <div className="absolute inset-0 bg-black/40 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <Play size={16} className="text-spotify" fill="#1DB954" />
+          <Play size={16} className="text-spotify" fill={COLORS.spotify} />
         </div>
       </div>
 
@@ -46,8 +48,8 @@ export default function TrackCard({ track, index }) {
       {/* Mini barre energia/valence */}
       {track.features && (
         <div className="flex items-center gap-2">
-          <MiniBar label="E" value={energy} color="#f59e0b" />
-          <MiniBar label="V" value={valence} color="#10b981" />
+          <MiniBar label="E" value={energy} color={FEATURE_COLORS.energy} />
+          <MiniBar label="V" value={valence} color={FEATURE_COLORS.valence} />
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import { Heart, TrendingUp, TrendingDown, Users, Music, RefreshCw, Calendar, Che
 import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { COLORS } from '../lib/palette'
 
 export default function TasteEvolutionPage() {
   const { data, loading, error, refetch } = useSpotifyData('/api/v1/taste-evolution')
@@ -271,7 +272,7 @@ function ArtistColumn({ id, title, icon: Icon, iconColor, artists, emptyText, to
             backgroundColor: 'rgba(40, 40, 40, 0.95)',
             backdropFilter: 'blur(8px)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-            color: '#b3b3b3',
+            color: COLORS.textSecondary,
             fontSize: '12px',
             lineHeight: '1.4',
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',

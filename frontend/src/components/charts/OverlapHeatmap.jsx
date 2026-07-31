@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { COLORS, withAlpha } from '../../lib/palette'
 
 export default function OverlapHeatmap({ labels = [], matrix = [], title = 'Sovrapposizione Playlist', loading = false }) {
 
@@ -57,7 +58,7 @@ export default function OverlapHeatmap({ labels = [], matrix = [], title = 'Sovr
                   const opacity = isDiagonal ? 0.15 : Math.max(0.05, value / maxVal)
                   const bgColor = isDiagonal
                     ? 'rgba(255, 255, 255, 0.05)'
-                    : `rgba(99, 102, 241, ${opacity})`
+                    : withAlpha(COLORS.accent, opacity)
                   return (
                     <div
                       key={j}
@@ -78,7 +79,7 @@ export default function OverlapHeatmap({ labels = [], matrix = [], title = 'Sovr
           <div className="flex items-center justify-end gap-2 mt-3">
             <span className="text-text-muted text-[10px]">0%</span>
             {[0.1, 0.3, 0.5, 0.7, 1].map((o, i) => (
-              <div key={i} className="w-4 h-4 rounded-sm" style={{ backgroundColor: `rgba(99, 102, 241, ${o})` }} />
+              <div key={i} className="w-4 h-4 rounded-sm" style={{ backgroundColor: withAlpha(COLORS.accent, o) }} />
             ))}
             <span className="text-text-muted text-[10px]">100%</span>
           </div>

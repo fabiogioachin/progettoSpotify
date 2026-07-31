@@ -8,7 +8,8 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts'
-import { TOOLTIP_STYLE, GRID_COLOR } from '../../lib/chartTheme'
+import { AXIS_LABEL_COLOR, AXIS_LINE, AXIS_TICK_COLOR, GRID_COLOR, TOOLTIP_STYLE } from '../../lib/chartTheme'
+import { COLORS } from '../../lib/palette'
 
 export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività vs Energia', loading = false }) {
   if (loading) {
@@ -49,18 +50,18 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
             dataKey="x"
             domain={[0, 100]}
             name="Positività"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
-            label={{ value: 'Positività', position: 'bottom', fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+            axisLine={AXIS_LINE}
+            label={{ value: 'Positività', position: 'bottom', fill: AXIS_LABEL_COLOR, fontSize: 12 }}
           />
           <YAxis
             type="number"
             dataKey="y"
             domain={[0, 100]}
             name="Energia"
-            tick={{ fill: '#b3b3b3', fontSize: 12 }}
-            axisLine={{ stroke: '#282828' }}
-            label={{ value: 'Energia', angle: -90, position: 'left', fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }}
+            axisLine={AXIS_LINE}
+            label={{ value: 'Energia', angle: -90, position: 'left', fill: AXIS_LABEL_COLOR, fontSize: 12 }}
           />
           <ZAxis
             type="number"
@@ -75,7 +76,7 @@ export default function MoodScatter({ tracks, title = 'Mappa Mood: Positività v
           {/* Quadranti */}
           <Scatter
             data={data}
-            fill="#6366f1"
+            fill={COLORS.accent}
             fillOpacity={0.7}
             animationDuration={1500}
           />

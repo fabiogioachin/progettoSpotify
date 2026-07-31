@@ -6,7 +6,8 @@ import OverlapHeatmap from '../components/charts/OverlapHeatmap'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { TOOLTIP_STYLE } from '../lib/chartTheme'
+import { AXIS_TICK_COLOR, GRID_COLOR, TOOLTIP_STYLE } from '../lib/chartTheme'
+import { COLORS, HUES } from '../lib/palette'
 import { ListMusic, Globe, Lock, Users, RefreshCw, Loader2, Clock, AlertTriangle } from 'lucide-react'
 import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 import { usePlaylistTask } from '../hooks/usePlaylistTask'
@@ -134,7 +135,7 @@ export default function PlaylistAnalyticsPage() {
                   <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
                     <motion.div
                       className="h-full rounded-full"
-                      style={{ backgroundColor: isWaiting ? '#f59e0b' : '#6366f1' }}
+                      style={{ backgroundColor: isWaiting ? HUES.amber : COLORS.accent }}
                       initial={{ width: 0 }}
                       animate={{ width: `${progress.percent}%` }}
                       transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -152,7 +153,7 @@ export default function PlaylistAnalyticsPage() {
             <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-300"
-                style={{ backgroundColor: '#f59e0b', width: `${progress.percent}%` }}
+                style={{ backgroundColor: HUES.amber, width: `${progress.percent}%` }}
               />
             </div>
             <p className="text-text-muted text-xs text-center mt-1">
@@ -201,11 +202,11 @@ export default function PlaylistAnalyticsPage() {
               <h3 className="text-text-primary font-display font-semibold mb-4">Distribuzione Dimensioni</h3>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={sizeDistribution} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#282828" />
-                  <XAxis dataKey="range" tick={{ fill: '#b3b3b3', fontSize: 12 }} />
-                  <YAxis tick={{ fill: '#b3b3b3', fontSize: 12 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+                  <XAxis dataKey="range" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} />
+                  <YAxis tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} />
                   <Tooltip {...TOOLTIP_STYLE} formatter={(value) => [`${value} playlist`, 'Conteggio']} />
-                  <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={1500} />
+                  <Bar dataKey="count" fill={COLORS.accent} radius={[4, 4, 0, 0]} animationDuration={1500} />
                 </BarChart>
               </ResponsiveContainer>
               <p className="text-text-muted text-xs text-center mt-2">

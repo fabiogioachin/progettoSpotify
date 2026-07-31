@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Download, Share2 } from 'lucide-react'
+import { COLORS } from '../../../lib/palette'
 
 export default function SlideOutro({ data }) {
   const cardRef = useRef(null)
@@ -26,7 +27,7 @@ export default function SlideOutro({ data }) {
     try {
       const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: '#121212',
+        backgroundColor: COLORS.background,
         scale: 2,
         useCORS: true,
       })
@@ -47,7 +48,7 @@ export default function SlideOutro({ data }) {
     try {
       const html2canvas = (await import('html2canvas')).default
       canvas = await html2canvas(cardRef.current, {
-        backgroundColor: '#121212',
+        backgroundColor: COLORS.background,
         scale: 2,
         useCORS: true,
       })

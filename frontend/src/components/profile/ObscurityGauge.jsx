@@ -1,15 +1,16 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { GRID_COLOR } from '../../lib/chartTheme'
+import { GRID_COLOR, OBSCURITY_COLORS } from '../../lib/chartTheme'
 
 const RADIUS = 80
 const STROKE_WIDTH = 12
 const CIRCUMFERENCE = Math.PI * RADIUS // semicircle
 
 function getColor(score) {
-  if (score < 30) return '#10b981' // green — mainstream
-  if (score < 60) return '#6366f1' // indigo — mid
-  return '#a855f7' // purple — obscure
+  const [mainstream, mid, obscure] = OBSCURITY_COLORS
+  if (score < 30) return mainstream
+  if (score < 60) return mid
+  return obscure
 }
 
 function getLabel(score) {

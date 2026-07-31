@@ -1,3 +1,5 @@
+import { COLORS, withAlpha } from './src/lib/palette.js'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -7,18 +9,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#121212',
-        surface: '#181818',
-        'surface-hover': '#282828',
-        border: '#282828',
-        'border-hover': '#3e3e3e',
-        accent: '#6366f1',
-        'accent-hover': '#818cf8',
-        'accent-glow': 'rgba(99, 102, 241, 0.15)',
-        spotify: '#1DB954',
-        'text-primary': '#FFFFFF',
-        'text-secondary': '#b3b3b3',
-        'text-muted': '#8a8a8a',
+        background: COLORS.background,
+        surface: COLORS.surface,
+        'surface-hover': COLORS.surfaceHover,
+        border: COLORS.border,
+        'border-hover': COLORS.borderHover,
+        accent: COLORS.accent,
+        'accent-hover': COLORS.accentHover,
+        'accent-pale': COLORS.accentPale,
+        'accent-glow': withAlpha(COLORS.accent, 0.15),
+        spotify: COLORS.spotify,
+        'text-primary': COLORS.textPrimary,
+        'text-secondary': COLORS.textSecondary,
+        'text-muted': COLORS.textMuted,
       },
       fontFamily: {
         display: ['Space Grotesk', 'sans-serif'],
@@ -45,8 +48,8 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(99, 102, 241, 0.1)' },
-          '50%': { boxShadow: '0 0 40px rgba(99, 102, 241, 0.3)' },
+          '0%, 100%': { boxShadow: `0 0 20px ${withAlpha(COLORS.accent, 0.1)}` },
+          '50%': { boxShadow: `0 0 40px ${withAlpha(COLORS.accent, 0.3)}` },
         },
         float: {
           '0%, 100%': { transform: 'translateY(0)' },

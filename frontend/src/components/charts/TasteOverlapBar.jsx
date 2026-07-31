@@ -1,6 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-
-const OVERLAP_COLORS = ['#6a6a6a', '#6366f1', '#1DB954']
+import { AXIS_TICK_COLOR, GRID_COLOR, OVERLAP_COLORS } from '../../lib/chartTheme'
 
 const OVERLAP_DESCRIPTIONS = {
   'Passeggeri': 'Artisti che compaiono solo in un periodo — gusti del momento',
@@ -34,9 +33,9 @@ export default function TasteOverlapBar({ data = [], title = 'Distribuzione Arti
       </p>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#282828" horizontal={false} />
-          <XAxis type="number" tick={{ fill: '#b3b3b3', fontSize: 12 }} />
-          <YAxis type="category" dataKey="label" tick={{ fill: '#b3b3b3', fontSize: 12 }} width={80} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
+          <XAxis type="number" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} />
+          <YAxis type="category" dataKey="label" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} width={80} />
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null

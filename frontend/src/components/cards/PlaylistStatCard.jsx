@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Music, Users, Calendar, Clock, Info } from 'lucide-react'
+import { COLORS, HUES } from '../../lib/palette'
 
 export default function PlaylistStatCard({ playlist, index = 0 }) {
   if (!playlist) return null
@@ -95,7 +96,7 @@ function VarietaArtisti({ concentrationPct, uniqueArtists, trackCount }) {
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: `${concentrationPct}%`,
-            backgroundColor: concentrationPct > 70 ? '#6366f1' : concentrationPct > 40 ? '#f59e0b' : '#ef4444',
+            backgroundColor: concentrationPct > 70 ? COLORS.accent : concentrationPct > 40 ? HUES.amber : HUES.red,
           }}
         />
       </div>
