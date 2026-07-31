@@ -1950,8 +1950,20 @@ questa voce di registro. Restano aperti i finding I-7, I-8, I-9 e l'item-checkpo
 ### Il fallimento in Bash si risolve quotando il path, non cambiando shell
 
 Sesta volta di fila che il Passo 0 fallisce in Bash, ma stavolta con un esito diverso che vale la
-pena mettere a verbale, perché la lezione a verbale in `.claude/tasks/lessons.md` dice «rieseguilo in
-PowerShell» e c'è una via più corta.
+pena mettere a verbale.
+
+> **Correzione, scritta in fase di finalize dopo il commit `d13dcae`.** Qui c'era scritto che la
+> lezione in `.claude/tasks/lessons.md` «dice *rieseguilo in PowerShell*» e che quindi esisteva una
+> via più corta di quella nota. **È falso, e l'ho scritto senza aprire il file.** Quella lezione
+> (riga 112) offre già due strade: PowerShell con `&` e le virgolette, **oppure** Bash con le forward
+> slash (`C:/Users/...`), «che Git Bash accetta». Non era ferma su PowerShell. Ciò che aggiungo qui
+> sotto resta vero ma è un *terzo* modo, non la scoperta di un'alternativa dove non ce n'erano.
+>
+> Vale la pena dire com'è successo, perché è la **seconda volta**: la lezione alla riga 114 dello
+> stesso file dice testualmente che *un run-log che cita una lezione va verificato sulla lezione, non
+> sul run-log precedente*. Ho fatto esattamente questo, riprendendo la formula dai run-log dei giri
+> precedenti. Non apro una lezione nuova: quella giusta esiste già, e il rimedio è applicarla — cioè
+> questa correzione.
 
 Il comando fallisce così:
 
@@ -1967,8 +1979,13 @@ esattamente ciò che prescrive la regola globale — mai path Windows nudi dentr
 `NOOP-UNDECIDABLE` in nessuna delle due varianti: la guardia non è mai stata avviata, e quando lo è
 stata ha risposto.
 
-Non ho aggiornato `lessons.md` perché questo ramo non deve toccare nulla oltre al run-log, e c'è
-un'altra sessione viva sulla stessa working tree. La correzione alla lezione resta qui.
+Non ho aggiornato `lessons.md`, e in fase di finalize la decisione è stata riconfermata su dati
+freschi invece che sull'intenzione di partenza. Due ragioni: la lezione esistente **non è sbagliata**
+— offre già la via Bash con le forward slash, quindi questo è un terzo modo da annotare e non un
+errore da correggere; e una probe rifatta alle 22:37 UTC trova **3** sessioni vive sulla working
+tree, una a 24 secondi, contro le 2 di inizio run. Aggiungere una rifinitura a un file condiviso
+mentre tre sessioni ci lavorano costa più di quanto renda. L'annotazione resta qui, e il Passo 3
+impone al prossimo run di leggere questo registro.
 
 ### Breaker
 
