@@ -2368,3 +2368,156 @@ programma precedente, perchÃ© Ã¨ una transizione nuova. Manca un giro.
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere. `git status --porcelain` rifatto
 subito prima dell'`add` elencava **solo** i file di questo giro: nessuno scrittore concorrente.
+
+---
+
+## 2026-08-01 07:42 UTC — `ITEM-DONE` — finding I-9 «L'indicatore di budget API mostra "0/25" prima di aver misurato qualcosa»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 37 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.113s su 37 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, e resta 0: questo run è un `ITEM-DONE`).
+
+**Il Passo 0 in Bash è fallito di nuovo — nona volta — e il rimedio è quello già a verbale.** Stesso
+exit 2, stesso path con i backslash mangiati
+(`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`). Rieseguito in PowerShell con l'operatore
+`&` e i path quotati, la guardia ha risposto `LIBERO`. Come stabilito dalla lezione, questo **non**
+è un `NOOP-UNDECIDABLE`: non era la guardia a non saper rispondere, era la shell a non averla mai
+avviata.
+
+### Working tree pulita all'avvio
+
+`git status --porcelain` a inizio run: **vuoto**. Nessuna decisione da prendere su lavoro altrui.
+
+### Cosa è stato fatto
+
+Un solo file di codice toccato, `frontend/src/components/layout/Header.jsx`. Lo stato
+dell'indicatore parte ora da `null` invece che da `{ current: 0, max: 25, pct: 0 }`, e il riquadro
+**non viene disegnato** finché non arriva la prima misura vera.
+
+**Nascondere e non scrivere «nessun dato», ed è una scelta, non l'unica strada.** L'item concedeva
+entrambe. Ho preso la prima perché è la convenzione dichiarata del progetto — `.claude/CLAUDE.md`,
+«Empty sections: hide rather than showing "nessun dato disponibile"» — e perché su un contrassegno
+piccolo nell'intestazione un segnaposto sarebbe stato solo rumore. Il costo, dichiarato: alla prima
+risposta il riquadro compare e gli elementi accanto si spostano di poco. È un evento unico, sotto il
+secondo, su un elemento che è già `hidden sm:flex`, quindi invisibile su schermo stretto.
+
+### Il finto era doppio, e l'item ne nominava solo metà
+
+È il pezzo che questo giro ha aggiunto rispetto a com'era scritto il finding. Oltre allo zero era
+inventato anche il **25**, e in modo più insidioso.
+
+25 è il limite reale della finestra Spotify, documentato in `.claude/CLAUDE.md` («Spotify sliding
+window throttle, 25 calls/30s»). Il massimo vero però **non è quella costante**: il backend manda in
+`X-RateLimit-Usage` il budget **per-utente**. `main.py:836` compone `f"{current}/{effective}"` dove
+`effective` viene da `get_effective_budget()`, e il commento sopra la classe lo dice per esteso
+(«Uses `get_effective_budget()` to show the per-user P0 budget instead of the raw Spotify throttle
+limit (25)»). Un utente con budget diverso vedeva quindi, prima della prima risposta, un massimo
+sbagliato oltre che un minimo inventato.
+
+Perché conta oltre questo item: un segnaposto scelto **uguale a una costante vera** supera proprio
+il controllo che dovrebbe smascherarlo. Chi rilegge la riga e si chiede «il 25 è giusto?» trova
+conferma nella documentazione e va oltre. Solo risalire a chi produce il valore a runtime lo
+smentisce.
+
+### Perché l'invariante 5 non ha protetto, pur essendo scritta da prima
+
+Vale la pena dirlo, perché è il tipo di cosa che si ripete. L'invariante 5 di `.claude/CLAUDE.md`
+vieta per nome i valori finti plausibili, ma è formulata sul **contratto dell'API**: «Backend returns
+`has_*` / `*_source` flags; frontend uses them for conditional rendering». Questo valore il contratto
+non lo attraversa mai — nasce e muore dentro un `useState` di un componente React. Una regola scritta
+sui payload non copre lo stato iniziale del frontend, anche quando il difetto è identico.
+
+### Con quale dei tre mezzi è stato verificato
+
+Dei tre mezzi ammessi dalla sezione «Trovati dall'ispezione», questo item usa il **2** e il **3**.
+
+**Mezzo 1, dal vivo: non applicabile, e non scrivo che lo sia.** L'indicatore sta
+nell'intestazione, che `AppLayout` disegna solo dentro `ProtectedRoute`: per vederlo serve una
+sessione, cioè `.env` e login Spotify reale, **entrambi vietati al loop**. In più il difetto è uno
+stato *iniziale*, quindi anche potendo aprire la pagina bisognerebbe cogliere la frazione di secondo
+prima della prima risposta.
+
+**Mezzo 2, sul codice, con prova strutturale sul pacchetto costruito.** È la prova più forte
+disponibile, e risponde ai due pezzi del criterio dell'item:
+
+| Verifica sul pacchetto costruito | Esito |
+|---|---|
+| il seme finto è sparito dal componente | `function ZR(){…,[i,o]=C.useState(null)` — dov'era `useState({current:0,max:25,pct:0})` |
+| il colore non si calcola senza misura | `const a=i?i.pct>85?…` |
+| il riquadro è subordinato alla misura | `i&&_.jsxs("div",{…title:"Budget API: …"})` |
+| quante volte compare il badge nel pacchetto | **1** (`Budget API:`), cioè nessuna copia dimenticata |
+| `max:25` residui nel chunk principale | **2**, entrambi dentro `nP` — vedi sotto |
+
+**Mezzo 3, meccanicamente.**
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 2731 moduli, 51 entry PWA, build in 8.04s | **0** |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 325.12s | **0** |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). Le 51 entry PWA sono **identiche** al run di I-8: nessun chunk nuovo, ed è atteso,
+perché `Header` sta nel chunk principale e non è caricato pigramente.
+
+**La suite backend è stata eseguita anche se questo giro non tocca Python**, a differenza della
+scelta fatta al giro di I-8. Non è un ripensamento sul metodo: è che questo è l'ultimo giro di
+lavoro del programma, e chiuderlo con la misura fresca invece che ereditata toglie ogni dubbio al
+checkpoint che verrà dopo. Il numero è identico a quello dei giri di I-6 e I-7, sullo stesso albero
+di codice backend.
+
+### Osservazione, senza azione: `ThrottleBanner` ha lo stesso seme ma non lo mostra mai
+
+`ThrottleBanner.jsx:6-7` semina due `useState` con lo stesso `{ current: 0, max: 25, pct: 0 }`. Sono
+i due `max:25` che restano nel pacchetto. **Non l'ho toccato**, e la ragione non è che sia fuori
+mandato per convenzione: è che lì il valore **non raggiunge lo schermo**, quindi non c'è nessun
+difetto visibile da correggere. Verificato sul pacchetto costruito, non dedotto dal sorgente:
+
+```
+k=a>0, x=!k&&i.pct>85, T=!k&&!x&&i.pct>60, E=k||x||T, L=!E&&p>0&&i.current>0
+```
+
+Col seme, `a` (il conto alla rovescia) vale 0 e `p` (la finestra) vale 0, quindi `E` — il riquadro
+d'avviso — è falso, e `L` — il contatore in basso a destra — è falso a sua volta. Entrambi restano
+chiusi finché non arriva una misura vera, che sovrascrive l'intero oggetto, massimo compreso.
+Dedurne un item nuovo è vietato dal backlog: la decisione è di Fabio.
+
+### Il programma è finito: il prossimo giro è il checkpoint
+
+Con I-9 i nove finding dell'ispezione sono **tutti chiusi, zero `FAILED`**. Il prossimo fire
+incontrerà l'item-checkpoint, che scrive `LOOP HALTED` in testa al backlog e **deve** mandare la
+voce di capolinea nel canale Inbox del vault — anche se ne esiste già una del programma precedente,
+perché è una transizione nuova.
+
+### Lezione catturata
+
+Una voce in `.claude/tasks/lessons.md`: un valore di partenza che coincide con una costante
+documentata supera proprio il controllo che dovrebbe smascherarlo, e una regola scritta sul
+contratto dell'API non copre lo stato iniziale di un componente. Chiude anche il rimando lasciato
+aperto dalla lezione di I-5, il cui punto (4) diceva che nascondere una sezione non serve a niente
+finché «il contatore nell'intestazione mostra `0` comunque».
+
+### Breaker
+
+**Non aperto.** Il contatore del Passo 6 vale 0: il run è un `ITEM-DONE`, quindi nessuno streak
+aperto, nessuna durata da misurare, nessun `BREAKER: TRATTENUTO` da scrivere. Nessuna riga
+`escalated:` pendente da chiudere. Il contatore della guardia era a 1 e non ha stampato nessuna
+`NOTA`.
+
+### Escalation al vault
+
+**Nessuna, e nessun lock preso.** Il canale verso Fabio si apre solo per breaker aperto o capolinea,
+e non siamo in nessuno dei due: il capolinea lo scriverà il giro del checkpoint, che è il prossimo.
+Prendere la corsia `inbox` senza niente da scrivere toglierebbe il giro ad altri loop della macchina.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere. `git status --porcelain` rifatto
+subito prima dell'`add` elencava **solo** i tre file di questo giro: nessuno scrittore concorrente.

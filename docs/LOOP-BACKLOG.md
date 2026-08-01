@@ -486,7 +486,30 @@ funzioni ancora. È anche ciò che rende invisibile il difetto I-2.
 **Verifica**: un indirizzo inesistente mostra una pagina che dice che non esiste, con un
 collegamento per tornare alla dashboard.
 
-### I-9. `[ ]` L'indicatore di budget API mostra «0/25» prima di aver misurato qualcosa
+### I-9. `[x]` L'indicatore di budget API mostra «0/25» prima di aver misurato qualcosa
+
+> **Fatto il 2026-08-01.** Verificato **sul codice** (mezzo 2) e **meccanicamente** (mezzo 3), con
+> prova strutturale sul pacchetto costruito: l'indicatore sta nell'intestazione, che si vede solo
+> con una sessione aperta, cioè con `.env` e login Spotify reale — entrambi vietati al loop, quindi
+> il mezzo 1 non è applicabile e non scrivo che lo sia. Un solo file toccato, `Header.jsx`: lo stato
+> parte da `null` e il riquadro **non viene disegnato** finché non arriva la prima misura vera.
+> Scelto di nascondere e non di scrivere «nessun dato», perché è la convenzione del progetto
+> (`.claude/CLAUDE.md`, «Empty sections: hide rather than showing "nessun dato disponibile"»).
+>
+> **Il finto era doppio, e l'item ne nominava solo metà.** Oltre allo zero, era finto anche il
+> **25**: il massimo che il backend manda nell'intestazione `X-RateLimit-Usage` è il budget
+> **per-utente** (`main.py:836`, `get_effective_budget()`), non il limite di 25 della finestra
+> Spotify. Un utente con budget diverso vedeva quindi, prima della prima risposta, un massimo
+> sbagliato oltre che un minimo inventato.
+>
+> Prova dal pacchetto costruito: il corpo del componente porta ora `C.useState(null)`, il colore è
+> calcolato solo se la misura esiste (`a=i?i.pct>85?…`), e il riquadro è subordinato
+> (`i&&_.jsxs("div",{…title:"Budget API: …"`). Dettaglio in `docs/loop-last-run.md`.
+>
+> **Osservazione, senza azione**: `ThrottleBanner.jsx:6-7` ha lo stesso seme finto in due `useState`,
+> ma **non lo mostra mai** — entrambi i suoi riquadri sono subordinati a `pct > 60` o a
+> `windowReset > 0 && current > 0`, e con il seme sono tutti falsi. Nessun difetto visibile, quindi
+> non l'ho toccato: dedurne un item è vietato, la decisione è di Fabio.
 
 `Header.jsx:8` parte da `{ current: 0, max: 25 }` e si aggiorna solo quando arriva la prima
 risposta con l'intestazione del contatore. Fino ad allora, in cima a ogni pagina, si legge «0/25»

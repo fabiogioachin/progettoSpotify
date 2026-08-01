@@ -5,7 +5,11 @@ import { LogOut, Music2, Activity } from 'lucide-react'
 
 export default function Header() {
   const { user, logout } = useAuth()
-  const [usage, setUsage] = useState({ current: 0, max: 25, pct: 0 })
+  // null = nessuna misura ancora arrivata. Non partire da {current: 0, max: 25}: sarebbe
+  // uno «0/25» in verde indistinguibile da una misura vera, e il 25 è per giunta il limite
+  // reale della finestra Spotify. Il massimo vero è il budget per-utente, che lo dice il
+  // backend nell'intestazione X-RateLimit-Usage — non è una costante.
+  const [usage, setUsage] = useState(null)
 
   useEffect(() => {
     const handler = (e) => setUsage(e.detail)
@@ -13,11 +17,13 @@ export default function Header() {
     return () => window.removeEventListener('api:usage', handler)
   }, [])
 
-  const usageColor = usage.pct > 85
-    ? 'text-red-400 bg-red-500/10 border-red-500/20'
-    : usage.pct > 60
-      ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-      : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+  const usageColor = !usage
+    ? ''
+    : usage.pct > 85
+      ? 'text-red-400 bg-red-500/10 border-red-500/20'
+      : usage.pct > 60
+        ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+        : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
 
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border lg:pl-60">
@@ -45,13 +51,15 @@ export default function Header() {
             <span className="text-sm text-text-secondary hidden sm:block">
               {user?.display_name}
             </span>
-            <div
-              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${usageColor}`}
-              title={`Budget API: ${usage.current}/${usage.max} chiamate negli ultimi 30s`}
-            >
-              <Activity size={12} />
-              <span>{usage.current}/{usage.max}</span>
-            </div>
+            {usage && (
+              <div
+                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${usageColor}`}
+                title={`Budget API: ${usage.current}/${usage.max} chiamate negli ultimi 30s`}
+              >
+                <Activity size={12} />
+                <span>{usage.current}/{usage.max}</span>
+              </div>
+            )}
             <button
               onClick={logout}
               className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all duration-300"
