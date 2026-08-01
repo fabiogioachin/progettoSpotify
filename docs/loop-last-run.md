@@ -2537,13 +2537,18 @@ LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (
 `no_progress_streak`: **0** (era 0, resta 0: questo run chiude il suo item e committa, quindi produce
 un avanzamento reale). Nessuno streak aperto, quindi nessun timestamp di primo run da tenere.
 
-**Il Passo 0 in Bash è riuscito al primo colpo, e per la prima volta in dieci giri.** Le nove volte
-precedenti fallivano con exit 2 e il path a backslash mangiato
-(`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`), e il rimedio a verbale era rieseguire in
-PowerShell. Questa volta ho passato gli stessi path **con le barre in avanti** — `C:/Users/fgioa/...`
-— e Git Bash li ha risolti senza toccarli. È il rimedio più economico dei due: non cambia shell,
-cambia solo come si scrive il path, e vale per qualunque comando di questo prompt. La lezione
-esistente resta valida, questa la restringe.
+**Il Passo 0 in Bash è riuscito al primo colpo, e non è una scoperta di questo giro: è la lezione
+già a verbale, applicata.** Le nove volte precedenti fallivano con exit 2 e il path a backslash
+mangiato (`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`). Questa volta ho scritto tutti i
+path **con le barre in avanti** (`C:/Users/fgioa/...`) e Git Bash li ha risolti senza toccarli.
+
+Lo scrivo perché il merito non è mio e la distinzione conta. `.claude/tasks/lessons.md:112` elencava
+la strada delle barre in avanti **fin dal 2026-07-30**, e il giro di I-8 vi aveva aggiunto il rimedio
+ancora più economico — restare in Bash e **quotare anche il path dello script**, perché la causa vera
+è un'asimmetria di quoting. Nessuno dei due rimedi è nuovo. Il fatto nuovo, semmai, è che la lezione
+ha smesso di costare una chiamata fallita per giro: fin qui veniva scritta e non applicata al
+comando successivo. Nessuna lezione da catturare, quindi — quella esistente è già completa e
+corretta.
 
 ### Working tree pulita all'avvio
 
