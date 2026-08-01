@@ -2190,3 +2190,181 @@ Vale la pena dirlo perché ci si avvicina: dopo I-8 e I-9 resta solo il checkpoi
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere. `git status --porcelain` rifatto
 subito prima dell'`add` elencava **solo** i file di questo giro: nessuno scrittore concorrente.
+
+## 2026-08-01 04:39 UTC â€” `ITEM-DONE` â€” finding I-8 Â«Nessuna pagina "non trovato"Â»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 34 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.053s su 34 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, e resta 0: questo run Ã¨ un `ITEM-DONE`).
+
+**Il contatore della guardia Ã¨ sceso da 3 a 1, ed Ã¨ la prova che il run precedente ha chiuso i
+conti.** Il giro di I-7 lo aveva trovato a 3 su 3 e aveva eseguito `--confirm-progress` dopo il
+commit; se non l'avesse fatto, questo run avrebbe letto 4 e la guardia avrebbe emesso un allarme
+Â«backlog fermoÂ» mentre il loop stava avanzando di un item a giro. L'1 che si legge qui Ã¨ il fire di
+questo run, non un residuo.
+
+**Il Passo 0 in Bash Ã¨ fallito di nuovo â€” ottava volta â€” ma questa volta il rimedio Ã¨ costato due
+virgolette invece di un cambio di shell.** Stesso exit 2, stesso path assurdo con i backslash
+mangiati. Rieseguito **nello stesso tool Bash** quotando anche il path dello script, e la guardia
+ha risposto `LIBERO`. La lezione a verbale prescriveva PowerShell oppure le forward slash: la terza
+strada funziona e costa meno, ed Ã¨ ora aggiunta alla lezione. Il punto vero l'ha chiarito il
+confronto fra i due tentativi: nella riga che falliva, il path dell'interprete e `--repo-root` erano
+quotati e sono arrivati interi, quello dello script era nudo ed Ã¨ stato consumato. Non era una
+stranezza di Git Bash, era **un'asimmetria di quoting** dentro la stessa riga di comando. Come giÃ 
+stabilito dalla lezione, questo **non** Ã¨ un `NOOP-UNDECIDABLE`: la guardia non era mai stata
+avviata, e quando lo Ã¨ stata ha risposto.
+
+### Working tree pulita all'avvio
+
+`git status --porcelain` a inizio run: **vuoto**. Nessuna decisione da prendere su lavoro altrui.
+
+### Cosa Ã¨ stato fatto
+
+Aggiunta `frontend/src/pages/NotFoundPage.jsx` e cambiata la rotta di raccolta in `App.jsx`. Prima
+mandava alla radice tutto ciÃ² che non riconosceva, e la radice manda alla dashboard chi ha una
+sessione: il risultato era che un indirizzo sbagliato **si comportava come uno giusto**, e l'utente
+si ritrovava sulla dashboard senza sapere perchÃ©.
+
+Ora la rotta di raccolta passa da `ProtectedRoute`, ed Ã¨ la scelta di progetto che vale la pena
+spiegare, perchÃ© non Ã¨ la piÃ¹ ovvia:
+
+- **Chi ha una sessione** vede la pagina Â«non trovatoÂ» **dentro il guscio dell'applicazione**, con
+  la barra laterale intera. Conta: la pagina non Ã¨ un vicolo cieco, da lÃ¬ si raggiunge qualunque
+  altra sezione, e in piÃ¹ c'Ã¨ il collegamento esplicito alla dashboard che l'item chiede.
+- **Chi non ce l'ha** continua ad arrivare alla schermata di accesso, esattamente come per ogni
+  altra rotta protetta. Renderla pubblica avrebbe scambiato una destinazione sbagliata con
+  un'altra: a chi non ha ancora fatto l'accesso, un cartello Â«questa pagina non esisteÂ» dice meno
+  della schermata da cui deve comunque passare.
+
+La pagina **dice quale indirizzo non Ã¨ stato trovato**. Senza quello resterebbe un cartello
+generico, e il refuso â€” che Ã¨ la causa piÃ¹ probabile â€” non si troverebbe. L'indirizzo viene
+accorciato a 80 caratteri perchÃ© un indirizzo inventato puÃ² essere lungo a piacere e sfonderebbe il
+riquadro.
+
+### Il pezzo che poteva rompersi in silenzio, verificato prima di toccare la rotta
+
+La rotta di raccolta Ã¨ l'unica del router che cattura indirizzi che nessuno ha scritto in `App.jsx`.
+Fra questi ci sarebbe, in astratto, il ritorno di Spotify dopo il consenso: cambiarla senza guardare
+significherebbe rischiare di rompere l'accesso. **Non ci arriva**, e l'ho verificato invece di
+dedurlo:
+
+| Dove | Cosa dice | Effetto |
+|---|---|---|
+| `vite.config.js:107-113` | `proxy` di `/auth`, `/api`, `/health` verso `127.0.0.1:8001` | in sviluppo quegli indirizzi vanno al backend, il router non li vede |
+| `vite.config.js:57` | `navigateFallbackDenylist: [/^\/(auth\|api\|health)/]` | nel pacchetto costruito sono esclusi dal ripiego su `index.html` |
+
+Quindi il router riceve solo indirizzi dell'applicazione, nÃ© prima nÃ© dopo la compilazione. Lo
+scrivo perchÃ© Ã¨ il controllo che rende sicura la modifica, ed Ã¨ invisibile guardando `App.jsx`.
+
+### Con quale dei tre mezzi Ã¨ stato verificato
+
+Dei tre mezzi ammessi dalla sezione Â«Trovati dall'ispezioneÂ», questo item ne usa **tutti e tre**, ma
+su porzioni diverse â€” ed Ã¨ la prima volta in questo programma che il mezzo 1 Ã¨ applicabile a
+qualcosa oltre alla schermata di accesso.
+
+**Mezzo 1, dal vivo â€” il ramo dell'utente senza sessione.** Server di sviluppo su `127.0.0.1:5173`,
+backend spento. Aperto `http://127.0.0.1:5173/indirizzo-che-non-esiste`: l'utente arriva alla
+schermata di accesso, con l'avviso Â«Il servizio non rispondeÂ» introdotto da I-1. **Nessuna pagina
+bianca, e nessun rimbalzo infinito** fra la rotta di raccolta e la radice â€” che era il rischio vero
+di questa modifica, dato che `ProtectedRoute` rimanda alla radice e la radice Ã¨ a sua volta una
+rotta. In console solo i due `Auth check failed` da 500 del backend spento, che sono attesi e giÃ 
+gestiti a schermo da I-1: nessun errore nuovo introdotto da questo giro.
+
+**Mezzo 2, sul codice â€” il ramo dell'utente con sessione.** La pagina richiede una sessione, cioÃ¨
+`.env` e login Spotify reale, **entrambi vietati al loop**: non Ã¨ apribile dal vivo e non scrivo che
+lo sia. Verificata sul pacchetto costruito, che Ã¨ la prova piÃ¹ forte disponibile:
+
+| Verifica sul pacchetto costruito | Esito |
+|---|---|
+| esiste il chunk della pagina | `dist/assets/NotFoundPage-D1cZMU8r.js` |
+| la rotta di raccolta non rimanda piÃ¹ | `path:"*",element:jsx(mt,{children:jsx(wP,{}` â€” dov'era `Navigate to="/"` |
+| `wP` Ã¨ davvero la pagina | `wP=C.lazy(()=>import("./NotFoundPage-D1cZMU8r.js"))` |
+| `mt` Ã¨ davvero `ProtectedRoute` | `function mt({children:t,withLayout:r=!0})â€¦` con `user` â†’ guscio, senza â†’ `Navigate to:"/"` |
+| il testo arriva all'utente | Â«Questa pagina non esisteÂ» presente nel chunk |
+| il collegamento chiesto dall'item | `to:"/dashboard"` presente nel chunk |
+
+Le ultime due righe rispondono parola per parola al criterio dell'item (Â«mostra una pagina che dice
+che non esiste, con un collegamento per tornare alla dashboardÂ»), e le due centrali dimostrano il
+ramo che non posso aprire: con una sessione, `mt` rende il figlio dentro il guscio.
+
+**Mezzo 3, meccanicamente.**
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 51 entry PWA, build in 3.95s | **0** |
+
+Le entry PWA passano da 50 a 51: Ã¨ il chunk della pagina nuova, l'unica differenza attesa.
+
+**Backend non eseguito, e la ragione.** Il giro di I-7 aveva rieseguito `pytest` per dimostrare che
+un rinomina non aveva toccato Python. Qui non serve: questo giro aggiunge un file in
+`frontend/src/pages/` e ne modifica un altro nella stessa cartella, senza sfiorare `backend/`. Una
+suite da 317 secondi che non puÃ² dire niente di nuovo non Ã¨ una prova, Ã¨ un rito. Lo dichiaro invece
+di lasciarlo intendere.
+
+### Osservazione, senza azione: il collegamento profondo perso all'accesso
+
+Guardando `ProtectedRoute` per decidere dove agganciare la rotta di raccolta ho notato una cosa che
+**non ho toccato**, perchÃ© Ã¨ fuori dal mandato di I-8. Chi apre un indirizzo valido ma profondo â€”
+`/temporal`, per dire â€” senza avere una sessione viene mandato alla radice, e dopo l'accesso finisce
+sulla dashboard: **l'indirizzo di partenza Ã¨ perduto**, e nessuno gli dice che era valido. Un
+segnalibro su una pagina interna, condiviso o salvato, non riporta mai dove puntava.
+
+Non Ã¨ il difetto I-8, che riguarda gli indirizzi **inesistenti**, e non ne deduco un item: il
+backlog lo vieta e la decisione Ã¨ di Fabio. Lo scrivo perchÃ© Ã¨ il vicino di casa del difetto appena
+chiuso â€” stessa rotta, stesso meccanismo â€” e perchÃ© ora che la rotta di raccolta Ã¨ stata toccata,
+chi ci tornasse sopra lo troverebbe comunque.
+
+### Cosa non Ã¨ stato committato, e perchÃ©
+
+Per l'ispezione dal vivo serviva avviare il server di sviluppo, e lo strumento di anteprima di
+questa sessione lo avvia solo da un file di configurazione (`.claude/launch.json`) che nel repo
+**non esiste**. L'ho creato, usato, e poi **rimosso** a ispezione finita â€” spostato nel cestino
+della suite, non cancellato. Due ragioni: aggiungere un file di configurazione dell'ambiente di
+lavoro non fa parte di I-8, e lasciarlo lÃ¬ non committato avrebbe sporcato la working tree, facendo
+uscire il run successivo con `NOOP-DIRTY` per colpa di questo. Se un giro futuro dovesse ispezionare
+di nuovo dal vivo, ricrearlo costa dieci righe; se Fabio lo vuole stabile nel repo, Ã¨ una sua
+decisione.
+
+### Lezioni catturate
+
+Due voci in `.claude/tasks/lessons.md`:
+
+1. **Nuova** â€” una rotta di raccolta che rimanda invece di dire Â«non esisteÂ» nasconde tutti i
+   collegamenti rotti. Ãˆ la spiegazione di come il difetto I-2 sia sopravvissuto fino
+   all'ispezione: un collegamento rotto e uno funzionante producevano lo stesso esito osservabile,
+   quindi il difetto non aveva sintomi e nessuno lo cercava. La forma generale, che vale oltre
+   questo repo: ogni ripiego silenzioso nasconde esattamente la categoria di errori che Ã¨ lÃ¬ per
+   assorbire.
+2. **Aggiunta** alla lezione esistente sul tool Bash che mangia i backslash: quotare il path dello
+   script Ã¨ la terza strada, provata oggi, e la diagnosi giusta Ã¨ Â«asimmetria di quoting nella
+   stessa rigaÂ», non Â«Git Bash non accetta i path WindowsÂ».
+
+### Breaker
+
+**Non aperto.** Il contatore del Passo 6 vale 0: il run Ã¨ un `ITEM-DONE`, quindi nessuno streak
+aperto, nessuna durata da misurare, nessun `BREAKER: TRATTENUTO` da scrivere. Nessuna riga
+`escalated:` pendente da chiudere. Il contatore della guardia Ã¨ a 1 e non ha stampato nessuna
+`NOTA`.
+
+### Escalation al vault
+
+**Nessuna, e nessun lock preso.** Il canale verso Fabio si apre solo per breaker aperto o capolinea,
+e non siamo in nessuno dei due: restano I-9 e l'item-checkpoint. Prendere la corsia `inbox` senza
+niente da scrivere toglierebbe il giro ad altri loop della macchina.
+
+**Il prossimo giro Ã¨ l'ultimo di lavoro.** Dopo I-9 resta solo il checkpoint, che scrive
+`LOOP HALTED` e **deve** mandare la voce di capolinea nel canale â€” anche se ne esiste giÃ  una del
+programma precedente, perchÃ© Ã¨ una transizione nuova. Manca un giro.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere. `git status --porcelain` rifatto
+subito prima dell'`add` elencava **solo** i file di questo giro: nessuno scrittore concorrente.

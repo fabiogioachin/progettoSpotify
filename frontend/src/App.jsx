@@ -18,6 +18,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const FriendsPage = lazy(() => import('./pages/FriendsPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 function ProtectedRoute({ children, withLayout = true }) {
   const { user, loading } = useAuth()
@@ -143,7 +144,18 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Un indirizzo sconosciuto non deve scaricare l'utente sulla dashboard
+            senza dirgli niente: chi ha una sessione vede una pagina che spiega
+            cosa non e' stato trovato, chi non ce l'ha passa comunque dalla
+            schermata di accesso, come per ogni altra rotta protetta. */}
+        <Route
+          path="*"
+          element={
+            <ProtectedRoute>
+              <NotFoundPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Suspense>
   )

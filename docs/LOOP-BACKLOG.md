@@ -455,7 +455,28 @@ prossimo che lo prende rifà una cosa fatta. Costa la stessa lettura scoprirlo d
 **Verifica**: il componente ha un nome che descrive ciò che disegna, tutti i punti che lo importano
 sono aggiornati, e B1 in `todo.md` è chiuso o annotato come già fatto.
 
-### I-8. `[ ]` Nessuna pagina «non trovato»: ogni indirizzo sbagliato scarica sulla dashboard
+### I-8. `[x]` Nessuna pagina «non trovato»: ogni indirizzo sbagliato scarica sulla dashboard
+
+> **Fatto il 2026-08-01.** Verificato **dal vivo** (mezzo 1) per il ramo dell'utente non autenticato,
+> **sul codice** (mezzo 2) per quello autenticato, e **meccanicamente** (mezzo 3). Nuova pagina
+> `NotFoundPage.jsx`, e la rotta di raccolta `App.jsx` non rimanda più alla radice: passa da
+> `ProtectedRoute`, così **chi ha una sessione vede la pagina dentro il guscio dell'applicazione** —
+> barra laterale intera, quindi da lì si va ovunque — e chi non ce l'ha continua ad arrivare alla
+> schermata di accesso, come per ogni altra rotta protetta. La pagina dice **quale** indirizzo non
+> esiste: senza quello resterebbe un cartello generico, e il refuso non si troverebbe.
+>
+> **Il pezzo che poteva rompersi in silenzio, verificato prima di toccare la rotta**: la rotta di
+> raccolta è l'unica del router che può catturare indirizzi che nessuno ha scritto in `App.jsx`, e
+> fra questi ci sarebbe il ritorno di Spotify dopo il consenso. Non ci arriva: in sviluppo `/auth`,
+> `/api` e `/health` sono deviati al backend dal server di sviluppo (`vite.config.js:107-113`) e nel
+> pacchetto costruito sono esclusi dal ripiego dell'app installabile
+> (`navigateFallbackDenylist`, `vite.config.js:57`). Il router non li vede, né prima né dopo.
+>
+> **Limite dichiarato**: la pagina in sé non è apribile dal vivo, perché richiede una sessione, cioè
+> `.env` e login Spotify reale — entrambi vietati al loop. Dal vivo ho verificato ciò che si può:
+> con il backend spento, `/indirizzo-che-non-esiste` porta alla schermata di accesso con l'avviso di
+> servizio giù, **nessuna pagina bianca e nessun rimbalzo infinito** fra la rotta di raccolta e la
+> radice. Il resto è prova strutturale sul pacchetto costruito. Dettaglio in `docs/loop-last-run.md`.
 
 `App.jsx:146` manda alla radice tutto ciò che non riconosce, e la radice manda alla dashboard chi è
 autenticato. Un refuso nell'indirizzo, o un vecchio segnalibro, non producono nessun messaggio:
