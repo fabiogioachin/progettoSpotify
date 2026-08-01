@@ -1,7 +1,7 @@
 import { Compass, Sparkles, Star, BarChart3, Music } from 'lucide-react'
 import MoodScatter from '../components/charts/MoodScatter'
 import AudioRadar from '../components/charts/AudioRadar'
-import GenreTreemap from '../components/charts/GenreTreemap'
+import GenreDonut from '../components/charts/GenreDonut'
 import { SkeletonCard } from '../components/ui/Skeleton'
 import { StaggerContainer, StaggerItem } from '../components/ui/StaggerContainer'
 import { useSpotifyData } from '../hooks/useSpotifyData'
@@ -137,12 +137,12 @@ export default function DiscoveryPage() {
               ) : null}
             </SectionErrorBoundary>
 
-            {/* Genre Treemap + Centroid Radar o Outliers */}
+            {/* Genre Donut + Centroid Radar o Outliers */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Se ci sono generi, mostra il treemap; altrimenti il radar se ha features */}
-              <SectionErrorBoundary sectionName="GenreTreemap">
+              {/* Se ci sono generi, mostra la ciambella; altrimenti il radar se ha features */}
+              <SectionErrorBoundary sectionName="GenreDonut">
                 {Object.keys(genreDistribution).length > 0 ? (
-                  <GenreTreemap genres={genreDistribution} title="Il tuo DNA musicale" />
+                  <GenreDonut genres={genreDistribution} title="Il tuo DNA musicale" />
                 ) : (
                   <AudioRadar features={displayCentroid} title="Il tuo centro musicale" />
                 )}

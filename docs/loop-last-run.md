@@ -2014,3 +2014,179 @@ giro ad altri loop della macchina.
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito. `git status --porcelain` era **vuoto** prima di questa
 voce di registro.
+
+---
+
+## 2026-08-01 01:33 UTC — `ITEM-DONE` — finding I-7 «`GenreTreemap` disegna una ciambella»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 32 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.070s su 32 transcript (soglia 1s, massimo storico 0.132s)
+NOTA     soglia di 3 cedimenti raggiunta, ma sono passate solo 3.00 ore (minimo 6): nessuna escalation. I fire sono piu' fitti della cadenza per cui la soglia e' tarata.
+         contatore: 3 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 1, aperto dal `NOOP-BUSY` del 2026-07-31T22:33:31Z e azzerato da
+questo `ITEM-DONE`).
+
+**La guardia ha trattenuto un avviso, e il conto torna.** Il suo contatore — che è suo, indipendente
+da quello del Passo 6 — è arrivato a 3 su 3, ma la guardia non ha gridato perché dal primo cedimento
+erano passate **3 ore** contro le 6 di soglia. È esattamente il caso che il Passo 6 descrive per il
+proprio contatore, e i numeri combaciano: il `NOOP-BUSY` è delle 22:33, adesso è l'01:33. Da 1 a 3 in
+un fire solo perché il run precedente ha interrogato la guardia **due volte** (la probe rifatta alle
+22:37, che quel run-log dichiara), e ogni interrogazione senza progresso confermato incrementa.
+
+Il Passo 0 in Bash è fallito per la settima volta di fila, con lo stesso exit 2 e lo stesso path
+assurdo. Ho eseguito il comando in **PowerShell** con `&` e i path quotati, che è una delle due
+strade che la lezione prescrive — verificata aprendo `.claude/tasks/lessons.md:112`, non ripresa da
+un run-log precedente, perché è il tranello che questo registro ha già documentato due volte. **Non**
+è un `NOOP-UNDECIDABLE`: la guardia non è mai stata avviata, e quando lo è stata ha risposto `LIBERO`.
+
+### Working tree pulita all'avvio
+
+`git status --porcelain` a inizio run: **vuoto**. Nessuna decisione da prendere su lavoro altrui.
+
+### Cosa è stato fatto
+
+Il componente `GenreTreemap` **non disegna un treemap**: disegna un `PieChart` con `innerRadius`
+al 45%, cioè una ciambella, con accanto una legenda che elenca fino a 12 generi con la percentuale.
+Del treemap era rimasto solo il nome. Rinominati file e componente in **`GenreDonut`**, e aggiornati
+tutti i punti che li nominavano nel codice: i due import (`DashboardPage.jsx`, `DiscoveryPage.jsx`),
+i due `sectionName` passati a `SectionErrorBoundary`, e i tre commenti che dicevano «treemap».
+
+Il rinomina è stato fatto con `git mv`, così la storia del file resta seguibile: il diff mostra
+`R` più una sola riga cambiata nel file, quella dell'`export default`.
+
+### La data in cui il lavoro era stato fatto, trovata invece che supposta
+
+L'item dice «il lavoro è già stato fatto» senza dire quando, e la differenza conta: B1 di
+`todo.md` va chiuso con una prova, non con un'impressione. Ho ricostruito la storia del file
+commit per commit, guardando **l'import da recharts**, che è l'unica cosa che distingue davvero un
+treemap da una ciambella:
+
+| Commit | Import da `recharts` | `innerRadius` |
+|---|---|---|
+| `ed262a7` … `0d67cb7` (5 commit) | `{ ResponsiveContainer, Treemap, Tooltip }` | no |
+| **`58e39f2`** (2026-04-03) | `{ ResponsiveContainer, PieChart, Pie, Cell, Tooltip }` | **sì** |
+| `a3d3c92`, `HEAD` | idem | sì |
+
+Il passaggio è in `58e39f2`, il cui messaggio dice testualmente «donut chart for genres». Quindi B1
+è stato consegnato il **2026-04-03** e non è mai stato spuntato: quasi quattro mesi in cui la lista
+di lavoro chiedeva una cosa che il codice aveva già.
+
+**Nota di metodo, perché il primo tentativo mi ha dato la risposta sbagliata.** Avevo cercato la
+stringa `Treemap` nel file: dava «treemap» su tutti i commit, **compresi quelli con la ciambella**,
+perché la parola compare dentro il nome del componente stesso (`GenreTreemap`). Il criterio giusto è
+l'import, non il nome — che è poi, in piccolo, lo stesso equivoco che l'item denuncia.
+
+### B1 chiuso in `todo.md`
+
+Marcato `[x]` con accanto la data, il commit e il perché il difetto originale è risolto: la
+ciambella con la legenda non nasconde i generi minori, che era la lamentela scritta fra parentesi
+(«phonk 79% nascondeva gli altri generi»). Rinominato anche il riferimento a «genre treemap» nella
+sezione «Sviluppo futuro» (riga 28), che nominava un componente ormai inesistente.
+
+### Osservazione, senza azione: lo stesso commit chiude anche B2, B3 e C1
+
+Il messaggio di `58e39f2` non dichiara solo la ciambella. Dichiara anche il selettore temporale
+unificato, il ThrottleBanner con budget per-utente e drain progressivo, e la fusione KG+Rete con
+zoom semantico — cioè, parola per parola, gli **altri tre item aperti** di `todo.md`. Un controllo
+veloce li trova nel codice:
+
+| Item | Cosa chiede | Riscontro |
+|---|---|---|
+| B2 | selettore temporale 7gg/30gg/3M/Tutto | `DashboardPage.jsx:19-22`, le quattro voci esatte |
+| B3 | budget per-utente + drain progressivo | `ThrottleBanner.jsx:31-38`, `drainFraction` interpolato |
+| C1 | fusione KG+Rete con zoom semantico | `ArtistNetwork.jsx:55-56`, `zoomBlend` fra scala 1.3 e 2.2 |
+
+**Non li ho chiusi**, e la ragione non è pigrizia: il mandato di questo giro è I-7, che parla di B1 e
+di nient'altro — un run, un item. E chiuderli richiederebbe verificare per bene ciò che qui ho solo
+sfiorato: B3 chiede anche un `auto-hide` che il messaggio del commit non nomina. Lo scrivo perché è
+la stessa trappola dell'item, moltiplicata per tre: una lista di lavoro che promette cose già fatte
+fa rifare il lavoro a chi la legge. La decisione è di Fabio.
+
+### Riferimenti fuori dal codice: cosa ho aggiornato e cosa no
+
+Il `CLAUDE.md` globale impone di aggiornare tutti i riferimenti dopo un rinomina. Ho distinto fra
+documenti che **descrivono l'applicazione di oggi** e registri storici:
+
+**Aggiornati** — dicevano al lettore una cosa falsa sul prodotto:
+
+- `README.md:7` — «distribuzione generi (treemap)», la prima pagina che un lettore apre.
+- `docs/PRD.md:70` e `:113` — «Genre Treemap» e «(treemap)» nell'elenco delle funzionalità.
+- `docs/LAUNCH-PLAN.md:31` — citava `GenreTreemap.jsx:37` come riferimento di codice. Corretto in
+  `GenreDonut.jsx:29`, che è la riga vera del `return null` (verificata, non stimata: la 37 era già
+  stale prima di questo giro).
+
+**Non toccati**, con la ragione:
+
+1. `.claude/skills/react-spotify-patterns/SKILL.md:116` nomina `GenreTreemap` in un elenco di chart.
+   È un file di skill, e il `CLAUDE.md` globale ne vieta la modifica senza richiesta esplicita di
+   Fabio; il Passo 2 dice che il vincolo più restrittivo vince. È **lo stesso identico caso** del
+   giro dell'item 3 con `EmptyState`, e resta una decisione di Fabio.
+2. `docs/RESTRUCTURING-PLAN.md:195` è un piano concluso che descrive cosa si era deciso allora.
+   Riscriverlo falsificherebbe un registro storico — stessa scelta, e stessa motivazione, del giro
+   dell'item 3.
+3. Le voci precedenti di questo run-log, per la stessa ragione: sono un registro, non uno stato.
+
+### Verifiche eseguite
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | 50 entry PWA, build in 3.89s | **0** |
+| ricerca `Treemap` su `frontend/src` | **nessuna occorrenza** | — |
+| `GenreTreemap` nel pacchetto costruito | **nessuna occorrenza** | — |
+| componente `Treemap` di recharts nel pacchetto | **mai incluso** | — |
+| `GenreDonut` nel pacchetto costruito | presente nei chunk Dashboard e Discovery | — |
+| corpo minificato del componente | `innerRadius:"45%"`, `outerRadius:"80%"`, `paddingAngle:2` | — |
+| `backend\.venv\Scripts\python.exe -m pytest -q` | **536 passati, 0 falliti** in 317.52s | **0** |
+
+Interprete backend: `C:\Users\fgioa\Desktop\PRO\progettoWrap\backend\.venv\Scripts\python.exe`
+(Python 3.12.13). La suite backend è stata rieseguita per intero anche se questo giro non tocca
+Python: serve a dimostrare che il rinomina non ha alterato nulla, non a scoprire regressioni che non
+possono esistere. Numero identico al run di I-6, sullo stesso albero di codice backend.
+
+Dei tre mezzi che la sezione «Trovati dall'ispezione» ammette, qui vale il **terzo (meccanico)**,
+rafforzato dalla prova strutturale sul pacchetto costruito. Il mezzo 1 (dal vivo) **non è
+applicabile**: la ciambella sta sulla dashboard e sulla pagina discovery, entrambe dietro
+l'autenticazione, che senza `.env` e senza login Spotify reale — vietati al loop — non si aprono.
+Non scrivo «verificato dal vivo» per una pagina che non ho potuto aprire.
+
+La prova sul pacchetto costruito serve perché il criterio dell'item è «il componente ha un nome che
+descrive ciò che disegna, e tutti i punti che lo importano sono aggiornati»: un import dimenticato
+non darebbe errore di lint, darebbe un errore a schermo solo aprendo quella pagina — che è
+precisamente ciò che qui non si può fare. Il pacchetto che si costruisce senza il vecchio nome, e
+che contiene il nuovo in entrambi i chunk, è la prova che nessun punto è rimasto indietro.
+
+### Breaker
+
+**Non aperto**, e sono due contatori distinti che vanno letti separatamente. Quello del Passo 6 —
+quello di questo prompt — vale 0: il run è un `ITEM-DONE`. Nessuno streak aperto, quindi nessuna
+durata da misurare e nessun `BREAKER: TRATTENUTO` da scrivere. Nessuna riga `escalated:` pendente da
+chiudere. Il contatore **della guardia** era a 3, ma è cosa sua e l'ha trattenuto da sé per la
+condizione di tempo, come riportato in testa a questa voce.
+
+### Conti con la guardia
+
+`--confirm-progress` eseguito **dopo** il commit, come prescrive il Passo 6: il contatore della
+guardia era a 3 su 3 e senza l'azzeramento emetterebbe un allarme «backlog fermo» falso proprio
+mentre il loop avanza. `--confirm-escalation` **non** eseguito, ed è corretto: la guardia ha stampato
+`LIBERO` più una `NOTA` di avviso trattenuto, non una riga `ESCALATION`.
+
+### Escalation al vault
+
+**Nessuna, e nessun lock preso.** Il canale verso Fabio si apre solo per breaker aperto o capolinea,
+e non siamo in nessuno dei due: restano I-8, I-9 e l'item-checkpoint. Prendere la corsia `inbox`
+senza niente da scrivere toglierebbe il giro ad altri loop della macchina.
+
+Vale la pena dirlo perché ci si avvicina: dopo I-8 e I-9 resta solo il checkpoint, che scrive
+`LOOP HALTED` e **deve** mandare la voce di capolinea. Mancano due giri.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere. `git status --porcelain` rifatto
+subito prima dell'`add` elencava **solo** i file di questo giro: nessuno scrittore concorrente.

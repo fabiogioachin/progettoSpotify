@@ -4,7 +4,7 @@ Dashboard di analisi musicale personale che va oltre Spotify Wrapped. Collega il
 
 ## Funzionalita'
 
-- **Dashboard**: KPI animati, profilo audio radar, trend temporali, distribuzione generi (treemap)
+- **Dashboard**: KPI animati, profilo audio radar, trend temporali, distribuzione generi (donut)
 - **Profilo**: obscurity score, genere DNA, decade distribution, taste map
 - **Confronto Playlist**: confronta fino a 4 playlist con grafici comparativi (popolarita', generi, audio features)
 - **Analisi Playlist**: statistiche aggregate, distribuzione dimensioni, concentrazione artisti

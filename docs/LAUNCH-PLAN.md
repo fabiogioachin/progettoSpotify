@@ -28,7 +28,7 @@ Il chart restituisce `null` e il genitore decide se mostrare o no il blocco — 
 scritta in `.claude/CLAUDE.md` («Empty sections: hide rather than showing "nessun dato
 disponibile"») e in `.claude/skills/react-spotify-patterns/SKILL.md:116`, che vieta esplicitamente
 l'empty state dentro i chart. Il comportamento è nel codice: `AudioRadar.jsx:28`,
-`GenreTreemap.jsx:37`, `MoodScatter.jsx:24`, `TrendTimeline.jsx:25`, `ListeningHeatmap.jsx:97`,
+`GenreDonut.jsx:29`, `MoodScatter.jsx:24`, `TrendTimeline.jsx:25`, `ListeningHeatmap.jsx:97`,
 `ArtistNetwork.jsx:420`, `OverlapHeatmap.jsx:27`, `PlaylistComparison.jsx:24`,
 `TasteOverlapBar.jsx:24`, `StreakDisplay.jsx:14`.
 

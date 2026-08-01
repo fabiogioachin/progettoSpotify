@@ -418,7 +418,31 @@ grigio della griglia e per quello delle etichette, ripetuti ovunque.
 **Verifica**: i colori dei grafici arrivano da `chartTheme.js` o dalle variabili CSS; cambiato
 l'accento in un solo punto, cambia in tutta l'applicazione.
 
-### I-7. `[ ]` `GenreTreemap` disegna una ciambella: il nome mente e `todo.md` risulta aperto a torto
+### I-7. `[x]` `GenreTreemap` disegna una ciambella: il nome mente e `todo.md` risulta aperto a torto
+
+> **Fatto il 2026-08-01.** Verificato **meccanicamente** (mezzo 3) e con una prova strutturale sul
+> pacchetto costruito. Il componente e il suo file sono ora `GenreDonut`; nel pacchetto costruito
+> `GenreTreemap` scende a **zero occorrenze**, il componente `Treemap` di recharts **non è mai stato
+> incluso**, e il corpo minificato porta `innerRadius:"45%"`, `outerRadius:"80%"` — una ciambella.
+> Aggiornati i 2 punti che lo importavano (`DashboardPage.jsx`, `DiscoveryPage.jsx`), più i
+> `sectionName` e i commenti che dicevano «treemap». Zero occorrenze di `Treemap` in tutto
+> `frontend/src`.
+>
+> **Trovata la data in cui il lavoro era stato fatto**, invece di dire genericamente «già fatto»:
+> commit `58e39f2` del **2026-04-03**, il cui messaggio dice «donut chart for genres». Le versioni
+> precedenti importavano davvero `Treemap` da recharts; da lì in poi no. B1 è quindi chiuso in
+> `todo.md` con la data e il commit.
+>
+> **Osservazione, senza azione**: lo stesso commit `58e39f2` dichiara anche il selettore temporale
+> unificato, il budget per-utente del ThrottleBanner col drain progressivo, e la fusione KG+Rete con
+> zoom semantico — cioè **B2, B3 e C1**, gli altri tre item aperti di `todo.md`. Un controllo veloce
+> li trova tutti e tre nel codice. Non li ho chiusi: il mandato di questo item è B1, e la decisione
+> sugli altri è di Fabio. Dettaglio in `docs/loop-last-run.md`.
+>
+> **Non toccati, e perché**: `.claude/skills/react-spotify-patterns/SKILL.md:116` nomina
+> `GenreTreemap`, ma è un file di skill e il `CLAUDE.md` globale ne vieta la modifica senza richiesta
+> esplicita — stesso caso di `EmptyState` al giro dell'item 3. `docs/RESTRUCTURING-PLAN.md:195` resta
+> com'è: è un piano concluso, riscriverlo falsificherebbe un registro storico.
 
 Il punto B1 di `.claude/tasks/todo.md:17` chiede «donut chart al posto del treemap» ed è segnato da
 fare. **Il lavoro è già stato fatto**: `GenreTreemap.jsx:54-70` disegna un `PieChart` con un raggio

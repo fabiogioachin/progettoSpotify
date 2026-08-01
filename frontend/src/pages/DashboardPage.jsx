@@ -4,7 +4,7 @@ import KPICard from '../components/cards/KPICard'
 import TrackCard from '../components/cards/TrackCard'
 import AudioRadar from '../components/charts/AudioRadar'
 import TrendTimeline from '../components/charts/TrendTimeline'
-import GenreTreemap from '../components/charts/GenreTreemap'
+import GenreDonut from '../components/charts/GenreDonut'
 import ClaudeExportPanel from '../components/export/ClaudeExportPanel'
 import PeriodSelector from '../components/ui/PeriodSelector'
 import { SkeletonKPICard, SkeletonCard } from '../components/ui/Skeleton'
@@ -236,13 +236,13 @@ export default function DashboardPage() {
         </SectionErrorBoundary>
       </div>
 
-      {/* Genre Treemap + Export */}
+      {/* Genre Donut + Export */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SectionErrorBoundary sectionName="GenreTreemap">
+        <SectionErrorBoundary sectionName="GenreDonut">
           {featuresLoading ? (
             <SkeletonCard height="h-72" />
           ) : (
-            <GenreTreemap genres={genres} />
+            <GenreDonut genres={genres} />
           )}
         </SectionErrorBoundary>
         <SectionErrorBoundary sectionName="ClaudeExportPanel">

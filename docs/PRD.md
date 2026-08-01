@@ -67,7 +67,7 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Trend features**: se audio features disponibili (da librosa), mostra trend 3 periodi. Altrimenti mostra Tempo di Ascolto
 - **Audio Radar**: radar chart 7 feature audio (da cache DB o analisi librosa on-demand con progress bar)
 - **Top 50 brani**: lista scrollabile con TrackCard
-- **Genre Treemap**: visualizzazione generi dominanti
+- **Genre Donut**: visualizzazione generi dominanti (donut chart + legenda, fino a 12 generi)
 - **Export Claude AI**: prompt strutturato con dati per analisi personalizzata
 
 ### 5.2 Evoluzione del Gusto (`/evolution`)
@@ -110,7 +110,7 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Dedup globale artisti per generi via `genre_cache` (DB 7d TTL, nessun cap)
 
 ### 5.7 Discovery (`/discovery`)
-- **Distribuzione generi** (treemap) — sempre disponibile
+- **Distribuzione generi** (donut) — sempre disponibile
 - **Distribuzione popolarità**: istogramma — nascosto quando popularity non disponibile (tutti i valori a 0)
 - **MoodScatter**: scatter plot energy×valence — visibile quando audio features disponibili (da librosa)
 - **Outliers/Hidden Gems**: 3 livelli di fallback:

@@ -15,7 +15,7 @@ const CustomTooltip = ({ active, payload }) => {
   )
 }
 
-export default function GenreTreemap({ genres, title = 'Distribuzione Generi', loading = false }) {
+export default function GenreDonut({ genres, title = 'Distribuzione Generi', loading = false }) {
   if (loading) {
     return (
       <div className="glow-card bg-surface rounded-xl p-5 animate-pulse">

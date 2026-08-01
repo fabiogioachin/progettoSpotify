@@ -14,7 +14,12 @@
 
 ## Fix/Refactor in corso
 
-- [ ] B1: Dashboard — generi: donut chart al posto del treemap (phonk 79% nascondeva gli altri generi)
+- [x] B1: Dashboard — generi: donut chart al posto del treemap (phonk 79% nascondeva gli altri generi)
+  — **già fatto il 2026-04-03 in `58e39f2`** («donut chart for genres»), mai spuntato qui. Il
+  componente disegnava un `PieChart` con `innerRadius="45%"` più una legenda che elenca fino a 12
+  generi con la percentuale, quindi un genere dominante non ne nasconde più nessuno. Restava solo
+  il nome, che diceva ancora `GenreTreemap`: rinominato in `GenreDonut` il 2026-08-01 (finding I-7
+  di `docs/LOOP-BACKLOG.md`).
 - [ ] B2: Dashboard — unificare selettore temporale (7gg/30gg/3M/Tutto per tutta la pagina, mapping a Spotify time_range)
 - [ ] B3: Dashboard — ThrottleBanner: mostrare budget effettivo per-user, drain progressivo della barra, auto-hide
 - [ ] C1: Ecosistema Artisti — fusione grafi KG + Rete con zoom semantico (KG overview, zoom-in rivela connessioni)
@@ -25,7 +30,7 @@
 
 ### Discovery page rebuild
 - Scoperte recenti: aggiungere contesto (genere, mood, trend, first_play_date, info tracce)
-- Sezioni bloccate da dev mode: mood scatter, genre treemap, outliers → valutare librosa-only
+- Sezioni bloccate da dev mode: mood scatter, genre donut, outliers → valutare librosa-only
 - Nuova musica: API Recommendations deprecata → content-based filtering da DB, Last.fm similar, nuove uscite
 - Playlist pubbliche come fonte di scoperta
 - Trend analysis dai dati DB accumulati
