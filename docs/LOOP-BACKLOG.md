@@ -1,5 +1,19 @@
 # LOOP BACKLOG — progettoWrap
 
+LOOP HALTED
+
+> **Fermato al checkpoint il 2026-08-01T17:08:37Z**, alla fine del secondo programma — non per un
+> guasto. I **9 finding** dell'ispezione frontend sono chiusi, **zero `FAILED`**, nessun
+> `BLOCKED_USER` nuovo. Da qui ogni fire esce `NOOP-HALTED` in silenzio: il loop riparte solo quando
+> **tu** togli il marcatore qui sopra.
+>
+> **Il lavoro successivo è già scritto e già approvato da te**: la sezione «PROGRAMMA: lint, piano di
+> lancio, backup e health report — STATO: APPROVATO-IN-CODA», cioè gli item 7, 8, 9 e 10. Per
+> avviarlo basta **un gesto solo**, togliere `LOOP HALTED`: non serve scrivere item nuovi. Se invece
+> vuoi che la successione avvenga da sola, va prima cablata sul launcher di questo loop, e in quel
+> caso l'item-checkpoint di fine sezione va tolto — lo spiega la sezione del secondo programma.
+> Riepilogo del giro in `docs/loop-last-run.md`.
+
 > **Secondo programma, aperto il 2026-07-30 su richiesta di Fabio: i 9 finding dell'ispezione
 > frontend.** Il marcatore `LOOP HALTED` è stato tolto da qui. Il loop riparte da **I-1** e ne fa uno
 > per giro, nell'ordine in cui stanno nella sezione «Trovati dall'ispezione»; dopo I-9 incontra un
@@ -522,7 +536,22 @@ plausibili, i dati mancanti si dichiarano mancanti.
 **Verifica**: finché non è arrivata una misura vera, l'indicatore è nascosto o dichiara di non
 avere ancora dati; non mostra uno zero che sembra misurato.
 
-### ✋ `[ ]` CHECKPOINT — i 9 finding sono chiusi: fermati qui
+### ✋ `[x]` CHECKPOINT — i 9 finding sono chiusi: fermati qui
+
+> **Eseguito il 2026-08-01T17:08:37Z.** `LOOP HALTED` scritto in testa al file, **nessun file di
+> codice toccato**. I nove finding sono chiusi, **zero `FAILED`** e nessun `BLOCKED_USER` nuovo oltre
+> ai tre già in lista (11, 12, 13). L'albero chiude verde: `npm run lint` e `npm run build` a exit 0,
+> e la suite backend è quella misurata al giro di I-9 (536 passati) su un albero backend **identico**
+> — l'ultimo commit che tocca `backend/` è `cac233f`, quattro commit prima di `HEAD`.
+>
+> **Nessun finding si è rivelato falso**, ma **quattro erano scritti a metà** e il giro che li ha
+> presi ha dovuto allargarli: I-3, I-6, I-9 e, in modo diverso, I-5. Dettaglio per finding, con il
+> mezzo di verifica usato per ciascuno, in `docs/loop-last-run.md`.
+>
+> **L'item-checkpoint è stato eseguito e non tolto**, benché la sezione del secondo programma preveda
+> di toglierlo: la condizione che lo prescrive — la successione automatica cablata su questo loop —
+> **non si è verificata**, e il canale Inbox del vault la dà ancora per non fatta. Toglierlo adesso
+> lascerebbe il loop senza freno prima che esista il meccanismo che lo sostituisce.
 
 Se stai leggendo questo item come «primo item non completato», i nove finding sopra sono chiusi o
 dichiarati `[FAILED]`. **Questo giro non implementa niente.** Fai solo questo:

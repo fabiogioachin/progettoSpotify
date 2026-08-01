@@ -2521,3 +2521,192 @@ Prendere la corsia `inbox` senza niente da scrivere toglierebbe il giro ad altri
 `git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
 A fine run: **identico**. Nessun push partito, come deve essere. `git status --porcelain` rifatto
 subito prima dell'`add` elencava **solo** i tre file di questo giro: nessuno scrittore concorrente.
+
+---
+
+## 2026-08-01 17:08 UTC — `CHECKPOINT` — item-checkpoint «i 9 finding sono chiusi: fermati qui»
+
+**Guardia** (riga integrale di output, exit code 0):
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 39 transcript scansionati, 0 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.097s su 39 transcript (soglia 1s, massimo storico 0.132s)
+         contatore: 1 fire senza progresso confermato (soglia 3)
+```
+
+`no_progress_streak`: **0** (era 0, resta 0: questo run chiude il suo item e committa, quindi produce
+un avanzamento reale). Nessuno streak aperto, quindi nessun timestamp di primo run da tenere.
+
+**Il Passo 0 in Bash è riuscito al primo colpo, e per la prima volta in dieci giri.** Le nove volte
+precedenti fallivano con exit 2 e il path a backslash mangiato
+(`...\progettoWrap\Usersfgioa.claudescriptsloop_yield.py`), e il rimedio a verbale era rieseguire in
+PowerShell. Questa volta ho passato gli stessi path **con le barre in avanti** — `C:/Users/fgioa/...`
+— e Git Bash li ha risolti senza toccarli. È il rimedio più economico dei due: non cambia shell,
+cambia solo come si scrive il path, e vale per qualunque comando di questo prompt. La lezione
+esistente resta valida, questa la restringe.
+
+### Working tree pulita all'avvio
+
+`git status --porcelain` a inizio run: **vuoto**. Nessuna decisione da prendere su lavoro altrui.
+
+### Cosa è stato fatto
+
+**Nessun file di codice toccato**, come prescrive l'item. Solo i quattro gesti del checkpoint:
+`LOOP HALTED` in testa al backlog, l'item marcato `[x]`, questa voce, e la voce di capolinea nel
+canale Inbox del vault.
+
+### Il programma, finding per finding
+
+Nove finding, **tutti chiusi**. **Zero `FAILED`** e **zero `BLOCKED_USER` nuovi**: i tre in lista
+(11, 12, 13) sono quelli di prima, mai toccati.
+
+| # | Finding | Mezzi dichiarati dal giro |
+|---|---|---|
+| I-1 | Col backend spento il login porta a una pagina bianca | **1** (dal vivo) + 3 |
+| I-2 | «Artisti unici» punta a una rotta che non esiste | 2 + 3 |
+| I-3 | «Streak» promette un dettaglio che non c'è | 2 + 3 |
+| I-4 | Privacy: esportazione e cancellazione falliscono in silenzio | 2 + 3 |
+| I-5 | Evoluzione Gusto: tre messaggi di «nessun dato» mai mostrati | 2 + 3 |
+| I-6 | La palette è centralizzata solo a metà | 3 + prova eseguita sul pacchetto |
+| I-7 | `GenreTreemap` disegna una ciambella | 3 + prova strutturale sul pacchetto |
+| I-8 | Nessuna pagina «non trovato» | **1** (dal vivo, ramo non autenticato) + 2 + 3 |
+| I-9 | L'indicatore di budget mostra «0/25» prima di misurare | 2 + 3 |
+
+**Il mezzo 1 è stato usato due volte su nove, ed è un limite del programma, non una pigrizia.** Dal
+vivo si raggiunge solo ciò che sta davanti all'autenticazione: la schermata di accesso e gli errori
+che si producono spegnendo il backend. Tutto il resto richiede `.env` e un login Spotify reale,
+**entrambi vietati al loop**. Nessun giro ha scritto «verificato dal vivo» per una pagina che non
+poteva aprire — la sezione «Trovati dall'ispezione» lo vietava per nome, ed è stato rispettato.
+
+Il mezzo 3 — `npm run lint` e `npm run build` a exit 0 — è stato eseguito da **tutti e nove** i giri.
+
+### Nessun finding falso, ma quattro erano scritti a metà
+
+È il risultato più utile del programma, e va detto perché cambia come si scrive la prossima
+ispezione. **Nessuno dei nove descriveva un difetto inesistente** — a differenza del giro di
+ispezione stesso, dove due piste su quattro furono smontate. Quattro però nominavano **meno di
+quello che c'era**, e correggerli come scritti avrebbe lasciato il difetto in piedi:
+
+- **I-3** diceva che mancava l'ancora. Vero, ma aggiungerla non bastava: un salto fatto con `<Link>`
+  non è una navigazione al frammento, quindi il browser non scorre nemmeno quando l'identificatore
+  esiste. Con solo l'ancora, la scheda avrebbe continuato a lasciare l'utente in cima alla pagina,
+  cioè il difetto descritto dall'item, intatto. Servivano due pezzi.
+- **I-6** contava 120 colori in 24 file, ma il censimento guardava dentro `src/`. Due copie
+  dell'accento vivevano **fuori** — `index.html` e `vite.config.js`, cioè la barra del browser sul
+  telefono e i colori dell'app installabile — ed erano esattamente il caso che l'item descriveva.
+- **I-9** nominava lo zero finto e non il **25**, che era finto a sua volta e in modo più insidioso:
+  coincide con una costante vera e documentata, quindi supera proprio il controllo che dovrebbe
+  smascherarlo.
+- **I-5** era scritto bene ma lasciava aperte due strade. La seconda — nascondere le colonne vuote —
+  sarebbe stata un peggioramento: tre delle quattro schede in cima alla pagina puntano a quelle
+  ancore, e sparirebbero **proprio quando** segnano 0, ricreando il difetto I-3 daccapo.
+
+**Cosa impararne per la prossima ispezione**: un finding scritto guardando il punto in cui il difetto
+si *vede* tende a nominare l'ultimo anello, non la catena. Chi lo prende deve rifare la domanda
+«basta questo?» prima di correggere, non dopo.
+
+### L'albero chiude verde
+
+| Comando | Esito | Exit |
+|---|---|---|
+| `cd frontend && npm run lint` | nessun errore | **0** |
+| `cd frontend && npm run build` | build in 8.43s, 51 entry PWA (1257.42 KiB) | **0** |
+
+**La suite backend non è stata rieseguita, ed è una scelta dichiarata, non una dimenticanza.** Il
+numero valido è quello del giro di I-9: **536 passati, 0 falliti**, exit 0, con
+`backend\.venv\Scripts\python.exe` (Python 3.12.13). Vale ancora perché l'albero backend è
+**identico**: l'ultimo commit che tocca `backend/` è `cac233f`, quattro commit prima di `HEAD`, e
+questo giro non tocca codice. Rieseguirla avrebbe misurato lo stesso albero per cinque minuti e
+mezzo. Le 51 entry PWA sono identiche ai giri di I-8 e I-9.
+
+**Limite che resta aperto, e non è mio da chiudere**: `backend-lint` in CI è rosso per 2 errori
+`ruff` pre-esistenti, segnalati fin dal giro dell'item 4. Non stanno in nessun item, perché dedurne
+di nuovi è vietato al loop.
+
+### L'item-checkpoint è stato eseguito, non tolto
+
+Va spiegato perché sembra contraddire il backlog. La sezione del secondo programma dice che quando
+la successione automatica sarà cablata su questo loop, **il checkpoint andrà tolto** — altrimenti un
+cartello di stop impedirebbe per sempre il passaggio da un programma all'altro.
+
+Quel momento **non è arrivato**. Non lo deduco dal contesto: il canale Inbox del vault lo dice per
+esteso alla voce `human:blocco0-successione-personale` del 2026-07-30, «Su progettoWrap i marcatori
+sono scritti ma INERTI: quel launcher legge ancora la lista piatta e il freno resta
+l'item-checkpoint». Togliere il checkpoint adesso lascerebbe il loop **senza freno prima che esista
+il meccanismo che lo sostituisce**: proseguirebbe dritto sul terzo programma senza che nessuno
+l'abbia deciso in quel momento. Il cartello è la scelta conservativa, ed è quella che il backlog
+prescrive oggi.
+
+### Breaker
+
+**Non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi. `no_progress_streak` vale 0
+contro una soglia di 3, quindi non c'è nessuno streak aperto di cui misurare la durata. Niente
+`BREAKER: TRATTENUTO` da scrivere — quel caso riguarda una soglia **raggiunta** con troppo poco tempo
+trascorso, e qui non è raggiunta affatto. Nessuna riga `escalated:` di breaker pendente da chiudere.
+
+### Escalation al vault: capolinea consegnato
+
+Il canale verso Fabio si apre, ed è il caso «capolinea» del Passo 7: `LOOP HALTED` l'ho scritto io,
+quindi da adesso il loop è invisibile a meno che qualcuno non lo dica. È una **transizione nuova**,
+quindi la voce va scritta anche se ne è esistita una del programma precedente.
+
+- **Corsia `inbox` presa** prima della scrittura e **rilasciata subito dopo**:
+  `acquire` → `decision: ACQUIRE_OK (exit 0)`, `note: nessun lock globale presente`;
+  `release` → `decision: RELEASE_OK (exit 0)`. Unica scrittura di questo run su stato condiviso con
+  gli altri loop della macchina.
+- **Voce scritta** in `Knowledge/Ecosystem/Inbox.md`, chiave `progetto-wrap-dev-loop:capolinea`,
+  `loop_id: progetto-wrap-dev-loop`, `first_seen` = `last_seen` = `2026-08-01T17:08:37Z`. Aggiornati
+  entrambi i punti del file, l'elenco leggibile e il blocco JSON.
+- **`first_seen` è di oggi e non del 2026-07-30**: la voce di capolinea del primo programma **non
+  c'era più**, rimossa quando la coda fu riaperta. Non è un upsert che ha perso la data, è una voce
+  nuova su una chiave libera.
+- **Consegna verificata, non assunta**: il blocco JSON è stato riletto e riparsato dopo la modifica.
+  Contiene **5 chiavi** — la mia più le quattro preesistenti
+  (`human:suite-sync-disabilitato-personale`, `human:blocco0-successione-personale`,
+  `polymarket-dev-loop:successione`, `polymarket-dev-loop:capolinea`), **intatte**. Nessuna voce di
+  altri loop toccata.
+- Nessun `ESCALATION-UNDELIVERED` e nessun `ESCALATION-DEFERRED`: il file era raggiungibile e la
+  corsia libera. Nessun ripiego su `pending-vault-notes/`, che il Passo 7 vieta.
+
+**La voce dice una cosa in più del testo prescritto, ed è il motivo per cui vale la pena leggerla.**
+Il modello del Passo 7 dice «non riparte finché non gli dai lavoro nuovo **e** non togli il
+marcatore». Qui il lavoro nuovo **c'è già**: la sezione «lint, piano di lancio, backup e health
+report» è marcata `APPROVATO-IN-CODA` da Fabio il 2026-07-30. Serve **un gesto solo**, togliere
+`LOOP HALTED` — non due come nel caso PolyMarket, dove la sezione successiva mancava. Dirlo evita che
+la voce venga letta come una richiesta di lavoro che è già stata soddisfatta.
+
+`escalated: progetto-wrap-dev-loop:capolinea @ 2026-08-01T17:08:37Z`. Si scrive **una volta sola**,
+alla transizione: i fire successivi escono `NOOP-HALTED` in silenzio e non devono riscriverla.
+
+### Conti con la guardia
+
+Eseguito `--confirm-progress` **dopo** il commit. Il contatore della guardia era a 1 su 3 e questo
+fire produce un commit, che è precisamente ciò che quel contatore misura.
+
+Va riscritta la conseguenza, perché è la stessa del checkpoint precedente e si ripresenterà: da
+adesso ogni fire esce `NOOP-HALTED` **senza** confermare progresso, quindi dopo tre fire — circa nove
+ore — la guardia emetterà un allarme «backlog fermo». Quell'allarme sarà **vero nella sostanza e
+ridondante nel canale**: il loop è fermo per scelta, e Fabio l'ha già saputo dalla voce di capolinea.
+Chi lo riceve deve leggerlo come conferma dell'halt, non come guasto nuovo.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere — questo repo non ha canale di
+pubblicazione automatica.
+
+### Per chi riapre la coda
+
+Togliere `LOOP HALTED` da `docs/LOOP-BACKLOG.md` **basta**: il primo item non completato che il loop
+troverebbe è il **7** (lint frontend), primo della sezione già approvata. Due cose da sapere prima:
+
+- **L'item 7 va corretto prima di essere preso**: dà `npm run lint` per rosso, ed è **verde** da
+  quattordici giri di fila. Di quell'item resta viva solo la parte sulle 6 soppressioni
+  `eslint-disable` da motivare una per una.
+- **Se invece vuoi la successione automatica**, va cablata sul launcher e allora l'item-checkpoint
+  di fine sezione va tolto, come spiega la sezione del secondo programma.
+
+Restano scritte, e nessun giro le ha prese perché dedurre item nuovi è vietato al loop: le **123
+classi colore di serie Tailwind** in 22 file segnalate da I-6, il seme finto di `ThrottleBanner`
+segnalato da I-9 (non visibile a schermo, quindi nessun difetto), e i **2 errori `ruff`** che tengono
+`backend-lint` rosso in CI. Sono osservazioni, non lavoro assegnato: la decisione è tua.
