@@ -208,6 +208,12 @@ Lessons that affect future tasks. Target: under 15 entries.
 **Root cause**: «Tutto» non è un numero grande, è l'assenza di un limite. Sostituirlo con un numero grande produce un difetto che non è mai un errore: la risposta resta valida, plausibile e sbagliata, e diventa visibile solo quando i dati superano il limite — cioè molto dopo che qualcuno ha smesso di guardare.
 **Action**: `_DAYS_MAP["all"] = None`, e sia il taglio degli ascolti sia la finestra dei minuti giornalieri saltano il filtro quando i giorni sono `None`. Due test di regressione con un ascolto di 500 giorni fa: incluso senza limite, escluso con una finestra di 30 giorni. Gli altri chiamanti di `compute_temporal_patterns` non passano il periodo, quindi restano sul default. Parente della lezione sul tetto mancante nella cache, stesso giorno: là mancava un limite dove serviva, qui ce n'era uno dove non doveva essercene.
 
+### 2026-08-04 — [codebase] Una classifica fedele alla fonte può essere lo stesso una risposta sbagliata alla domanda
+**Context**: La dashboard mostrava «Top 50 Brani» leggendo `/me/top/tracks` di Spotify. L'app riportava fedelmente quello che l'API restituiva, quindi nessun test poteva fallire e nessun log segnalare niente.
+**What happened**: L'utente vedeva una classifica «vecchia». Misurato: la lista «1M» aveva 3 brani su 50 in comune con quello che aveva davvero ascoltato la sera prima. Il difetto non era nel codice, era nella domanda: l'utente chiede «cosa ascolto di più», l'endpoint risponde «cosa Spotify ritiene rappresentativo del tuo profilo», e le due cose divergono perché quell'aggregato si muove lentamente.
+**Root cause**: Quando la fonte è esterna, «corretto» ha due significati che non coincidono — fedele a quello che l'API dice, e vero rispetto a quello che l'utente chiede. Il primo si verifica con un test, il secondo solo confrontando con i dati propri.
+**Action**: `GET /api/v1/library/top-played` conta gli ascolti in `recent_plays` per il periodo scelto (solo database, zero chiamate a Spotify) e alimenta la sezione principale; la classifica di Spotify resta in una seconda sezione dichiarata come sua, sull'ultimo anno — l'unica finestra che lo storico proprio non copre. Regola generale: quando l'app ha già i dati grezzi, una classifica si costruisce da quelli, e l'aggregato del fornitore si affianca dichiarando la fonte, non si spaccia per la misura.
+
 ## Archive
 Resolved or one-off entries. Not read by agents.
 

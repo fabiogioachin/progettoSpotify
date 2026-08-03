@@ -45,6 +45,17 @@ export default function TrackCard({ track, index }) {
         </p>
       </div>
 
+      {/* Quante volte l'hai ascoltato: c'e' solo nelle classifiche costruite
+          sugli ascolti registrati, non in quelle che arrivano da Spotify. */}
+      {track.play_count > 0 && (
+        <span
+          className="text-text-muted text-xs font-mono flex-shrink-0"
+          title={`${track.play_count} ascolti`}
+        >
+          {track.play_count}×
+        </span>
+      )}
+
       {/* Mini barre energia/valence */}
       {track.features && (
         <div className="flex items-center gap-2">

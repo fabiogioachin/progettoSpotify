@@ -35,6 +35,31 @@ class TopTracksResponse(BaseModel):
     time_range: str
 
 
+class PlayedTrackResponse(BaseModel):
+    """Un brano della classifica costruita sugli ascolti registrati davvero."""
+
+    id: str
+    name: str
+    artist: str
+    artist_id: str | None = None
+    album_image: str | None = None
+    popularity: int | None = None
+    duration_ms: int = 0
+    play_count: int = 0
+    total_ms: int = 0
+    first_played_at: str | None = None
+    last_played_at: str | None = None
+    features: AudioFeaturesResponse | None = None
+
+
+class TopPlayedResponse(BaseModel):
+    tracks: list[PlayedTrackResponse]
+    total: int
+    range: str
+    total_plays: int
+    first_play_date: str | None = None
+
+
 class PlaylistResponse(BaseModel):
     id: str
     name: str = ""

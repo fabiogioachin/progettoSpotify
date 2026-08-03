@@ -2,17 +2,17 @@
 
 import logging
 from collections import defaultdict
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_auth
 from app.models.listening_history import RecentPlay
-from app.schemas import TopTracksResponse
+from app.schemas import TopPlayedResponse, TopTracksResponse
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
@@ -27,6 +27,19 @@ from app.utils.rate_limiter import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/library", tags=["library"])
+
+# "all" e' None, non un numero: la classifica sugli ascolti veri non ha motivo di
+# fermarsi a una scadenza, e un tetto silenzioso taglierebbe lo storico piu' vecchio.
+_PLAYED_DAYS_MAP: dict[str, int | None] = {"7d": 7, "30d": 30, "90d": 90, "all": None}
+
+
+def _as_utc_iso(dt: datetime | None) -> str | None:
+    """Le date lette dal DB possono arrivare senza fuso: qui valgono sempre UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 @router.get("/top", response_model=TopTracksResponse)
@@ -99,6 +112,92 @@ async def get_top_tracks(
         "tracks": tracks,
         "total": data.get("total", len(tracks)),
         "time_range": time_range,
+    }
+
+
+@router.get("/top-played", response_model=TopPlayedResponse)
+async def get_top_played(
+    range: Literal["7d", "30d", "90d", "all"] = Query(default="30d"),
+    limit: int = Query(default=50, ge=1, le=100),
+    user_id: int = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Classifica dei brani costruita sugli ascolti registrati, non su Spotify.
+
+    Conta quante volte ogni brano compare in recent_plays nel periodo scelto.
+    E' una classifica di ascolti veri: due brani a pari merito si ordinano per
+    tempo totale ascoltato e poi per ultimo ascolto. Nessuna chiamata a Spotify,
+    si legge solo il database.
+    """
+    days = _PLAYED_DAYS_MAP[range]
+    filters = [RecentPlay.user_id == user_id]
+    if days is not None:
+        filters.append(
+            RecentPlay.played_at >= datetime.now(timezone.utc) - timedelta(days=days)
+        )
+
+    play_count = func.count().label("play_count")
+    result = await db.execute(
+        select(
+            RecentPlay.track_spotify_id,
+            func.max(RecentPlay.track_name).label("track_name"),
+            func.max(RecentPlay.artist_name).label("artist_name"),
+            func.max(RecentPlay.artist_spotify_id).label("artist_spotify_id"),
+            func.max(RecentPlay.duration_ms).label("duration_ms"),
+            func.coalesce(func.sum(RecentPlay.duration_ms), 0).label("total_ms"),
+            func.min(RecentPlay.played_at).label("first_played_at"),
+            func.max(RecentPlay.played_at).label("last_played_at"),
+            play_count,
+        )
+        .where(*filters)
+        .group_by(RecentPlay.track_spotify_id)
+        .order_by(play_count.desc(), desc("total_ms"), desc("last_played_at"))
+        .limit(limit)
+    )
+    rows = result.all()
+
+    tracks = [
+        {
+            "id": row.track_spotify_id,
+            "name": row.track_name,
+            "artist": row.artist_name,
+            "artist_id": row.artist_spotify_id,
+            "album_image": None,
+            "popularity": None,
+            "duration_ms": row.duration_ms or 0,
+            "play_count": row.play_count,
+            "total_ms": row.total_ms or 0,
+            "first_played_at": _as_utc_iso(row.first_played_at),
+            "last_played_at": _as_utc_iso(row.last_played_at),
+        }
+        for row in rows
+    ]
+
+    # Popularity e audio features: solo cache DB, zero chiamate a Spotify.
+    await read_popularity_cache(tracks, db)
+    features_map = await get_or_fetch_features(db, [t["id"] for t in tracks])
+    for track in tracks:
+        feat = features_map.get(track["id"])
+        if feat:
+            track["features"] = feat
+
+    # Quanti brani distinti e quanti ascolti totali ci sono nel periodo: servono
+    # a dire "50 brani su 312" invece di lasciar credere che la lista sia tutto.
+    totals = (
+        await db.execute(
+            select(
+                func.count(func.distinct(RecentPlay.track_spotify_id)),
+                func.count(),
+            ).where(*filters)
+        )
+    ).one()
+
+    return {
+        "tracks": tracks,
+        "total": totals[0],
+        "range": range,
+        "total_plays": totals[1],
+        "first_play_date": await get_first_play_date(db, user_id),
     }
 
 

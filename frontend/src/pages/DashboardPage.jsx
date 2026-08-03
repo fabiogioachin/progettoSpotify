@@ -22,11 +22,19 @@ const DASHBOARD_RANGES = [
   { value: 'all', label: 'Tutto' },
 ]
 
+// Il periodo scelto qui governa i trend, che restano una vista di Spotify.
 const RANGE_TO_SPOTIFY = {
   '7d': 'short_term',
   '30d': 'short_term',
   '90d': 'medium_term',
   'all': 'long_term',
+}
+
+const RANGE_LABEL = {
+  '7d': 'ultimi 7 giorni',
+  '30d': 'ultimi 30 giorni',
+  '90d': 'ultimi 3 mesi',
+  'all': 'da sempre',
 }
 
 export default function DashboardPage() {
@@ -38,9 +46,19 @@ export default function DashboardPage() {
   const [range, setRange] = useState('30d')
   const spotifyPeriod = RANGE_TO_SPOTIFY[range]
 
+  // Classifica di Spotify: resta, ma su un solo periodo — il suo lungo termine,
+  // cioe' l'ultimo anno circa. E' l'unica finestra che gli ascolti registrati qui
+  // non coprono, e serve come secondo parere accanto alla classifica vera.
   const { data: topData, loading: topLoading, error: topError } = useSpotifyData(
     '/api/v1/library/top',
-    { time_range: spotifyPeriod, limit: 50 }
+    { time_range: 'long_term', limit: 50 }
+  )
+
+  // Classifica costruita sugli ascolti registrati: quante volte hai davvero
+  // fatto partire ogni brano nel periodo scelto.
+  const { data: playedData, loading: playedLoading, error: playedError } = useSpotifyData(
+    '/api/v1/library/top-played',
+    { range, limit: 50 }
   )
 
   const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/v1/analytics/trends')
@@ -48,6 +66,16 @@ export default function DashboardPage() {
 
   const tracks = topData?.tracks || []
   const trends = trendsData?.current || []
+
+  // Le copertine non sono negli ascolti registrati: si prendono da quelle che
+  // Spotify ha gia' mandato, quando il brano compare in entrambe le liste.
+  const coverById = new Map(
+    tracks.filter(t => t.album_image).map(t => [t.id, t.album_image])
+  )
+  const playedTracks = (playedData?.tracks || []).map(t => ({
+    ...t,
+    album_image: t.album_image || coverById.get(t.id) || null,
+  }))
 
   // Extract features/genres from trends for the selected period (avoids a separate API call)
   const periodProfile = trends.find(t => t.period === spotifyPeriod)
@@ -79,7 +107,8 @@ export default function DashboardPage() {
   })()
 
   // KPI calculations — solo dati reali sempre disponibili
-  const trackCount = topData?.total || tracks.length || 0
+  const trackCount = playedData?.total || 0
+  const playCount = playedData?.total_plays || 0
 
   // Streak di ascolto
   const streak = temporalData?.streak?.max_streak || 0
@@ -98,7 +127,7 @@ export default function DashboardPage() {
   const topGenre = Object.keys(genres)[0] || null
   const topGenrePct = Object.values(genres)[0] || 0
 
-  const hasError = topError || trendsError
+  const hasError = topError || trendsError || playedError
 
   return (
     <>
@@ -125,13 +154,13 @@ export default function DashboardPage() {
       <SectionErrorBoundary sectionName="KPICards">
         <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <StaggerItem>
-            {topLoading ? <SkeletonKPICard /> : (
+            {playedLoading ? <SkeletonKPICard /> : (
               <KPICard
-                title="Brani analizzati"
+                title="Brani ascoltati"
                 value={trackCount}
                 icon={Music}
                 delay={0}
-                tooltip="Top brani che Spotify ha registrato per te nel periodo selezionato. Scorri in basso per vederli"
+                tooltip={`Brani diversi che hai ascoltato ${RANGE_LABEL[range]}, su ${playCount} ascolti in tutto. Scorri in basso per la classifica`}
                 link="#top-tracks"
               />
             )}
@@ -214,27 +243,63 @@ export default function DashboardPage() {
           )}
         </SectionErrorBoundary>
 
-        <SectionErrorBoundary sectionName="TopTracks">
-          {topLoading ? (
+        <SectionErrorBoundary sectionName="TopPlayed">
+          {playedLoading ? (
             <SkeletonCard height="h-72" />
           ) : (
             <div id="top-tracks" className="glow-card bg-surface rounded-xl p-5">
-              <h3 className="text-text-primary font-display font-semibold mb-4">
-                Top 50 Brani
+              <h3 className="text-text-primary font-display font-semibold">
+                I tuoi brani più ascoltati
               </h3>
-              <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
-                <StaggerContainer className="space-y-1">
-                  {tracks.slice(0, 50).map((track, i) => (
-                    <StaggerItem key={track.id}>
-                      <TrackCard track={track} index={i} />
-                    </StaggerItem>
-                  ))}
-                </StaggerContainer>
-              </div>
+              <p className="text-text-muted text-xs mb-4">
+                Contati dai tuoi ascolti registrati, {RANGE_LABEL[range]}
+                {playCount > 0 && ` · ${playCount} ascolti`}
+              </p>
+              {playedTracks.length === 0 ? (
+                <p className="text-text-secondary text-sm">
+                  Nessun ascolto registrato in questo periodo.
+                </p>
+              ) : (
+                <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+                  <StaggerContainer className="space-y-1">
+                    {playedTracks.map((track, i) => (
+                      <StaggerItem key={track.id}>
+                        <TrackCard track={track} index={i} />
+                      </StaggerItem>
+                    ))}
+                  </StaggerContainer>
+                </div>
+              )}
             </div>
           )}
         </SectionErrorBoundary>
       </div>
+
+      {/* Classifica di Spotify — periodo suo, non quello scelto sopra */}
+      <SectionErrorBoundary sectionName="TopTracks">
+        {topLoading ? (
+          <SkeletonCard height="h-72" />
+        ) : tracks.length > 0 && (
+          <div id="top-tracks-spotify" className="glow-card bg-surface rounded-xl p-5">
+            <h3 className="text-text-primary font-display font-semibold">
+              Top 50 secondo Spotify
+            </h3>
+            <p className="text-text-muted text-xs mb-4">
+              La classifica che calcola Spotify sull&apos;ultimo anno. Non conta gli
+              ascolti uno per uno e non segue il periodo scelto qui sopra.
+            </p>
+            <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+              <StaggerContainer className="space-y-1">
+                {tracks.slice(0, 50).map((track, i) => (
+                  <StaggerItem key={track.id}>
+                    <TrackCard track={track} index={i} />
+                  </StaggerItem>
+                ))}
+              </StaggerContainer>
+            </div>
+          </div>
+        )}
+      </SectionErrorBoundary>
 
       {/* Genre Donut + Export */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -36,7 +36,13 @@
   chiavi dell'utente a ogni esaurimento del budget Spotify, partendo ogni volta dal valore già
   raddoppiato. Le chiavi in Redis erano arrivate a 166 milioni di anni: la pagina serviva per sempre
   la stessa copia. Corretto il 2026-08-04 con `MAX_CACHE_TTL = 3600` e due test di regressione.
-- [ ] D3: Dashboard — «Top 50 Brani» mostra la classifica di Spotify, non quello che ascolti davvero
+- [x] D3: Dashboard — «Top 50 Brani» mostra la classifica di Spotify, non quello che ascolti davvero
+  — **Chiuso il 2026-08-04**: la sezione principale ora conta gli ascolti registrati
+  (`GET /api/v1/library/top-played`, solo database, zero chiamate a Spotify) e segue il periodo
+  scelto in alto; accanto resta una seconda sezione con la classifica di Spotify sull'ultimo anno,
+  l'unica finestra che lo storico proprio non copre. Ogni riga della prima mostra quante volte hai
+  ascoltato il brano. Le copertine si prendono dalla lista Spotify quando il brano compare in
+  entrambe, altrimenti restano vuote: recuperarle costerebbe una chiamata per brano.
   — La sezione legge `/me/top/tracks` di Spotify, che è un aggregato lento: misurato il 2026-08-04,
   la lista «1M» aveva **3 brani su 50** in comune con gli ascolti reali della sera prima. Non è un
   difetto dell'app, che riporta fedelmente quello che Spotify restituisce, ma è il motivo per cui la
