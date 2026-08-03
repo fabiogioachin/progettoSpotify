@@ -34,6 +34,14 @@ MAX_USER_SHARE_MAX = 1.00  # Ceiling: solo user gets full tier budget
 
 WINDOW_SIZE = 30  # seconds
 
+# Tetto alla scadenza delle chiavi in cache. Senza un limite ogni raddoppio parte
+# dal valore gia' raddoppiato prima: dopo una ventina di strozzature la cache non
+# scade piu' e la pagina serve per sempre la stessa copia. Visto dal vivo il
+# 2026-08-04: chiavi partite da 300 secondi arrivate a 5,26e15 secondi, cioe' 166
+# milioni di anni. Un'ora e' il punto oltre il quale servire dati piu' vecchi non
+# fa piu' risparmiare nulla che valga la pena.
+MAX_CACHE_TTL = 3600  # seconds
+
 # Redis key — same sorted set used by SpotifyClient throttle
 _REDIS_CALLS_KEY = "ratelimit:spotify:calls"
 
@@ -109,7 +117,8 @@ async def check_budget(user_id: int, priority: Priority) -> bool:
 async def extend_cache_ttl(user_id: int, multiplier: int = 2):
     """Double cache TTLs for a user when budget is tight.
 
-    Scans Redis keys matching cache:user:{user_id}:* and multiplies their TTL.
+    Scans Redis keys matching cache:user:{user_id}:* and multiplies their TTL,
+    up to MAX_CACHE_TTL. Keys already at the ceiling are left untouched.
     Fails silently on Redis errors.
     """
     try:
@@ -123,7 +132,9 @@ async def extend_cache_ttl(user_id: int, multiplier: int = 2):
             for key in keys:
                 ttl = await r.ttl(key)
                 if ttl > 0:
-                    new_ttl = ttl * multiplier
+                    new_ttl = min(ttl * multiplier, MAX_CACHE_TTL)
+                    if new_ttl <= ttl:
+                        continue  # gia' al tetto: allungare ancora non ha senso
                     await r.expire(key, new_ttl)
                     extended_count += 1
             if cursor == 0:

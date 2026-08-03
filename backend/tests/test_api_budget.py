@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.api_budget import (
+    MAX_CACHE_TTL,
     TIER_LIMITS,
     Priority,
     check_budget,
@@ -171,6 +172,37 @@ class TestExtendCacheTtl:
         assert mock_redis.expire.await_count == 2
         mock_redis.expire.assert_any_await("cache:user:1:top_tracks:abc", 240)
         mock_redis.expire.assert_any_await("cache:user:1:me:def", 600)
+
+    @pytest.mark.asyncio
+    async def test_ttl_is_capped_at_ceiling(self):
+        """Il raddoppio non supera MAX_CACHE_TTL.
+
+        Senza tetto ogni chiamata riparte dal valore gia' raddoppiato: dopo una
+        ventina di strozzature la cache non scade piu' e la pagina serve per
+        sempre la stessa copia.
+        """
+        mock_redis = AsyncMock()
+        mock_redis.scan.return_value = (0, ["cache:user:1:top_tracks:abc"])
+        mock_redis.ttl.return_value = MAX_CACHE_TTL - 100  # raddoppiando sforerebbe
+
+        with patch("app.services.api_budget.get_redis", return_value=mock_redis):
+            await extend_cache_ttl(user_id=1, multiplier=2)
+
+        mock_redis.expire.assert_awaited_once_with(
+            "cache:user:1:top_tracks:abc", MAX_CACHE_TTL
+        )
+
+    @pytest.mark.asyncio
+    async def test_key_already_at_ceiling_is_left_alone(self):
+        """Una chiave gia' al tetto non viene riscritta."""
+        mock_redis = AsyncMock()
+        mock_redis.scan.return_value = (0, ["cache:user:1:top_tracks:abc"])
+        mock_redis.ttl.return_value = MAX_CACHE_TTL
+
+        with patch("app.services.api_budget.get_redis", return_value=mock_redis):
+            await extend_cache_ttl(user_id=1, multiplier=2)
+
+        mock_redis.expire.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_skips_keys_with_no_ttl(self):
