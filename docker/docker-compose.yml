@@ -48,7 +48,14 @@ services:
       - ENVIRONMENT=development
     volumes:
       - ../backend/app:/app/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+      # Le migrazioni sono montate, non solo copiate a build time: una migrazione
+      # nuova scritta in locale deve valere al riavvio, senza ricostruire l'immagine.
+      - ../backend/alembic:/app/alembic
+    # Lo schema va applicato prima di servire. Su un volume Postgres nuovo il
+    # database parte vuoto: senza questo passo l'app si avvia "sana" e il login
+    # muore solo alla fine dell'OAuth, con un errore 500 illeggibile. Alembic e'
+    # idempotente, quindi a schema aggiornato questo e' un no-op.
+    command: sh -c "python -m alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload"
     depends_on:
       postgres:
         condition: service_healthy
