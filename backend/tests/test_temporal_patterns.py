@@ -255,6 +255,53 @@ class TestDayOfWeekBucketing:
 
 
 # ---------------------------------------------------------------------------
+# "Tutto" non deve avere un limite
+# ---------------------------------------------------------------------------
+
+class TestUnboundedRange:
+    """days=None significa tutto lo storico, senza tetto nascosto.
+
+    Il periodo "Tutto" dell'interfaccia valeva 365 giorni: oltre l'anno tagliava
+    senza dirlo, e l'etichetta prometteva il contrario.
+    """
+
+    @pytest.mark.asyncio
+    async def test_none_keeps_plays_older_than_a_year(self):
+        vecchio = datetime.now(timezone.utc) - timedelta(days=500)
+        recente = datetime.now(timezone.utc) - timedelta(hours=2)
+        items = [
+            _make_api_item(vecchio, track_id="vecchio"),
+            _make_api_item(recente, track_id="recente"),
+        ]
+
+        with patch("app.services.temporal_patterns.retry_with_backoff",
+                    side_effect=_passthrough_retry):
+            result = await compute_temporal_patterns(
+                _mock_client(items), db=None, days=None
+            )
+
+        assert result["total_plays"] == 2
+
+    @pytest.mark.asyncio
+    async def test_finite_window_still_cuts(self):
+        """Il taglio continua a valere quando un numero di giorni c'e'."""
+        vecchio = datetime.now(timezone.utc) - timedelta(days=500)
+        recente = datetime.now(timezone.utc) - timedelta(hours=2)
+        items = [
+            _make_api_item(vecchio, track_id="vecchio"),
+            _make_api_item(recente, track_id="recente"),
+        ]
+
+        with patch("app.services.temporal_patterns.retry_with_backoff",
+                    side_effect=_passthrough_retry):
+            result = await compute_temporal_patterns(
+                _mock_client(items), db=None, days=30
+            )
+
+        assert result["total_plays"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Streak in full pipeline
 # ---------------------------------------------------------------------------
 

@@ -202,6 +202,12 @@ Lessons that affect future tasks. Target: under 15 entries.
 **Root cause**: Un database vuoto ha due storie possibili — è stato svuotato, oppure non è mai stato riempito — e sono indistinguibili guardando solo il contenuto. La data di creazione del volume e il contatore delle transazioni le separano, perché misurano la *storia* del contenitore invece del suo stato.
 **Action**: (1) Davanti a una perdita di dati, prima di cercare il colpevole stabilisci se quel dato è mai passato di lì: `pg_current_xact_id()` e la data del volume rispondono in due comandi. (2) Lo script di migrazione salta le tabelle già popolate, quindi non serve più a nulla appena l'app viene usata una volta: un recupero successivo richiede un'importazione mirata che ometta la colonna `id` (altrimenti `ON CONFLICT DO NOTHING` scarta in silenzio le righe che collidono sulla chiave primaria) e che non tocchi `users` e `spotify_tokens`, per non distruggere la sessione viva.
 
+### 2026-08-04 — [codebase] Un'etichetta che promette «Tutto» su un limite finito mente senza mai sbagliare
+**Context**: Il selettore di periodo della pagina Pattern Temporali offre «7gg / 30gg / 3M / Tutto». Il backend traduceva `all` in **365 giorni**.
+**What happened**: Nessun sintomo, perché lo storico dell'utente parte da marzo 2026: un anno lo contiene tutto. Il taglio sarebbe comparso solo fra un anno, e si sarebbe manifestato come ascolti che spariscono dal totale senza che nulla cambi nell'interfaccia.
+**Root cause**: «Tutto» non è un numero grande, è l'assenza di un limite. Sostituirlo con un numero grande produce un difetto che non è mai un errore: la risposta resta valida, plausibile e sbagliata, e diventa visibile solo quando i dati superano il limite — cioè molto dopo che qualcuno ha smesso di guardare.
+**Action**: `_DAYS_MAP["all"] = None`, e sia il taglio degli ascolti sia la finestra dei minuti giornalieri saltano il filtro quando i giorni sono `None`. Due test di regressione con un ascolto di 500 giorni fa: incluso senza limite, escluso con una finestra di 30 giorni. Gli altri chiamanti di `compute_temporal_patterns` non passano il periodo, quindi restano sul default. Parente della lezione sul tetto mancante nella cache, stesso giorno: là mancava un limite dove serviva, qui ce n'era uno dove non doveva essercene.
+
 ## Archive
 Resolved or one-off entries. Not read by agents.
 

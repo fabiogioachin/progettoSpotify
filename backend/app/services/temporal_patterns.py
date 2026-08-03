@@ -6,7 +6,7 @@ Ogni volta che viene chiamato, salva i nuovi ascolti e analizza l'intero storico
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, func
@@ -40,7 +40,7 @@ async def compute_temporal_patterns(
     client: SpotifyClient,
     db: AsyncSession = None,
     user_id: int = None,
-    days: int = 30,
+    days: int | None = 30,
     user_tz: ZoneInfo | None = None,
 ) -> dict:
     """Analizza i pattern temporali dai brani ascoltati di recente.
@@ -102,9 +102,10 @@ async def compute_temporal_patterns(
                 len(api_plays),
             )
 
-    # Filter plays by time range (using user timezone for "today" boundary)
+    # Filter plays by time range (using user timezone for "today" boundary).
+    # days=None significa "tutto lo storico": nessun taglio.
     cutoff = (
-        datetime.now(tz) - timedelta(days=days) if plays else None
+        datetime.now(tz) - timedelta(days=days) if plays and days is not None else None
     )
     if cutoff:
         plays = [p for p in plays if p["datetime"] >= cutoff]
@@ -341,7 +342,7 @@ def _empty_result():
 
 
 async def _compute_daily_minutes(
-    db: AsyncSession, user_id: int, plays: list[dict], days: int = 30,
+    db: AsyncSession, user_id: int, plays: list[dict], days: int | None = 30,
     user_tz: ZoneInfo | None = None,
 ) -> list[dict]:
     """Calcola i minuti di ascolto giornalieri.
@@ -351,7 +352,8 @@ async def _compute_daily_minutes(
     """
     _tz = user_tz or ZoneInfo("UTC")
     today = datetime.now(_tz).date()
-    start_date = today - timedelta(days=days)
+    # days=None: nessun limite inferiore, si prende tutto lo storico.
+    start_date = date.min if days is None else today - timedelta(days=days)
 
     # Prova prima DailyListeningStats (pre-aggregato dal background job)
     result = await db.execute(

@@ -16,7 +16,9 @@ from app.utils.rate_limiter import RateLimitError, SpotifyAuthError, SpotifyServ
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/temporal", tags=["temporal"])
 
-_DAYS_MAP = {"7d": 7, "30d": 30, "90d": 90, "all": 365}
+# "all" e' None, non un numero: un tetto a 365 giorni avrebbe tagliato lo storico
+# piu' vecchio di un anno senza dirlo, e l'etichetta nell'interfaccia dice "Tutto".
+_DAYS_MAP: dict[str, int | None] = {"7d": 7, "30d": 30, "90d": 90, "all": None}
 
 
 @router.get("")
