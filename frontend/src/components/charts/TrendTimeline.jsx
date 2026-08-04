@@ -115,7 +115,7 @@ function ListeningTimeTrend({ dailyMinutes, temporalRange }) {
     ascolti: d.plays,
   }))
 
-  const rangeLabel = { '7d': 'ultimi 7 giorni', '30d': 'ultimi 30 giorni', '90d': 'ultimi 3 mesi', 'all': 'tutto lo storico' }
+  const rangeLabel = { '7d': 'ultimi 7 giorni', '30d': 'ultimo mese', '90d': 'ultimi 3 mesi', '1y': 'ultimo anno', 'all': 'tutto lo storico' }
 
   return (
     <div className="glow-card bg-surface rounded-xl p-5">

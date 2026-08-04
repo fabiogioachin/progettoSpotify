@@ -1,5 +1,6 @@
 """Router per dati libreria Spotify dell'utente."""
 
+import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,7 @@ from app.services.audio_analyzer import get_or_fetch_features
 from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
 from app.services.temporal_patterns import get_first_play_date
+from app.services.track_metadata import fetch_missing_images, read_track_images
 from app.utils.rate_limiter import (
     RateLimitError,
     SpotifyAuthError,
@@ -30,7 +32,13 @@ router = APIRouter(prefix="/api/v1/library", tags=["library"])
 
 # "all" e' None, non un numero: la classifica sugli ascolti veri non ha motivo di
 # fermarsi a una scadenza, e un tetto silenzioso taglierebbe lo storico piu' vecchio.
-_PLAYED_DAYS_MAP: dict[str, int | None] = {"7d": 7, "30d": 30, "90d": 90, "all": None}
+_PLAYED_DAYS_MAP: dict[str, int | None] = {
+    "7d": 7,
+    "30d": 30,
+    "90d": 90,
+    "1y": 365,
+    "all": None,
+}
 
 
 def _as_utc_iso(dt: datetime | None) -> str | None:
@@ -117,7 +125,7 @@ async def get_top_tracks(
 
 @router.get("/top-played", response_model=TopPlayedResponse)
 async def get_top_played(
-    range: Literal["7d", "30d", "90d", "all"] = Query(default="30d"),
+    range: Literal["7d", "30d", "90d", "1y", "all"] = Query(default="30d"),
     limit: int = Query(default=50, ge=1, le=100),
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
@@ -163,6 +171,7 @@ async def get_top_played(
             "artist": row.artist_name,
             "artist_id": row.artist_spotify_id,
             "album_image": None,
+            "preview_url": None,
             "popularity": None,
             "duration_ms": row.duration_ms or 0,
             "play_count": row.play_count,
@@ -173,13 +182,25 @@ async def get_top_played(
         for row in rows
     ]
 
-    # Popularity e audio features: solo cache DB, zero chiamate a Spotify.
+    # Popularity, copertine e audio features: solo cache DB, zero chiamate a Spotify.
     await read_popularity_cache(tracks, db)
-    features_map = await get_or_fetch_features(db, [t["id"] for t in tracks])
+    track_ids = [t["id"] for t in tracks]
+    features_map = await get_or_fetch_features(db, track_ids)
+    images_map = await read_track_images(db, track_ids)
     for track in tracks:
         feat = features_map.get(track["id"])
         if feat:
             track["features"] = feat
+        meta = images_map.get(track["id"])
+        if meta:
+            track["album_image"] = meta["album_image"]
+            track["preview_url"] = meta["preview_url"]
+
+    # Le copertine che mancano si recuperano dopo, una chiamata per brano: la
+    # risposta parte subito e la pagina le ritrova quando ricarica.
+    missing = [t["id"] for t in tracks if t["id"] not in images_map]
+    if missing:
+        asyncio.create_task(fetch_missing_images(user_id, missing))
 
     # Quanti brani distinti e quanti ascolti totali ci sono nel periodo: servono
     # a dire "50 brani su 312" invece di lasciar credere che la lista sia tutto.
@@ -197,6 +218,7 @@ async def get_top_played(
         "total": totals[0],
         "range": range,
         "total_plays": totals[1],
+        "images_pending": len(missing),
         "first_play_date": await get_first_play_date(db, user_id),
     }
 

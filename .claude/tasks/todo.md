@@ -41,8 +41,12 @@
   (`GET /api/v1/library/top-played`, solo database, zero chiamate a Spotify) e segue il periodo
   scelto in alto; accanto resta una seconda sezione con la classifica di Spotify sull'ultimo anno,
   l'unica finestra che lo storico proprio non copre. Ogni riga della prima mostra quante volte hai
-  ascoltato il brano. Le copertine si prendono dalla lista Spotify quando il brano compare in
-  entrambe, altrimenti restano vuote: recuperarle costerebbe una chiamata per brano.
+  ascoltato il brano. Le copertine hanno una cache permanente (`track_metadata`) riempita in
+  sottofondo, una chiamata per brano, al massimo i 50 visibili per volta: la pagina richiede la
+  lista finché non sono tutte a posto, con un segno che impedisce alle code di moltiplicarsi.
+  I periodi sono cinque (7gg / 1M / 3M / 1Y / Tutto) e si contano tutti sugli ascolti registrati;
+  la sezione di Spotify ha il suo selettore coi suoi tre nomi veri, perché tre mesi e un anno
+  Spotify non li calcola.
   — La sezione legge `/me/top/tracks` di Spotify, che è un aggregato lento: misurato il 2026-08-04,
   la lista «1M» aveva **3 brani su 50** in comune con gli ascolti reali della sera prima. Non è un
   difetto dell'app, che riporta fedelmente quello che Spotify restituisce, ma è il motivo per cui la

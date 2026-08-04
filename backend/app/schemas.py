@@ -45,6 +45,7 @@ class PlayedTrackResponse(BaseModel):
     album_image: str | None = None
     popularity: int | None = None
     duration_ms: int = 0
+    preview_url: str | None = None
     play_count: int = 0
     total_ms: int = 0
     first_played_at: str | None = None
@@ -57,6 +58,7 @@ class TopPlayedResponse(BaseModel):
     total: int
     range: str
     total_plays: int
+    images_pending: int = 0
     first_play_date: str | None = None
 
 

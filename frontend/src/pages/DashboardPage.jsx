@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Disc3, Flame, Music, Users } from 'lucide-react'
 import KPICard from '../components/cards/KPICard'
 import TrackCard from '../components/cards/TrackCard'
@@ -15,27 +15,41 @@ import SectionErrorBoundary from '../components/ui/SectionErrorBoundary'
 import { useAuth } from '../contexts/AuthContext'
 import OnboardingModal from '../components/onboarding/OnboardingModal'
 
+// Finestre esatte, contate sugli ascolti registrati. Spotify ne offre solo tre
+// e diverse da queste (4 settimane, 6 mesi, tutti i tempi): stanno nella loro
+// sezione, dove sono chiamate col loro nome.
 const DASHBOARD_RANGES = [
   { value: '7d', label: '7gg' },
-  { value: '30d', label: '30gg' },
+  { value: '30d', label: '1M' },
   { value: '90d', label: '3M' },
+  { value: '1y', label: '1Y' },
   { value: 'all', label: 'Tutto' },
 ]
 
-// Il periodo scelto qui governa i trend, che restano una vista di Spotify.
+// Il periodo scelto governa anche i trend, che restano una vista di Spotify:
+// qui si sceglie la finestra piu' vicina fra le tre che ha.
 const RANGE_TO_SPOTIFY = {
   '7d': 'short_term',
   '30d': 'short_term',
   '90d': 'medium_term',
+  '1y': 'long_term',
   'all': 'long_term',
 }
 
 const RANGE_LABEL = {
   '7d': 'ultimi 7 giorni',
-  '30d': 'ultimi 30 giorni',
+  '30d': 'ultimo mese',
   '90d': 'ultimi 3 mesi',
+  '1y': 'ultimo anno',
   'all': 'da sempre',
 }
+
+// Le uniche tre finestre che Spotify calcola, coi nomi che usa lui.
+const SPOTIFY_RANGES = [
+  { value: 'short_term', label: '4 settimane' },
+  { value: 'medium_term', label: '6 mesi' },
+  { value: 'long_term', label: 'Tutti i tempi' },
+]
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -44,22 +58,40 @@ export default function DashboardPage() {
     localStorage.getItem('wrap_onboarding_dismissed') !== 'true'
   )
   const [range, setRange] = useState('30d')
+  const [spotifyRange, setSpotifyRange] = useState('long_term')
   const spotifyPeriod = RANGE_TO_SPOTIFY[range]
 
-  // Classifica di Spotify: resta, ma su un solo periodo — il suo lungo termine,
-  // cioe' l'ultimo anno circa. E' l'unica finestra che gli ascolti registrati qui
-  // non coprono, e serve come secondo parere accanto alla classifica vera.
+  // Classifica di Spotify: resta, ma sui suoi periodi, che sono altri.
   const { data: topData, loading: topLoading, error: topError } = useSpotifyData(
     '/api/v1/library/top',
-    { time_range: 'long_term', limit: 50 }
+    { time_range: spotifyRange, limit: 50 }
   )
 
   // Classifica costruita sugli ascolti registrati: quante volte hai davvero
   // fatto partire ogni brano nel periodo scelto.
-  const { data: playedData, loading: playedLoading, error: playedError } = useSpotifyData(
-    '/api/v1/library/top-played',
-    { range, limit: 50 }
-  )
+  const {
+    data: playedData,
+    loading: playedLoading,
+    error: playedError,
+    refetch: refetchPlayed,
+  } = useSpotifyData('/api/v1/library/top-played', { range, limit: 50 })
+
+  // Le copertine mancanti arrivano in sottofondo, una chiamata per brano: si
+  // richiede la lista finche' non sono tutte a posto, senza superare i due minuti.
+  const pendingCovers = playedData?.images_pending || 0
+  useEffect(() => {
+    if (pendingCovers === 0) return
+    let attempts = 0
+    const id = setInterval(() => {
+      attempts += 1
+      if (attempts > 8) {
+        clearInterval(id)
+        return
+      }
+      refetchPlayed()
+    }, 15000)
+    return () => clearInterval(id)
+  }, [pendingCovers, refetchPlayed])
 
   const { data: trendsData, loading: trendsLoading, error: trendsError } = useSpotifyData('/api/v1/analytics/trends')
   const { data: temporalData, loading: temporalLoading } = useSpotifyData('/api/v1/temporal', { range, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
@@ -67,8 +99,8 @@ export default function DashboardPage() {
   const tracks = topData?.tracks || []
   const trends = trendsData?.current || []
 
-  // Le copertine non sono negli ascolti registrati: si prendono da quelle che
-  // Spotify ha gia' mandato, quando il brano compare in entrambe le liste.
+  // Le copertine arrivano dalla cache del backend; finche' non ci sono, si
+  // riempiono con quelle della lista Spotify quando il brano compare in entrambe.
   const coverById = new Map(
     tracks.filter(t => t.album_image).map(t => [t.id, t.album_image])
   )
@@ -254,6 +286,7 @@ export default function DashboardPage() {
               <p className="text-text-muted text-xs mb-4">
                 Contati dai tuoi ascolti registrati, {RANGE_LABEL[range]}
                 {playCount > 0 && ` · ${playCount} ascolti`}
+                {pendingCovers > 0 && ` · recupero ${pendingCovers} copertine…`}
               </p>
               {playedTracks.length === 0 ? (
                 <p className="text-text-secondary text-sm">
@@ -281,13 +314,23 @@ export default function DashboardPage() {
           <SkeletonCard height="h-72" />
         ) : tracks.length > 0 && (
           <div id="top-tracks-spotify" className="glow-card bg-surface rounded-xl p-5">
-            <h3 className="text-text-primary font-display font-semibold">
-              Top 50 secondo Spotify
-            </h3>
-            <p className="text-text-muted text-xs mb-4">
-              La classifica che calcola Spotify sull&apos;ultimo anno. Non conta gli
-              ascolti uno per uno e non segue il periodo scelto qui sopra.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <h3 className="text-text-primary font-display font-semibold">
+                  Top 50 secondo Spotify
+                </h3>
+                <p className="text-text-muted text-xs mb-4">
+                  La classifica che calcola Spotify. Non conta gli ascolti uno per uno,
+                  e ha solo queste tre finestre: per questo non segue il periodo scelto
+                  in cima alla pagina.
+                </p>
+              </div>
+              <PeriodSelector
+                value={spotifyRange}
+                onChange={setSpotifyRange}
+                options={SPOTIFY_RANGES}
+              />
+            </div>
             <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
               <StaggerContainer className="space-y-1">
                 {tracks.slice(0, 50).map((track, i) => (

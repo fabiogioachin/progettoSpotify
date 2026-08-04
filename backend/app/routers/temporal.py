@@ -18,13 +18,19 @@ router = APIRouter(prefix="/api/v1/temporal", tags=["temporal"])
 
 # "all" e' None, non un numero: un tetto a 365 giorni avrebbe tagliato lo storico
 # piu' vecchio di un anno senza dirlo, e l'etichetta nell'interfaccia dice "Tutto".
-_DAYS_MAP: dict[str, int | None] = {"7d": 7, "30d": 30, "90d": 90, "all": None}
+_DAYS_MAP: dict[str, int | None] = {
+    "7d": 7,
+    "30d": 30,
+    "90d": 90,
+    "1y": 365,
+    "all": None,
+}
 
 
 @router.get("")
 async def get_temporal_patterns(
     request: Request,
-    range: Literal["7d", "30d", "90d", "all"] = Query(default="30d"),
+    range: Literal["7d", "30d", "90d", "1y", "all"] = Query(default="30d"),
     tz: str = Query(default="UTC", alias="tz"),
     user_id: int = Depends(require_auth),
     db: AsyncSession = Depends(get_db),

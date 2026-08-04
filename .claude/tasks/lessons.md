@@ -214,6 +214,18 @@ Lessons that affect future tasks. Target: under 15 entries.
 **Root cause**: Quando la fonte è esterna, «corretto» ha due significati che non coincidono — fedele a quello che l'API dice, e vero rispetto a quello che l'utente chiede. Il primo si verifica con un test, il secondo solo confrontando con i dati propri.
 **Action**: `GET /api/v1/library/top-played` conta gli ascolti in `recent_plays` per il periodo scelto (solo database, zero chiamate a Spotify) e alimenta la sezione principale; la classifica di Spotify resta in una seconda sezione dichiarata come sua, sull'ultimo anno — l'unica finestra che lo storico proprio non copre. Regola generale: quando l'app ha già i dati grezzi, una classifica si costruisce da quelli, e l'aggregato del fornitore si affianca dichiarando la fonte, non si spaccia per la misura.
 
+### 2026-08-04 — [codebase] Una pagina che richiede i dati finché non arrivano moltiplica il lavoro che sta aspettando
+**Context**: Le copertine dei brani mancano nella cronologia e si recuperano in sottofondo, una chiamata a Spotify per brano. La pagina richiede la classifica ogni 15 secondi finché la risposta dichiara copertine mancanti.
+**What happened**: Ogni richiesta lanciava una nuova coda di recupero sugli stessi brani. Le code si sommavano contro lo stesso limite di 25 chiamate ogni 30 secondi, quindi più la pagina insisteva, meno copertine arrivavano — l'esatto contrario dell'intenzione.
+**Root cause**: Chiedere di nuovo e far ripartire il lavoro sono due cose diverse, ma nello stesso punto del codice sembrano una sola. Il difetto non si vede in una richiesta: nasce dalla ripetizione.
+**Action**: Un insieme di utenti con un riempimento già in corso in `track_metadata.py`; la seconda chiamata esce subito. Il periodo si svuota nel `finally`, così un errore non blocca l'utente per sempre. Due test: la seconda partenza non tocca Spotify, e il segno viene tolto a fine corsa. Regola: ogni lavoro in sottofondo innescato da una richiesta che si ripete ha bisogno di un segno «sto già lavorando», non di un limite di quantità.
+
+### 2026-08-04 — [codebase] I periodi di Spotify sono tre e non sono quelli che l'interfaccia vuole mostrare
+**Context**: Serviva un selettore a cinque finestre — 7 giorni, 1 mese, 3 mesi, 1 anno, tutto.
+**What happened**: Spotify calcola solo `short_term` (~4 settimane), `medium_term` (~6 mesi) e `long_term` (tutti i tempi). Tre mesi e un anno non esistono: mostrarli leggendo la finestra «più vicina» avrebbe messo un'etichetta «3M» su un aggregato di sei mesi, cioè un numero giusto sotto un nome sbagliato.
+**Root cause**: Quando la sorgente offre meno granularità dell'interfaccia, la tentazione è approssimare in silenzio. Ma un'etichetta è una promessa sul contenuto, e approssimarla non produce un errore visibile — produce un dato che nessuno può smentire guardandolo.
+**Action**: Le cinque finestre si contano sugli ascolti registrati, dove la finestra è esatta per costruzione; la classifica di Spotify vive in una sezione sua, con un selettore che usa i suoi tre nomi veri («4 settimane», «6 mesi», «Tutti i tempi»). Regola: se la sorgente non ha la finestra che vuoi mostrare, o la calcoli dai dati grezzi o la chiami col nome che ha davvero.
+
 ## Archive
 Resolved or one-off entries. Not read by agents.
 

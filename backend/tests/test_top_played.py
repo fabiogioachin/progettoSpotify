@@ -1,10 +1,12 @@
 """Test della classifica costruita sugli ascolti registrati.
 
-Copre le due cose che possono sbagliare in silenzio:
+Copre le cose che possono sbagliare in silenzio:
 - il periodo "Tutto" non deve applicare nessun taglio temporale;
-- le date lette dal DB senza fuso orario devono valere UTC, non l'ora locale.
+- le date lette dal DB senza fuso orario devono valere UTC, non l'ora locale;
+- le copertine mancanti vanno dichiarate e recuperate fuori dalla richiesta.
 """
 
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -47,23 +49,34 @@ def _make_db(rows: list, totals: tuple[int, int]) -> AsyncMock:
     return db
 
 
+def _caches(features: dict | None = None, images: dict | None = None):
+    """Le tre cache lette dall'endpoint, tutte a vuoto salvo diverso avviso."""
+    return [
+        patch("app.routers.library.read_popularity_cache", AsyncMock(return_value=0)),
+        patch(
+            "app.routers.library.get_or_fetch_features",
+            AsyncMock(return_value=features or {}),
+        ),
+        patch(
+            "app.routers.library.read_track_images",
+            AsyncMock(return_value=images or {}),
+        ),
+        patch("app.routers.library.fetch_missing_images", AsyncMock()),
+        patch(
+            "app.routers.library.get_first_play_date",
+            AsyncMock(return_value="2026-03-02"),
+        ),
+    ]
+
+
 class TestTopPlayed:
     @pytest.mark.asyncio
     async def test_counts_plays_and_reports_totals(self):
         db = _make_db([_row("t1", 44), _row("t2", 19)], (372, 639))
 
-        with (
-            patch(
-                "app.routers.library.read_popularity_cache", AsyncMock(return_value=0)
-            ),
-            patch(
-                "app.routers.library.get_or_fetch_features", AsyncMock(return_value={})
-            ),
-            patch(
-                "app.routers.library.get_first_play_date",
-                AsyncMock(return_value="2026-03-02"),
-            ),
-        ):
+        with ExitStack() as stack:
+            for p in _caches():
+                stack.enter_context(p)
             result = await get_top_played(range="all", limit=50, user_id=1, db=db)
 
         assert [t["play_count"] for t in result["tracks"]] == [44, 19]
@@ -76,17 +89,10 @@ class TestTopPlayed:
         """ "Tutto" deve leggere lo storico intero: nessun filtro sulla data."""
         assert _PLAYED_DAYS_MAP["all"] is None
 
-        with (
-            patch(
-                "app.routers.library.read_popularity_cache", AsyncMock(return_value=0)
-            ),
-            patch(
-                "app.routers.library.get_or_fetch_features", AsyncMock(return_value={})
-            ),
-            patch(
-                "app.routers.library.get_first_play_date", AsyncMock(return_value=None)
-            ),
-        ):
+        with ExitStack() as stack:
+            for p in _caches():
+                stack.enter_context(p)
+
             db_all = _make_db([], (0, 0))
             await get_top_played(range="all", limit=50, user_id=1, db=db_all)
 
@@ -97,20 +103,24 @@ class TestTopPlayed:
         assert "played_at >=" in db_week.statements[0]
 
     @pytest.mark.asyncio
+    async def test_one_year_is_a_finite_window(self):
+        assert _PLAYED_DAYS_MAP["1y"] == 365
+
+        with ExitStack() as stack:
+            for p in _caches():
+                stack.enter_context(p)
+            db = _make_db([], (0, 0))
+            await get_top_played(range="1y", limit=50, user_id=1, db=db)
+
+        assert "played_at >=" in db.statements[0]
+
+    @pytest.mark.asyncio
     async def test_naive_datetimes_are_read_as_utc(self):
         db = _make_db([_row("t1", 3, naive=True)], (1, 3))
 
-        with (
-            patch(
-                "app.routers.library.read_popularity_cache", AsyncMock(return_value=0)
-            ),
-            patch(
-                "app.routers.library.get_or_fetch_features", AsyncMock(return_value={})
-            ),
-            patch(
-                "app.routers.library.get_first_play_date", AsyncMock(return_value=None)
-            ),
-        ):
+        with ExitStack() as stack:
+            for p in _caches():
+                stack.enter_context(p)
             result = await get_top_played(range="30d", limit=50, user_id=1, db=db)
 
         assert result["tracks"][0]["last_played_at"].endswith("+00:00")
@@ -118,20 +128,34 @@ class TestTopPlayed:
     @pytest.mark.asyncio
     async def test_features_from_cache_are_attached(self):
         db = _make_db([_row("t1", 2)], (1, 2))
-        features = {"t1": {"energy": 0.8, "valence": 0.4}}
 
-        with (
-            patch(
-                "app.routers.library.read_popularity_cache", AsyncMock(return_value=0)
-            ),
-            patch(
-                "app.routers.library.get_or_fetch_features",
-                AsyncMock(return_value=features),
-            ),
-            patch(
-                "app.routers.library.get_first_play_date", AsyncMock(return_value=None)
-            ),
-        ):
+        with ExitStack() as stack:
+            for p in _caches(features={"t1": {"energy": 0.8, "valence": 0.4}}):
+                stack.enter_context(p)
             result = await get_top_played(range="30d", limit=50, user_id=1, db=db)
 
         assert result["tracks"][0]["features"]["energy"] == 0.8
+
+    @pytest.mark.asyncio
+    async def test_cached_cover_is_used_and_missing_ones_declared(self):
+        db = _make_db([_row("t1", 2), _row("t2", 1)], (2, 3))
+        images = {
+            "t1": {
+                "album": "Album",
+                "album_image": "https://img.example.com/a.jpg",
+                "preview_url": None,
+            }
+        }
+
+        with ExitStack() as stack:
+            for p in _caches(images=images):
+                stack.enter_context(p)
+            bg = stack.enter_context(
+                patch("app.routers.library.fetch_missing_images", AsyncMock())
+            )
+            result = await get_top_played(range="30d", limit=50, user_id=1, db=db)
+
+        assert result["tracks"][0]["album_image"] == "https://img.example.com/a.jpg"
+        assert result["tracks"][1]["album_image"] is None
+        assert result["images_pending"] == 1
+        bg.assert_called_once_with(1, ["t2"])

@@ -41,6 +41,27 @@ class ArtistGenre(Base):
     )
 
 
+class TrackMetadata(Base):
+    """Copertina e album di un brano.
+
+    La cronologia degli ascolti salva titolo, artista e orario, non l'immagine:
+    senza questa tabella le classifiche costruite sugli ascolti resterebbero
+    senza copertine. Non scade — la copertina di un album non cambia. La riga
+    viene scritta anche quando l'immagine manca, cosi' non si richiede due volte.
+    """
+
+    __tablename__ = "track_metadata"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    track_spotify_id = Column(String(255), unique=True, nullable=False, index=True)
+    album_name = Column(String(500), nullable=True)
+    album_image = Column(String, nullable=True)
+    preview_url = Column(String, nullable=True)
+    cached_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class TrackPopularity(Base):
     """Cache per popularity dei brani (enrichment centralizzato)."""
 
