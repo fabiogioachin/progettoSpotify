@@ -1,6 +1,9 @@
 # LOOP BACKLOG — progettoWrap
 
-LOOP HALTED
+> **Cartello tolto il 2026-08-22 su decisione di Fabio: il loop riparte dagli item 7-10**
+> (sezione «lint, piano di lancio, backup e health report», APPROVATO-IN-CODA dal 30/07). Lo stesso
+> giorno il task è stato riacceso nel registro dei lavori automatici, e il contratto del loop ha
+> ricevuto il verbale in una riga sugli esiti NOOP e il dedup delle raffiche di fire.
 
 > **Fermato al checkpoint il 2026-08-01T17:08:37Z**, alla fine del secondo programma — non per un
 > guasto. I **9 finding** dell'ispezione frontend sono chiusi, **zero `FAILED`**, nessun
