@@ -119,7 +119,11 @@ export function useWrappedTask(timeRange) {
       mountedRef.current = false
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    // Mount-only on purpose: `start` is rebuilt whenever timeRange changes, so
+    // depending on it would fire a second run for a period change that the effect
+    // below already handles — with a reset() first, which this one does not do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once at mount, period changes handled below
+  }, [])
 
   // Restart on period change
   useEffect(() => {

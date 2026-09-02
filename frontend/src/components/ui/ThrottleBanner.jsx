@@ -62,9 +62,14 @@ export function ThrottleBanner() {
     return () => clearInterval(timer)
   }, [countdown])
 
-  // Rolling countdown for sliding window reset
+  // Rolling countdown for sliding window reset.
+  // The interval must be created when the countdown starts and torn down when it
+  // reaches zero — never on every tick, or each second would restart the timer and
+  // the countdown would drift. Hence the boolean: it only flips on those two
+  // transitions. Extracted to a variable so exhaustive-deps can check it statically.
+  const isWindowCounting = windowReset > 0
   useEffect(() => {
-    if (windowReset <= 0) return
+    if (!isWindowCounting) return
     const timer = setInterval(() => {
       setWindowReset(prev => {
         const next = prev - 1
@@ -77,7 +82,7 @@ export function ThrottleBanner() {
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [windowReset > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isWindowCounting])
 
   // Determine banner state (using interpolated displayUsage for smooth drain)
   const isThrottled = countdown > 0

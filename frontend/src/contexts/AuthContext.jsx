@@ -82,7 +82,11 @@ export function AuthProvider({ children }) {
   )
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// The rule wants a file to export components only, so that Fast Refresh can swap it
+// without losing state. useAuth is the accessor for the context declared here: moving
+// it to its own file would split one concept across two, and the cost is one full
+// reload of this module when it is edited during development.
+// eslint-disable-next-line react-refresh/only-export-components -- hook kept beside its provider
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth deve essere usato dentro AuthProvider')

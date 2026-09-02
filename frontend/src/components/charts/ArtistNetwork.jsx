@@ -313,7 +313,14 @@ export default function ArtistNetwork({ nodes = [], edges = [], clusters = [], c
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
     }
-  }, [dataKey, nodeIndex, artistIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+    // The layout must restart only when the data identity changes, and dataKey is
+    // exactly that identity (sorted ids of nodes, genre nodes and genre edges).
+    // Listing nodes/genreNodes/genreEdges/edges instead would re-run on every new
+    // array identity, and the first statement of this effect cancels the running
+    // animation before the dataKey guard can bail out — the graph would freeze
+    // mid-layout on any re-render that rebuilds those arrays.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps are the data identity key by design
+  }, [dataKey, nodeIndex, artistIndex])
 
   // Zoom: wheel handler (smooth zoom toward cursor)
   const handleWheel = useCallback((e) => {

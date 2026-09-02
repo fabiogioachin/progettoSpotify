@@ -589,11 +589,22 @@ scrive il cartello di stop e sei tu a toglierlo.
 precede e ferma tutto. Diventeranno il lavoro del giro successivo — automaticamente, il giorno in
 cui la successione sarà cablata anche su questo loop.*
 
-> **Da correggere prima di prenderlo**: l'item 7 dà `npm run lint` per rosso, ma è **verde** da
-> tutti e cinque i giri del primo programma. Di quell'item resta viva solo la parte sulle 6
-> soppressioni `eslint-disable` da motivare.
+> **Corretto sul campo il 2026-09-02, chiudendo l'item 7**: l'item dava `npm run lint` per rosso,
+> ma era **verde** già dai cinque giri del primo programma. Viva era solo la parte sulle 6
+> soppressioni `eslint-disable`, che è quella che il giro ha fatto.
 
-### 7. `[ ]` Lint frontend pulito
+### 7. `[x]` Lint frontend pulito
+
+> **Fatto il 2026-09-02.** `npm run lint` esce 0 (lo faceva già), e le 6 soppressioni sono state
+> riviste una per una. **Una è sparita davvero**: `ThrottleBanner.jsx` usava l'espressione
+> `[windowReset > 0]` come dipendenza, cioè la cosa che l'item segnalava per nome. Ora quel
+> booleano ha un nome (`isWindowCounting`) e la regola lo verifica da sé: nessuna soppressione,
+> stesso comportamento a schermo. Le altre **cinque restano, e ognuna dice perché**: due lo
+> dicevano già (`useAudioAnalysis.js`), tre lo dicono da oggi (`ArtistNetwork.jsx`,
+> `useWrappedTask.js`, `AuthContext.jsx`). Nessuna delle cinque è zavorra:
+> `npx eslint . --report-unused-disable-directives` esce 0 senza segnalare nulla, quindi ciascuna
+> sta sopprimendo un errore vero. Verificato anche `npm run build` (0) e la suite backend
+> (553 passati). Dettaglio in `docs/loop-last-run.md`.
 
 `npm run lint` deve uscire senza errori, comprese le 6 soppressioni `eslint-disable` su
 `react-hooks/exhaustive-deps` da rivedere una per una (`ArtistNetwork.jsx:319`,

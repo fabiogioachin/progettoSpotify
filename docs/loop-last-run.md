@@ -2715,3 +2715,145 @@ Restano scritte, e nessun giro le ha prese perché dedurre item nuovi è vietato
 classi colore di serie Tailwind** in 22 file segnalate da I-6, il seme finto di `ThrottleBanner`
 segnalato da I-9 (non visibile a schermo, quindi nessun difetto), e i **2 errori `ruff`** che tengono
 `backend-lint` rosso in CI. Sono osservazioni, non lavoro assegnato: la decisione è tua.
+
+---
+
+## 2026-09-02 20:00 UTC — `ITEM-DONE` — item 7 «Lint frontend pulito»
+
+**Guardia**, riga integrale:
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 32 transcript scansionati, 1 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.156s su 32 transcript (soglia 1s, massimo storico 0.156s)
+         contatore: 2 fire senza progresso confermato (soglia 3), halted_fires 0
+```
+
+**Primo giro del terzo programma**, e il primo dopo la riapertura. Il cartello `LOOP HALTED` non c'è
+più in testa al backlog — l'ha tolto Fabio il 2026-08-22 col commit `1b8dc32` — quindi il Passo 1
+lascia passare, e il primo item non completato è il **7**, come la voce di capolinea del 2026-08-01
+aveva previsto.
+
+**Un mese fra questa voce e la precedente, e non è un buco.** L'ultima voce è del 2026-08-01: da
+allora il loop era fermo per ordine, e i quattro commit che stanno in mezzo (`70be618`, `5cdfc9b`,
+`1c47e68`, `354bcc9`) non sono suoi, sono lavoro fatto a mano da Fabio. Il contatore della guardia
+dice `2 fire senza progresso confermato`: sono i due fire che hanno trovato il cartello e sono
+usciti in silenzio.
+
+### Che cosa chiedeva l'item, e che cosa era già vero
+
+L'item dava `npm run lint` per rosso. **È verde, e lo era già**: misurato prima di toccare qualsiasi
+cosa, `npm run lint` esce 0. Il backlog lo diceva da sé in una nota sopra l'item, scritta da un giro
+precedente; quella nota è stata riscritta al passato, perché adesso è storia e non più un
+avvertimento.
+
+Restava viva la seconda metà: **le 6 soppressioni `eslint-disable`, da rivedere una per una**, con
+l'alternativa posta dall'item — o la soppressione ha una motivazione scritta accanto, o si corregge
+la dipendenza.
+
+### L'unica che era un difetto vero, ed è stata corretta
+
+`frontend/src/components/ui/ThrottleBanner.jsx:80` usava **un'espressione al posto di una
+dipendenza**: `}, [windowReset > 0])`. È il caso che l'item citava per nome, ed è l'unico dei sei in
+cui la soppressione copriva qualcosa di sistemabile.
+
+Il motivo per cui era scritta così è sensato: quell'effetto tiene un cronometro che scala di un
+secondo alla volta, e **non deve ricostruirsi a ogni tick** — se lo facesse, il cronometro
+ripartirebbe da capo ogni secondo e il conto alla rovescia deriverebbe. Passando il booleano invece
+del numero, l'effetto si ricostruisce solo alle due transizioni che contano: quando il conto parte e
+quando arriva a zero. Il difetto non era l'intenzione, era la forma: la regola non sa verificare
+un'espressione calcolata dentro l'elenco delle dipendenze, e per questo protestava.
+
+La correzione è dare un nome a quel booleano:
+
+```js
+const isWindowCounting = windowReset > 0
+useEffect(() => {
+  if (!isWindowCounting) return
+  ...
+}, [isWindowCounting])
+```
+
+Ora la regola lo verifica da sé e **la soppressione è sparita**. Il comportamento a schermo è lo
+stesso: il valore dentro l'effetto si aggiorna con la forma `setWindowReset(prev => ...)`, che non
+legge il valore vecchio dalla chiusura, quindi toglierlo dalle dipendenze non introduce nessun dato
+stantio. Da 6 soppressioni a **5**.
+
+### Le cinque che restano, e perché restano
+
+Nessuna delle altre cinque si può togliere correggendo la dipendenza senza rompere qualcosa. Due
+avevano già la motivazione scritta, tre l'hanno da oggi:
+
+| Dove | Perché resta |
+|---|---|
+| `ArtistNetwork.jsx:322` | Il grafo si ridà la forma solo quando cambia **l'identità dei dati**, e `dataKey` è esattamente quella. Mettere invece gli array nelle dipendenze farebbe ripartire il calcolo a ogni loro nuova identità — e la **prima riga** dell'effetto annulla l'animazione in corso **prima** che la guardia su `dataKey` possa fermarlo: il grafo si congelerebbe a metà disposizione. Motivazione aggiunta oggi. |
+| `useWrappedTask.js:125` | Deve girare **una volta sola all'avvio**. La funzione che chiama viene ricostruita quando cambia il periodo, quindi metterla fra le dipendenze farebbe partire un secondo giro per un cambio di periodo che **l'effetto subito sotto già gestisce** — e quello, a differenza di questo, azzera prima lo stato. Motivazione aggiunta oggi. |
+| `AuthContext.jsx:89` | Regola diversa dalle altre (`react-refresh/only-export-components`, non `exhaustive-deps`). Vuole che un file esporti solo componenti, per non perdere lo stato durante lo sviluppo. Qui l'accessorio al contesto sta accanto al contesto a cui accede: separarli spezzerebbe un concetto solo in due file, e il prezzo è una ricarica in più del modulo mentre lo si modifica. Motivazione aggiunta oggi. |
+| `useAudioAnalysis.js:108` | Già motivata («stabilized via trackIdsKey») e **la motivazione è vera**: alla riga 32, `trackIdsKey` è la stringa degli id costruita da `tracks`. Lasciata com'era. |
+| `useAudioAnalysis.js:122` | Già motivata («trackIds changes captured via startAnalysis») e vera: `startAnalysis` è fra le dipendenze e porta con sé `trackIdsKey`. Lasciata com'era. |
+
+### La verifica che l'item non chiedeva, e senza la quale il criterio è vuoto
+
+Il criterio dell'item è «ogni `eslint-disable` residuo ha il perché nel commento». Preso alla
+lettera, si soddisfa scrivendo cinque commenti — **anche sotto una soppressione che non sopprime più
+niente**: una motivazione elegante per un problema che non esiste. La configurazione del progetto non
+aiuta a scoprirlo, perché `eslint.config.js` non attiva il controllo delle soppressioni inutili, che
+resterebbero quindi mute.
+
+Perciò è stato misurato a parte: `npx eslint . --report-unused-disable-directives` esce **0 senza
+stampare nulla**, cioè tutte e cinque stanno davvero coprendo una segnalazione reale. È anche la
+controprova che la sesta andava tolta e non motivata.
+
+### Comandi e esiti
+
+| Comando | Esito |
+|---|---|
+| `npm run lint` (prima di toccare) | **exit 0** — già verde, come il backlog sospettava |
+| `npm run lint` (dopo) | **exit 0** |
+| `npx eslint . --report-unused-disable-directives` | **exit 0**, nessuna segnalazione: le 5 soppressioni sono tutte necessarie |
+| `npm run build` | **exit 0**, «built in 16.39s», 2731 moduli trasformati |
+| `pytest -q` (backend) | **exit 0** — `553 passed, 23 warnings in 254.16s` |
+
+Interprete backend dichiarato: quello del venv di progetto,
+`backend\.venv\Scripts\python.exe`, Python 3.12.13. Il backend non è stato toccato da questo item:
+la suite è girata come controprova di non regressione, non come verifica dell'item.
+
+Nessun test frontend eseguito perché **non esiste una suite frontend**: `package.json` non ha script
+`test` e non dichiara né vitest né jest. Gli strumenti di verifica del frontend sono `lint` e
+`build`, ed entrambi sono girati. Detto esplicitamente per non far leggere l'assenza come una
+dimenticanza.
+
+### Una cosa cambiata a schermo, e come si controlla
+
+La modifica a `ThrottleBanner` non è cosmetica: tocca il cronometro dell'indicatore di budget API.
+**Non è stata guardata dal vivo**, perché quel pannello compare solo dietro il login, e il login vero
+richiede credenziali Spotify reali che questo loop ha divieto di usare (è l'item 11,
+`BLOCKED_USER`). L'equivalenza è argomentata sul codice, qui sopra, non osservata: chi avrà
+l'ambiente acceso può confermarla in trenta secondi, guardando che il conto alla rovescia scali di
+un secondo per volta senza saltare.
+
+### `no_progress_streak`
+
+**0** (era 0, e resta 0: questo run chiude il suo item e committa).
+
+**BREAKER: non aperto**, e nessuna delle due condizioni del Passo 6 è in piedi — lo streak è 0,
+quindi la prima soglia non è nemmeno avvicinata.
+
+### Conti con la guardia
+
+`--confirm-progress` eseguito **dopo** il commit: questo run produce un commit, che è esattamente ciò
+che quel contatore misura. Il contatore era a 2 su 3, cioè a un fire dall'allarme — i due fire del
+periodo di halt — e questo giro lo azzera. Senza quella conferma, il prossimo fire avrebbe fatto
+suonare un allarme «backlog fermo» falso, su un loop appena tornato a produrre.
+
+### Remoto
+
+`git rev-parse @{u}` a inizio run: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`.
+A fine run: **identico**. Nessun push partito, come deve essere.
+
+### Che cosa trova il prossimo giro
+
+Il primo item non completato è l'**8**, «Allineare LAUNCH-PLAN a ciò che esiste davvero». Dopo
+restano il 9 (script di backup) e il 10 (health report), e poi **un altro checkpoint non c'è**:
+questa sezione non ne ha uno. Dopo il 10 il loop incontrerà solo item `BLOCKED_USER`, li salterà
+tutti e uscirà `NOOP-NOTHING-TO-DO` scrivendo `LOOP HALTED` da sé. Vale la pena saperlo prima: quel
+giro lì chiuderà la coda senza chiedere permesso, ed è il comportamento previsto dal contratto.
