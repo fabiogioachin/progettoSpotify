@@ -76,6 +76,21 @@ export default function DashboardPage() {
     refetch: refetchPlayed,
   } = useSpotifyData('/api/v1/library/top-played', { range, limit: 50 })
 
+  // Gli stessi brani, riordinati per quanto li ascolta il mondo. Segue il
+  // periodo scelto in cima, perche' l'insieme di partenza sono i tuoi ascolti.
+  const {
+    data: globalPopularData,
+    loading: globalPopularLoading,
+  } = useSpotifyData('/api/v1/library/top-global-popular', { range, limit: 50 })
+
+  // La classifica mondiale vera. Non prende `range`: nessuna fonte pubblica una
+  // classifica mondiale "di tre mesi fa", quindi la card dichiara la sua data
+  // invece di fingere di seguire il selettore in cima alla pagina.
+  const {
+    data: globalChartData,
+    loading: globalChartLoading,
+  } = useSpotifyData('/api/v1/library/top-global', { limit: 50 })
+
   // Le copertine mancanti arrivano in sottofondo, una chiamata per brano: si
   // richiede la lista finche' non sono tutte a posto, senza superare i due minuti.
   const pendingCovers = playedData?.images_pending || 0
@@ -108,6 +123,29 @@ export default function DashboardPage() {
     ...t,
     album_image: t.album_image || coverById.get(t.id) || null,
   }))
+
+  const globalPopularTracks = (globalPopularData?.tracks || []).map(t => ({
+    ...t,
+    album_image: t.album_image || coverById.get(t.id) || null,
+  }))
+  // Card vuota = card nascosta. Il numero di colonne si conta sulle card che
+  // hanno davvero dati: una griglia fissa lascerebbe un buco quando la
+  // popolarita' non e' ancora in cache.
+  const globalPopularMissing = globalPopularData?.popularity_missing || 0
+
+  const globalChartTracks = globalChartData?.tracks || []
+  // Card vuota = card nascosta: finche' la chiave Last.fm non c'e', o finche'
+  // il primo rinfresco non e' arrivato, la card non occupa spazio.
+  const showGlobalChart = globalChartLoading || globalChartTracks.length > 0
+  const globalChartUpdatedAt = globalChartData?.updated_at
+    ? new Date(globalChartData.updated_at).toLocaleDateString('it-IT', {
+        day: 'numeric', month: 'long', year: 'numeric',
+      })
+    : null
+  const showGlobalPopular = globalPopularLoading || globalPopularTracks.length > 0
+  const rankingGridCols = showGlobalPopular
+    ? 'grid-cols-1 lg:grid-cols-3'
+    : 'grid-cols-1 lg:grid-cols-2'
 
   // Extract features/genres from trends for the selected period (avoids a separate API call)
   const periodProfile = trends.find(t => t.period === spotifyPeriod)
@@ -252,8 +290,8 @@ export default function DashboardPage() {
         )}
       </SectionErrorBoundary>
 
-      {/* Radar + Top Tracks — 2 columns, each independent */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Radar + le due classifiche — colonne contate sulle card con dati */}
+      <div className={`grid ${rankingGridCols} gap-4`}>
         <SectionErrorBoundary sectionName="AudioRadar">
           {featuresLoading ? (
             <SkeletonCard height="h-72" />
@@ -306,7 +344,72 @@ export default function DashboardPage() {
             </div>
           )}
         </SectionErrorBoundary>
+
+        {showGlobalPopular && (
+          <SectionErrorBoundary sectionName="TopGlobalPopular">
+            {globalPopularLoading ? (
+              <SkeletonCard height="h-72" />
+            ) : (
+              <div id="top-global-popular" className="glow-card bg-surface rounded-xl p-5">
+                <h3 className="text-text-primary font-display font-semibold">
+                  Popolari nel mondo, fra i tuoi
+                </h3>
+                <p className="text-text-muted text-xs mb-4">
+                  I tuoi brani {RANGE_LABEL[range]}, ordinati per quanto li ascolta
+                  il mondo secondo Spotify
+                  {globalPopularMissing > 0 && ` · ${globalPopularMissing} senza dato, esclusi`}
+                </p>
+                <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+                  <StaggerContainer className="space-y-1">
+                    {globalPopularTracks.map((track, i) => (
+                      <StaggerItem key={track.id}>
+                        <TrackCard track={track} index={i} />
+                      </StaggerItem>
+                    ))}
+                  </StaggerContainer>
+                </div>
+              </div>
+            )}
+          </SectionErrorBoundary>
+        )}
       </div>
+
+      {/* Classifica mondiale — non segue il periodo, e lo dichiara */}
+      {showGlobalChart && (
+        <SectionErrorBoundary sectionName="TopGlobal">
+          {globalChartLoading ? (
+            <SkeletonCard height="h-72" />
+          ) : (
+            <div id="top-global" className="glow-card bg-surface rounded-xl p-5">
+              <h3 className="text-text-primary font-display font-semibold">
+                I brani più ascoltati nel mondo
+              </h3>
+              <p className="text-text-muted text-xs mb-4">
+                La classifica mondiale di Last.fm
+                {globalChartUpdatedAt && `, aggiornata al ${globalChartUpdatedAt}`}.
+                Non segue il periodo scelto in cima alla pagina: una classifica
+                mondiale esiste solo al presente.
+              </p>
+              <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">
+                <StaggerContainer className="space-y-1">
+                  {globalChartTracks.map((track, i) => (
+                    <StaggerItem key={`${track.rank}-${track.name}`}>
+                      <TrackCard
+                        track={{
+                          name: track.name,
+                          artist: track.artist,
+                          album_image: track.image,
+                        }}
+                        index={i}
+                      />
+                    </StaggerItem>
+                  ))}
+                </StaggerContainer>
+              </div>
+            </div>
+          )}
+        </SectionErrorBoundary>
+      )}
 
       {/* Classifica di Spotify — periodo suo, non quello scelto sopra */}
       <SectionErrorBoundary sectionName="TopTracks">
@@ -320,9 +423,9 @@ export default function DashboardPage() {
                   Top 50 secondo Spotify
                 </h3>
                 <p className="text-text-muted text-xs mb-4">
-                  La classifica che calcola Spotify. Non conta gli ascolti uno per uno,
-                  e ha solo queste tre finestre: per questo non segue il periodo scelto
-                  in cima alla pagina.
+                  La classifica che Spotify calcola <strong>per te</strong>: e' personale,
+                  non mondiale. Non conta gli ascolti uno per uno, e ha solo queste tre
+                  finestre: per questo non segue il periodo scelto in cima alla pagina.
                 </p>
               </div>
               <PeriodSelector

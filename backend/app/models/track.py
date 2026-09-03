@@ -73,3 +73,54 @@ class TrackPopularity(Base):
     cached_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class GlobalChartEntry(Base):
+    """La classifica mondiale, una riga per posizione.
+
+    Non ha colonna utente per scelta: il dato e' identico per chiunque apra la
+    pagina, e tenerne una copia per utente moltiplicherebbe le chiamate verso
+    Last.fm senza aggiungere nulla. La tabella si riscrive per intero a ogni
+    aggiornamento riuscito.
+    """
+
+    __tablename__ = "global_chart_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rank = Column(Integer, nullable=False, index=True)
+    track_name = Column(String(500), nullable=False)
+    artist_name = Column(String(500), nullable=False)
+    playcount = Column(Integer, nullable=True)
+    listeners = Column(Integer, nullable=True)
+    image = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    source = Column(String(32), nullable=False, default="lastfm")
+    fetched_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+
+
+class TrackWorldPlaycount(Base):
+    """Quante volte il mondo ha ascoltato un brano, secondo Last.fm.
+
+    Prende il posto di `track_popularity`, che resta vuota perche' Spotify in
+    dev mode non restituisce piu' il campo `popularity`. La chiave e' la coppia
+    artista+titolo normalizzata, non l'id Spotify: Last.fm non conosce gli id
+    di Spotify, e lo stesso brano puo' arrivare con id diversi da album diversi.
+    """
+
+    __tablename__ = "track_world_playcount"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lookup_key = Column(String(512), unique=True, nullable=False, index=True)
+    artist_name = Column(String(500), nullable=False)
+    track_name = Column(String(500), nullable=False)
+    playcount = Column(Integer, nullable=True)
+    cached_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )

@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_auth
 from app.models.listening_history import RecentPlay
-from app.schemas import TopPlayedResponse, TopTracksResponse
+from app.schemas import (
+    TopGlobalPopularResponse,
+    TopGlobalResponse,
+    TopPlayedResponse,
+    TopTracksResponse,
+)
+from app.services import global_chart_cache, lastfm_client
 from app.services.audio_analyzer import get_or_fetch_features
 from app.services.popularity_cache import read_popularity_cache
 from app.services.spotify_client import SpotifyClient
@@ -220,6 +226,162 @@ async def get_top_played(
         "total_plays": totals[1],
         "images_pending": len(missing),
         "first_play_date": await get_first_play_date(db, user_id),
+    }
+
+
+@router.get("/top-global-popular", response_model=TopGlobalPopularResponse)
+async def get_top_global_popular(
+    range: Literal["7d", "30d", "90d", "1y", "all"] = Query(default="30d"),
+    limit: int = Query(default=50, ge=1, le=100),
+    user_id: int = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """I brani che ascolti tu, riordinati per quanto li ascolta il mondo.
+
+    Non e' la classifica mondiale: e' la tua lista pesata col metro del mondo.
+    Segue il periodo scelto in cima alla dashboard, perche' l'insieme di
+    partenza sono i tuoi ascolti in quel periodo.
+
+    Il metro e' il numero di ascolti mondiali che Last.fm pubblica per ogni
+    brano. Non e' piu' l'indice di popolarita' di Spotify perche' quel campo in
+    dev mode non esiste piu': non arriva a zero, proprio non compare fra le
+    chiavi della risposta (verificato il 03/09/2026, vedi
+    `.claude/tasks/plan-global-top-tracks/GATE-2-RESULT.md`).
+
+    Dentro la richiesta si legge solo il database. I brani che la cache non ha
+    ancora pesato restano fuori dalla classifica invece di entrarci con uno
+    zero inventato — quanti sono lo dice `popularity_missing` — e vengono
+    chiesti a Last.fm da un task in sottofondo, che nessuno attende.
+    """
+    days = _PLAYED_DAYS_MAP[range]
+    filters = [RecentPlay.user_id == user_id]
+    if days is not None:
+        filters.append(
+            RecentPlay.played_at >= datetime.now(timezone.utc) - timedelta(days=days)
+        )
+
+    play_count = func.count().label("play_count")
+    result = await db.execute(
+        select(
+            RecentPlay.track_spotify_id,
+            func.max(RecentPlay.track_name).label("track_name"),
+            func.max(RecentPlay.artist_name).label("artist_name"),
+            func.max(RecentPlay.artist_spotify_id).label("artist_spotify_id"),
+            func.max(RecentPlay.duration_ms).label("duration_ms"),
+            func.coalesce(func.sum(RecentPlay.duration_ms), 0).label("total_ms"),
+            func.min(RecentPlay.played_at).label("first_played_at"),
+            func.max(RecentPlay.played_at).label("last_played_at"),
+            play_count,
+        )
+        .where(*filters)
+        .group_by(RecentPlay.track_spotify_id)
+    )
+    rows = result.all()
+
+    candidates = [
+        {
+            "id": row.track_spotify_id,
+            "name": row.track_name,
+            "artist": row.artist_name,
+            "artist_id": row.artist_spotify_id,
+            "album_image": None,
+            "preview_url": None,
+            "popularity": None,
+            "duration_ms": row.duration_ms or 0,
+            "play_count": row.play_count,
+            "total_ms": row.total_ms or 0,
+            "first_played_at": _as_utc_iso(row.first_played_at),
+            "last_played_at": _as_utc_iso(row.last_played_at),
+        }
+        for row in rows
+    ]
+
+    # Solo cache DB, zero chiamate dentro la richiesta: e' il senso della card.
+    pairs = [(t["artist"], t["name"]) for t in candidates if t["artist"] and t["name"]]
+    playcounts = await global_chart_cache.read_world_playcounts(db, pairs)
+
+    ranked = []
+    for track in candidates:
+        key = global_chart_cache.lookup_key(track["artist"], track["name"])
+        world = playcounts.get(key)
+        if world is None:
+            continue
+        track["world_playcount"] = world
+        ranked.append(track)
+    popularity_missing = len(candidates) - len(ranked)
+
+    # A pari peso mondiale vince chi ascolti di piu': cosi' l'ordine resta
+    # stabile invece di dipendere da come il database ha restituito le righe.
+    ranked.sort(
+        key=lambda t: (t["world_playcount"], t["play_count"], t["total_ms"]),
+        reverse=True,
+    )
+    tracks = ranked[:limit]
+
+    # I brani che Last.fm non ha ancora pesato si chiedono dopo, fuori dalla
+    # richiesta: la risposta parte subito e il prossimo caricamento li trova.
+    missing_pairs = [
+        (t["artist"], t["name"])
+        for t in candidates
+        if global_chart_cache.lookup_key(t["artist"], t["name"]) not in playcounts
+        and t["artist"]
+        and t["name"]
+    ]
+    if missing_pairs:
+        asyncio.create_task(global_chart_cache.fetch_missing_playcounts(missing_pairs))
+
+    track_ids = [t["id"] for t in tracks]
+    features_map = await get_or_fetch_features(db, track_ids)
+    images_map = await read_track_images(db, track_ids)
+    for track in tracks:
+        feat = features_map.get(track["id"])
+        if feat:
+            track["features"] = feat
+        meta = images_map.get(track["id"])
+        if meta:
+            track["album_image"] = meta["album_image"]
+            track["preview_url"] = meta["preview_url"]
+
+    return {
+        "tracks": tracks,
+        "total": len(ranked),
+        "range": range,
+        "popularity_missing": popularity_missing,
+        "source": "lastfm_playcount",
+    }
+
+
+@router.get("/top-global", response_model=TopGlobalResponse)
+async def get_top_global(
+    limit: int = Query(default=50, ge=1, le=50),
+    user_id: int = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """La classifica mondiale vera, da Last.fm.
+
+    Non ha un parametro di periodo, e non e' una dimenticanza: nessuna fonte
+    pubblica una classifica mondiale "di novanta giorni fa". Chi la mostra deve
+    dire a quando si riferisce, ed e' il senso di `updated_at`.
+
+    La richiesta non aspetta mai Last.fm. Se la cache e' vuota o vecchia, parte
+    un task in sottofondo e la risposta esce subito con quello che c'e': la
+    prima volta niente, dal caricamento successivo la classifica. Se il
+    rinfresco fallisce si continua a servire l'ultimo dato buono, con la sua
+    data vera, invece di far sparire la card.
+    """
+    chart, fetched_at = await global_chart_cache.read_chart(db)
+
+    if global_chart_cache.is_stale(fetched_at):
+        # Il task ha una sessione DB propria: quella dell'handler viene chiusa
+        # appena la risposta parte, cosa che qui accade apposta subito.
+        asyncio.create_task(global_chart_cache.refresh_chart_detached())
+
+    return {
+        "tracks": chart[:limit],
+        "total": len(chart),
+        "updated_at": fetched_at.isoformat() if fetched_at else None,
+        "source": "lastfm",
+        "configured": lastfm_client.is_configured(),
     }
 
 

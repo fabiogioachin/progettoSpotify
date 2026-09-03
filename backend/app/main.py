@@ -1035,6 +1035,19 @@ async def health_detailed(request: Request):
     current_calls, window_reset = await SpotifyClient.get_window_usage()
     max_calls = SpotifyClient._MAX_CALLS_PER_WINDOW
 
+    # Da quante ore la classifica mondiale non si aggiorna. Senza questo numero
+    # un rinfresco fermo da giorni resterebbe invisibile: la card continuerebbe
+    # a mostrare il dato vecchio, che e' il comportamento voluto ma va sorvegliato.
+    try:
+        from app.services import global_chart_cache, lastfm_client
+
+        async with async_session() as session:
+            chart_age = await global_chart_cache.chart_age_hours(session)
+        chart_configured = lastfm_client.is_configured()
+    except Exception:
+        chart_age = None
+        chart_configured = False
+
     status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
     return {
         "status": status,
@@ -1046,6 +1059,10 @@ async def health_detailed(request: Request):
             "calls_in_window": current_calls,
             "max_calls": max_calls,
             "window_reset_seconds": window_reset,
+        },
+        "global_chart": {
+            "configured": chart_configured,
+            "age_hours": chart_age,
         },
     }
 

@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Optional: RapidAPI key for audio features fallback (tracks without preview_url)
     rapidapi_key: str = ""
 
+    # Chiave Last.fm: e' l'unica fonte rimasta per la classifica mondiale e per
+    # quanto il mondo ascolta un brano. Spotify in dev mode non da' ne' l'una
+    # ne' l'altra. Senza chiave le due card restano semplicemente nascoste.
+    lastfm_api_key: str = ""
+
     # Token encryption key (derived from session_secret + encryption_salt)
     @property
     def encryption_key(self) -> bytes:

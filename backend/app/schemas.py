@@ -51,6 +51,9 @@ class PlayedTrackResponse(BaseModel):
     first_played_at: str | None = None
     last_played_at: str | None = None
     features: AudioFeaturesResponse | None = None
+    # Quante volte il mondo ha ascoltato il brano (Last.fm). Assente quando
+    # nessuno l'ha ancora chiesto: mai zero al posto di "non lo so".
+    world_playcount: int | None = None
 
 
 class TopPlayedResponse(BaseModel):
@@ -60,6 +63,47 @@ class TopPlayedResponse(BaseModel):
     total_plays: int
     images_pending: int = 0
     first_play_date: str | None = None
+
+
+class TopGlobalPopularResponse(BaseModel):
+    """I brani che l'utente ascolta, riordinati per peso mondiale.
+
+    Non e' una classifica mondiale: e' quanto il mondo ascolta cio' che ascolti
+    tu. La classifica mondiale vera sta in TopGlobalResponse.
+    """
+
+    tracks: list[PlayedTrackResponse]
+    total: int
+    range: str
+    popularity_missing: int = 0
+    source: str = "lastfm_playcount"
+
+
+class GlobalChartTrack(BaseModel):
+    """Una posizione della classifica mondiale."""
+
+    rank: int
+    name: str
+    artist: str
+    playcount: int | None = None
+    listeners: int | None = None
+    image: str | None = None
+    url: str | None = None
+
+
+class TopGlobalResponse(BaseModel):
+    """La classifica mondiale vera, con la data a cui si riferisce.
+
+    `updated_at` non e' un dettaglio: questa classifica non segue il periodo
+    scelto in dashboard, e senza la sua data non si distinguerebbe il dato di
+    oggi da uno fermo da una settimana.
+    """
+
+    tracks: list[GlobalChartTrack]
+    total: int
+    updated_at: str | None = None
+    source: str = "lastfm"
+    configured: bool = True
 
 
 class PlaylistResponse(BaseModel):

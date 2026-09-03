@@ -342,6 +342,25 @@ async def _sync_user_recent_plays(
                 user_id,
                 exc,
             )
+
+        # Classifica mondiale: si aggancia a questo giro invece di avere un job
+        # suo. Non serve il token dell'utente — Last.fm ha una chiave propria —
+        # ma serve un momento ricorrente in cui qualcuno passi di qui. Il lock
+        # condiviso fa si' che con piu' utenti il lavoro lo faccia uno solo.
+        try:
+            from app.services.global_chart_cache import (
+                is_stale,
+                read_chart,
+                refresh_chart,
+            )
+
+            _, fetched_at = await read_chart(db)
+            if is_stale(fetched_at):
+                await refresh_chart(db)
+        except Exception as exc:
+            logger.warning(
+                "Background sync: classifica mondiale non aggiornata: %s", exc
+            )
     finally:
         if owns_client:
             await client.close()
