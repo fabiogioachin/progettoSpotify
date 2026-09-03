@@ -22,14 +22,23 @@
   di `docs/LOOP-BACKLOG.md`).
 - [ ] B2: Dashboard — unificare selettore temporale (7gg/30gg/3M/Tutto per tutta la pagina, mapping a Spotify time_range)
 - [ ] B3: Dashboard — ThrottleBanner: mostrare budget effettivo per-user, drain progressivo della barra, auto-hide
-- [ ] B4: Dashboard — card "I brani più ascoltati" con la classifica globale di Spotify, accanto a
-  quella personale. **Piano già pronto e rivisto**: `.claude/tasks/plan-global-top-tracks/PLAN.md`,
-  prodotto con `/plan-hardened` il 2026-09-03 (5 giri di revisione, 27 rilievi accolti). Scelta fatta
-  dall'utente: la classifica editoriale vera di Spotify, non l'aggregato degli utenti della piattaforma
-  — quindi **la card non seguirà il selettore di periodo**, perché quella playlist esiste solo per
-  «adesso», e deve dichiararlo in UI. Primo step del piano: verificare che l'ID della playlist
-  `37i9dQZEVXbMDoHDwVN2tF` risponda in dev mode — se non risponde il piano non parte e la scelta si
-  riapre. Da eseguire con `/feature`, non a mano.
+- [x] B4: Dashboard — classifiche mondiali. **Fatto il 2026-09-03**, commit `f3c7e0a` e `7cc0d7e`,
+  ma non come il piano prevedeva: la fonte scelta non esisteva più. La playlist editoriale
+  `37i9dQZEVXbMDoHDwVN2tF` risponde 404 in dev mode, come ogni playlist di proprietà di Spotify;
+  e il ripiego (l'indice `popularity`) è risultato anch'esso sparito, assente dalle chiavi della
+  risposta. Entrambe le card girano ora su **Last.fm**, decisione dell'utente di farle tutte e due:
+  «I brani più ascoltati nel mondo» (classifica vera, non segue il periodo e lo dichiara) e
+  «Popolari nel mondo, fra i tuoi» (i tuoi brani pesati sugli ascolti mondiali, segue il periodo).
+  Verificate dal vivo coi dati veri. Evidenza in `plan-global-top-tracks/GATE-1-RESULT.md` e
+  `GATE-2-RESULT.md`; slice in `phases.md`.
+- [ ] B4-bis: `track_popularity` è una tabella morta — 0 righe a fronte di 469 brani distinti, perché
+  il giro orario legge un campo che Spotify non manda più. Va decisa: rimuoverla insieme al codice
+  che la scrive e la legge (`popularity_cache.py`, il ramo in `background_tasks.py`, il filtro in
+  `profile_metrics.py`), oppure ripopolarla da Last.fm. Finché resta così, ogni lettura di
+  `popularity` in giro per il codice ritorna vuoto in silenzio.
+- [ ] B4-ter: sorvegliare l'età della classifica mondiale. Il campo `global_chart.age_hours` c'è già
+  in `/health/detailed`, ma nessuno lo guarda: senza una soglia, un rinfresco fermo da settimane
+  resta invisibile perché la card continua — per scelta — a mostrare il dato vecchio.
 - [ ] C1: Ecosistema Artisti — fusione grafi KG + Rete con zoom semantico (KG overview, zoom-in rivela connessioni)
 - [ ] D1: Callback OAuth — gestire l'errore imprevisto invece della pagina «Internal Server Error»
   — `spotify_callback` in `backend/app/routers/auth.py` rimanda al frontend con `?error=...` su tutti i
@@ -85,6 +94,7 @@ era mai stata eseguita: il database Docker non aveva mai contenuto lo storico. D
 - Metriche di fedeltà artista (dati presenti, non esposti)
 
 ### Last.fm API integration
+- **Il ponte esiste già** dal 2026-09-03: `backend/app/services/lastfm_client.py`, chiave in
+  `LASTFM_API_KEY`, già configurata. Manca solo il metodo `artist.getTopTags` da aggiungergli.
 - Quarto fallback generi: Spotify → MusicBrainz → Playlist → Last.fm
-- API key gratuita, `artist.gettoptags`, 5 req/s, copertura underground superiore
 - Target: ridurre i 16 artisti senza generi

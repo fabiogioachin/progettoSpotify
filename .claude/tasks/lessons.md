@@ -272,8 +272,9 @@ Lessons that affect future tasks. Target: under 15 entries.
 ## Archive
 Resolved or one-off entries. Not read by agents.
 
-### 2026-03-21 — [codebase] TrackPopularity had no writer — RESOLVED 2026-04-02
+### 2026-03-21 — [codebase] TrackPopularity had no writer — RESOLVED 2026-04-02, **SUPERATA il 2026-09-03**
 Writer implemented: `sync_recent_plays` now correctly iterates `all_items` (was `items` — last page only). Fixed `popularity == 0` rejection. Table populates on every hourly sync.
+**Non vale più**: l'ultima frase è falsa dal lato Spotify. Il writer c'è ed è corretto, ma il campo `popularity` non arriva più nella risposta, quindi la tabella resta a 0 righe. Vedi la entry attiva del 2026-09-03.
 
 ### 2026-03 — [codebase] html2canvas doesn't resolve CSS variables
 Pass explicit `backgroundColor: '#121212'` to html2canvas options. Fixed.
