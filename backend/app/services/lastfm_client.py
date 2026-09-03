@@ -34,7 +34,21 @@ _TIMEOUT = 10.0
 
 
 class LastfmUnavailable(Exception):
-    """La chiamata non e' andata a buon fine. Chi chiama decide se e' grave."""
+    """La chiamata non e' andata a buon fine. Chi chiama decide se e' grave.
+
+    `code` porta il codice applicativo di Last.fm quando c'e', perche' non
+    tutti gli errori sono la stessa cosa: vedi `NOT_FOUND_CODES`.
+    """
+
+    def __init__(self, message: str, code: int | None = None):
+        super().__init__(message)
+        self.code = code
+
+
+# Last.fm usa questi codici per dire "questo brano non lo conosco", che NON e'
+# un guasto: e' una risposta. Confonderlo con un servizio giu' significherebbe
+# far interrompere l'intero giro al primo brano oscuro della lista.
+NOT_FOUND_CODES = {6}
 
 
 def is_configured() -> bool:
@@ -75,8 +89,10 @@ async def _call(method: str, **params) -> dict | None:
     # Last.fm segnala i propri errori dentro un 200: senza questo controllo un
     # errore applicativo passerebbe per una risposta valida e vuota.
     if isinstance(payload, dict) and "error" in payload:
+        code = payload.get("error")
         raise LastfmUnavailable(
-            f"Last.fm errore {payload.get('error')}: {payload.get('message')}"
+            f"Last.fm errore {code}: {payload.get('message')}",
+            code=code if isinstance(code, int) else None,
         )
     return payload
 
@@ -155,7 +171,11 @@ async def fetch_track_playcount(artist: str, track: str) -> int | None:
         payload = await _call(
             "track.getInfo", artist=artist, track=track, autocorrect=1
         )
-    except LastfmUnavailable:
+    except LastfmUnavailable as exc:
+        # Brano sconosciuto: e' una risposta, non un guasto. Chi chiama deve
+        # poter proseguire con gli altri brani della lista.
+        if exc.code in NOT_FOUND_CODES:
+            return None
         raise
     if payload is None:
         return None

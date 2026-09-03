@@ -141,12 +141,15 @@ Data fetching: `useSpotifyData(endpoint)` hook → Axios client with 429 retry i
 
 ## Spotify API Constraints
 
-- **Deprecated/removed in dev mode** (do not use): Audio Features, Recommendations, Related Artists (`/artists/{id}/related-artists`), Artist Top Tracks (`/artists/{id}/top-tracks`), batch endpoints (`/artists?ids=`, `/tracks?ids=`, `/albums?ids=`)
+- **Deprecated/removed in dev mode** (do not use): Audio Features, Recommendations, Related Artists (`/artists/{id}/related-artists`), Artist Top Tracks (`/artists/{id}/top-tracks`), batch endpoints (`/artists?ids=`, `/tracks?ids=`, `/albums?ids=`), **`popularity`** (Sep 2026 — see below)
 - **Feb 2026 dev mode migration**: `/playlists/{id}/tracks` → **`/playlists/{id}/items`** (old returns 403). `GET /playlists/{id}` no longer includes tracks.
 - Individual endpoints with semaphore + asyncio.gather replace all batch endpoints
 - Time ranges: only `short_term` (~4w), `medium_term` (~6m), `long_term` (all) — no custom ranges
 - Recently played: max 50 items — workaround is DB accumulation via `RecentPlay` model
-- **Always available**: popularity, genres, track/artist metadata, user profile
+- **Sep 2026 — `popularity` is gone**: the field is **absent from the response keys**, not `null` — verified on `/tracks/{id}`, `/me/top/tracks` and `/me/player/recently-played`. Consequence: `track_popularity` never populates (0 rows against 469 distinct tracks). Use Last.fm `track.getInfo` playcount instead — `services/lastfm_client.py`.
+- **Sep 2026 — editorial playlists are unreachable**: every Spotify-owned playlist returns **404** (Top 50 Global `37i9dQZEVXbMDoHDwVN2tF`, Top 50 Italy, Viral 50, Today's Top Hits); other users' public playlists return **403**. Only the authenticated user's own playlists are readable. `/search` returns `null` entries where editorial results would be. Global chart source is Last.fm `chart.getTopTracks` — `services/global_chart_cache.py`.
+- **Always available**: genres (empty in dev mode — MusicBrainz is the real source), track/artist metadata, user profile
+- **Before designing on any Spotify field or endpoint, probe it live with a real user and inspect the response keys.** Two options in the Sep 2026 plan died this way, one after the other. Evidence: `.claude/tasks/plan-global-top-tracks/GATE-1-RESULT.md`, `GATE-2-RESULT.md`.
 
 ## File Organization
 

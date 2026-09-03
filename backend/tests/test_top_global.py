@@ -248,6 +248,61 @@ async def test_playcount_non_numerico_non_diventa_zero():
 
 
 @pytest.mark.asyncio
+async def test_brano_sconosciuto_non_e_un_guasto():
+    """Last.fm che non conosce un brano risponde, non si rompe.
+
+    Trattarlo come un guasto farebbe interrompere il giro al primo brano
+    oscuro della lista, lasciando senza peso tutti quelli dopo di lui.
+    Successo dal vivo il 03/09/2026: 4 brani su 60 fermavano gli altri 56.
+    """
+    errore = lastfm_client.LastfmUnavailable("Track not found", code=6)
+    with patch.object(lastfm_client, "_call", AsyncMock(side_effect=errore)):
+        assert await lastfm_client.fetch_track_playcount("Tizio", "Ignoto") is None
+
+
+@pytest.mark.asyncio
+async def test_servizio_giu_invece_si_propaga():
+    """Un guasto vero deve fermare il giro, altrimenti si martella a vuoto."""
+    errore = lastfm_client.LastfmUnavailable("Service offline", code=11)
+    with patch.object(lastfm_client, "_call", AsyncMock(side_effect=errore)):
+        with pytest.raises(lastfm_client.LastfmUnavailable):
+            await lastfm_client.fetch_track_playcount("Tizio", "Brano")
+
+
+@pytest.mark.asyncio
+async def test_un_brano_sconosciuto_non_ferma_gli_altri():
+    """Il giro di riempimento prosegue oltre il brano che Last.fm non conosce."""
+    chiamate = []
+
+    async def _playcount(artist, track):
+        chiamate.append(track)
+        if track == "Ignoto":
+            return None
+        return 1000
+
+    session = AsyncMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch.object(lastfm_client, "is_configured", return_value=True),
+        patch.object(lastfm_client, "fetch_track_playcount", _playcount),
+        patch("app.services.global_chart_cache.async_session", return_value=session),
+        patch(
+            "app.services.global_chart_cache.read_world_playcounts",
+            AsyncMock(return_value={}),
+        ),
+        patch("app.services.global_chart_cache.asyncio.sleep", AsyncMock()),
+    ):
+        scritti = await global_chart_cache.fetch_missing_playcounts(
+            [("A", "Primo"), ("A", "Ignoto"), ("A", "Terzo")]
+        )
+
+    assert chiamate == ["Primo", "Ignoto", "Terzo"]
+    assert scritti == 3
+
+
+@pytest.mark.asyncio
 async def test_senza_chiave_il_client_non_chiama():
     with patch.object(lastfm_client.settings, "lastfm_api_key", ""):
         assert await lastfm_client.fetch_global_chart() is None
