@@ -2857,3 +2857,264 @@ restano il 9 (script di backup) e il 10 (health report), e poi **un altro checkp
 questa sezione non ne ha uno. Dopo il 10 il loop incontrerà solo item `BLOCKED_USER`, li salterà
 tutti e uscirà `NOOP-NOTHING-TO-DO` scrivendo `LOOP HALTED` da sé. Vale la pena saperlo prima: quel
 giro lì chiuderà la coda senza chiedere permesso, ed è il comportamento previsto dal contratto.
+
+### Pannello di progetto
+
+`pannello: pubblicato bf20b28df9c9fd1754aad2ee1976e5bf8270ce83bd2757e8cd5b21e0733d9336`
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 ore richieste`
+
+Gate di riservatezza: **verde**, 22 spie su 69 righe, nessuna accesa. Copertura 11 fonti su 11.
+Indirizzo letto dal registro, pagina viva riletta prima di riscriverla, icona 🎵, nessuna capacità.
+Corsia `suite` presa e rilasciata due volte, una per la generazione e una per l'esito.
+
+**Due cose viste passando, che non erano compito di questo giro e non sono state toccate.**
+
+1. **Una voce stantia nel canale verso Fabio.** La voce `progetto-wrap-dev-loop:capolinea`, scritta il
+   2026-08-01, dice ancora che il loop è fermo e che «basta un gesto solo, togliere `LOOP HALTED`».
+   Quel gesto Fabio l'ha fatto il 22 agosto, e il loop oggi ha prodotto un commit: la voce descrive
+   una situazione finita. Il pannello la ripropone in **«Aspettano te»**, cioè nella scheda che
+   elenca ciò che è fermo su una decisione dell'utente — dove adesso è falsa. **Non è stata
+   rimossa**: il contratto autorizza a scrivere nel canale solo quando il breaker si apre o quando
+   si arriva al capolinea, e nessuno dei due casi è questo. Toglierla è un gesto di Fabio, o di un
+   giro a cui il contratto lo chieda esplicitamente.
+2. **La pubblicazione ha avvisato che la pagina offre un file da scaricare con un collegamento
+   normale**, e il visualizzatore degli artefatti non concede il permesso di scaricare: quel
+   collegamento, per chi guarda, non fa niente. Riguarda il generatore del pannello, che sta fuori
+   da questo repo, non progettoWrap. Segnalato qui perché si ripresenterà a ogni pubblicazione
+   finché qualcuno non lo guarda.
+
+## 2026-09-02 23:06 UTC — `NOOP-BUSY` — guardia: CEDI 1 sessione/i viva/e sulla repo (finestra 15min): 30217d77-4f64-4072-ace3-fd88573bde94 ultimo evento 2026-09-02T23:05:49Z (0.2min fa) — scrivi NOOP-BUSY nel run-log: cedere non e' sparire — costo del controllo: 0.014s su 37 transcript (soglia 1s, massimo storico 0.156s) — contatore: 1 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 1 — pannello: saltato (run ceduta) — nessun item preso
+
+Novità rispetto alla voce precedente: la sessione viva è reale e non è questa, verificato sui due
+transcript aperti in contemporanea (`30217d77` non è `918bfa18`, che è questo giro). Il primo item
+non completato resta l'**8**, «Allineare LAUNCH-PLAN a ciò che esiste davvero».
+
+## 2026-09-03 01:33 UTC — `NOOP-DIRTY` — guardia: LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 35 transcript scansionati, 1 worktree ispezionati, scope suite OFF) — costo del controllo: 0.058s su 35 transcript (soglia 1s, massimo storico 0.156s) — contatore: 2 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 2 — pannello: pubblicato faa6670c5d6b — nessun item preso
+
+**Perché mi sono fermato, e perché la guardia aveva ragione a dire LIBERO.** La working tree portava
+lavoro di una sessione interattiva, non del loop: una pianificazione `/plan-hardened` per l'item B4
+del tracker (la card «I brani più ascoltati» con la classifica globale di Spotify), cioè la cartella
+non tracciata `.claude/tasks/plan-global-top-tracks/` con cinque documenti, più tre lezioni nuove in
+`.claude/tasks/lessons.md` e una voce in `.claude/tasks/todo.md`. I file portano orari fra le **22:10 e le 23:10 UTC**, cioè
+da due ore e mezza a tre ore e mezza prima di questo giro — molto fuori dalla finestra di 15 minuti
+che la guardia guarda, quindi «nessuna sessione viva» era una risposta corretta su una domanda
+diversa da quella che conta qui. La guardia misura chi sta scrivendo **adesso**; il Passo 3 misura
+che cosa c'è **sul disco**. Le due cose si sono separate proprio in questo giro, ed è lo stesso
+lavoro per cui il giro precedente aveva già ceduto con `NOOP-BUSY` alle 23:06 UTC: la sessione ha
+finito di scrivere, la guardia si è liberata, ma il disco è rimasto sporco. Ceduto due volte di
+fila per la stessa causa, con due motivi diversi.
+
+**Correzione di una lettura sbagliata, fatta prima di chiudere.** In una prima stesura di questa
+voce avevo scritto che quei file erano «fra le 00:10 e le 01:07 UTC», da 26 minuti prima del giro.
+Era falso: l'elenco dei file stampa l'ora **locale** (+02:00) e l'avevo verbalizzata come se fosse
+UTC, sbagliando di due ore. Lo annoto invece di limitarmi a correggere perché l'errore non era
+innocuo — faceva sembrare che la guardia e il Passo 3 divergessero per una manciata di minuti,
+cioè un caso di confine raro, mentre divergevano per tre ore, che è una condizione ordinaria e
+prevedibile ogni volta che una sessione lascia lavoro non committato.
+
+**Conferma arrivata durante il giro.** Alla rilettura di fine run `todo.md` era sparito dallo sporco:
+nel frattempo era comparso il commit `99a2fc9` «chore(auto): salva 1 file di fine turno», cioè il
+gancio di fine turno di quella stessa sessione, che stava ancora chiudendo i conti mentre io
+lavoravo. Non cambia il verdetto, lo rafforza: il repo era occupato da una persona, e cedere era la
+risposta giusta.
+
+**Che cosa non ho toccato.** Niente: nessun file del repo salvo questa voce, nessun commit, nessun
+item preso dalla coda. L'item che sarebbe toccato a questo giro — il primo non chiuso della sezione
+«lint, piano di lancio, backup e health report» — resta intatto per il fire successivo.
+
+**Riferimento remoto**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba` all'inizio e alla fine del run,
+invariato. Nessun push, come dev'essere. HEAD è avanti al remoto di tre commit, ma è lavoro
+committato da altri, non pubblicato da me.
+
+**Breaker**: non aperto. `no_progress_streak` è 2, sotto la soglia di 3, quindi la prima delle due
+condizioni non è nemmeno raggiunta e non c'è nessun avviso né emesso né trattenuto. Lo streak è
+cominciato col `NOOP-BUSY` delle 23:06 UTC: se anche il prossimo giro non producesse lavoro, la
+soglia sarebbe raggiunta e andrebbe allora verificata la seconda condizione, le 6 ore d'orologio
+dal 2026-09-02T23:06 UTC.
+
+**Pannello**: girato per intero, perché `NOOP-DIRTY` non è una delle due eccezioni del Passo 8.
+Impronta `faa6670c5d6bd298`, copertura 11 fonti su 11, gate di riservatezza verde (22 spie, 70 righe
+controllate, nessuna accesa). Pubblicato allo stesso indirizzo di sempre, senza capacità e senza
+toccare l'icona — la pagina viva porta 📊, scelta dalla prima pubblicazione umana, e il contratto
+chiede di allinearsi a quella. `pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina
+ferma da 0.0 ore su 24 ore richieste`.
+
+**Un difetto della pagina, nuovo, che non sta a questo repo.** Alla pubblicazione l'ambiente ha
+avvertito che il pulsante «Scarica il testo» del ponte delle proposte non funziona per chi guarda:
+il visualizzatore non concede a una pagina il permesso di consegnare file, quindi quel bottone non
+fa niente, in silenzio. L'altro pulsante — quello che copia negli appunti — funziona, e il testo
+resta comunque selezionabile a mano nel riquadro, quindi la scheda non è inutilizzabile. Il difetto
+sta nel generatore `~/.claude/scripts/project_panel.py`, che è configurazione globale fuori dal
+mandato di questo loop: lo segnalo qui e non lo tocco.
+
+**Coda del giro, scritta in fase di chiusura.** Una sonda fresca alle 01:38 UTC dice che la sessione
+`30217d77` è **tornata viva**: ultimo evento 01:37:35 UTC, e il commit `99a2fc9` porta 01:36:30 UTC.
+Al momento della guardia, alle 01:33, era ferma da oltre due ore e mezza — quindi il `LIBERO` era
+corretto quando è stato emesso, ed è invecchiato in tre minuti. Conseguenza pratica per chi legge:
+`lessons.md` porta ancora modifiche non committate di quella sessione e **non è stato toccato da
+questo giro**, nemmeno per registrare le due lezioni che il giro avrebbe prodotto (la divergenza fra
+guardia e sporco su disco; l'ora locale scambiata per UTC). Restano scritte qui sopra, e vanno
+riportate in `lessons.md` da chi ci scriverà per primo senza contendere il file.
+
+**Rettifica del passo del pannello, alle 01:43 UTC.** La prima pubblicazione di questo giro era
+sbagliata e va detto qui, perche' la riga `pannello: pubblicato faa6670c5d6b` scritta sopra da sola
+non lo farebbe capire. **Ho eseguito il pannello prima del run-log**, mentre il contratto lo vuole
+dopo — «perche' il pannello proietta quel registro e non puo' precederlo». Conseguenza concreta: la
+pagina pubblicata alle 01:36 non conteneva questo giro, e in intestazione dichiarava ancora «Ultimo
+giro: ha ceduto il turno, il 2 settembre 2026, 23:06 UTC», cioe' il giro precedente. Chi l'avesse
+aperta in quella mezz'ora avrebbe letto che l'ultimo giro era di tre ore prima.
+
+Rigenerata e ripubblicata allo stesso indirizzo con l'impronta `92f464626ddd`, questa volta col
+run-log gia' scritto. `pannello: pubblicato 92f464626ddd` — questa riga sostituisce quella di sopra.
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 ore
+richieste`. Gate di riservatezza rieseguito e verde (22 spie, 71 righe controllate).
+
+**Secondo errore, dentro la diagnosi del primo.** Per capire cosa fosse successo ho lanciato
+`--render` **senza prendere la corsia `suite`**, ed e' precisamente la trappola che il contratto
+descrive per esteso: quel comando sembra una domanda («devo pubblicare?») ma e' una scrittura, e
+riscrive tre file sotto `~/.claude/orchestration/`. Nessun danno osservato — nessun altro lavoro
+automatico teneva la corsia in quel momento — ma la protezione e' saltata per mia scelta, non per
+un caso fortunato, e la ripetizione successiva l'ho fatta con la corsia presa.
+
+**Un terzo fatto, che non e' un errore ma va saputo da chi ripubblichera'.** La notifica di
+«ripubblicato altrove» arrivata alle 01:37 **non era di un altro**: era l'eco della mia stessa
+pubblicazione, riconosciuta confrontando l'intestazione della pagina viva (01:36 UTC) col successo
+registrato dal programma (01:36:19Z). Per sovrascriverla ho dovuto rileggere la pagina viva per
+intero e poi rifare una lettura **fresca** dall'indirizzo: rileggere il file che un rifiuto
+precedente aveva gia' consegnato non vale come lettura. Due rifiuti prima di riuscire, entrambi
+corretti da parte dell'ambiente.
+
+## 2026-09-03 04:33 UTC — `NOOP-DIRTY` — guardia: LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 36 transcript scansionati, 1 worktree ispezionati, scope suite OFF) — costo del controllo: 0.054s su 36 transcript (soglia 1s, massimo storico 0.156s) — NOTA soglia di 3 cedimenti raggiunta, ma sono passate solo 5.46 ore (minimo 6): nessuna escalation. I fire sono piu' fitti della cadenza per cui la soglia e' tarata. — contatore: 3 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 3 — BREAKER: TRATTENUTO 3 run in 5.5 ore (minimo 6h) — pannello: pubblicato f1390a65404d — nessun item preso
+
+**Che cosa è cambiato rispetto al giro delle 01:33, che si era fermato per la stessa causa.** Lo
+sporco è lo stesso lavoro di sessione interattiva già descritto in quella voce — la cartella non
+tracciata `.claude/tasks/plan-global-top-tracks/` con i cinque documenti della pianificazione della
+card «I brani più ascoltati», più le tre lezioni nuove in `.claude/tasks/lessons.md` — ma con una
+differenza che conta: `.claude/tasks/todo.md` non è più sporco, perché nel frattempo l'ha committato
+il gancio di fine turno di quella sessione. Cambia la diagnosi, non il verdetto. Alle 01:33 la
+sessione stava ancora chiudendo i conti, e cedere significava lasciarla finire; adesso il suo ultimo
+commit (`99a2fc9`) porta le 01:36 UTC, cioè **tre ore di silenzio**, quindi non sta più finendo
+niente. Il lavoro è rimasto sul disco e nessuno lo sta muovendo. Il loop resterà fermo su questa
+stessa causa finché una persona non decide se quei file vanno committati o scartati.
+
+**Perché non ho segnalato il blocco a Fabio, pur avendo raggiunto il terzo giro senza progresso.**
+Perché le due condizioni del breaker sono congiunte e la seconda non è soddisfatta: il primo giro
+di questa serie è quello delle 23:06 di ieri, quindi sono passate 5 ore e 27 minuti sui 6 richiesti.
+Trenta minuti in meno del minimo. La stessa cosa la dice per conto suo anche la guardia, che tiene
+un contatore indipendente da questo e ha stampato la nota corrispondente. Al fire successivo, se lo
+sporco resta, entrambe le condizioni saranno vere e l'avviso partirà: chiave `NOOP-DIRTY|item 7`.
+
+**Che cosa non ho toccato.** Niente: nessun file del repo salvo questa voce, nessun commit, nessun
+item preso dalla coda. L'item che toccava a questo giro — il primo non chiuso della sezione «lint,
+piano di lancio, backup e health report» — resta intatto per il fire successivo.
+
+**Riferimento remoto**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba` all'inizio del run.
+
+**Pannello.** `pannello: pubblicato f1390a65404d` — generato con la corsia `suite` presa e
+rilasciata, gate di riservatezza verde (22 spie, 71 righe controllate, 11 fonti su 11), pagina viva
+riletta per intero prima di riscriverla, pubblicata allo stesso indirizzo.
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 richieste`.
+
+**Due cose sul passo del pannello che chi ripubblicherà deve sapere.** La prima: la pubblicazione è
+stata **rifiutata al primo tentativo** dal controllo automatico dell'ambiente, non dal contratto.
+Avevo passato due parametri in più di quelli che il contratto chiede — la dichiarazione «nessuna
+capacità» scritta esplicitamente e un'etichetta di versione — e con quelli il controllo blocca.
+Rifatta identica ma **spoglia**, cioè solo il file e l'indirizzo, è passata. Vale la pena saperlo
+perché la dichiarazione esplicita sembrava il modo più fedele di obbedire alla riga «nessuna
+capacità», e invece la lettura giusta di quella riga è **non passare affatto** quel parametro: su
+una ripubblicazione l'artefatto conserva da sé ciò che ha già.
+
+La seconda: l'icona della pagina viva è 📊, non il 🎵 che il contratto nomina. Non l'ho cambiata, ed
+è quello che il contratto stesso prescrive — se la prima pubblicazione, che è umana, ne ha scelta
+un'altra, è la riga del contratto ad allinearsi, non la pagina. Chi ripubblica **non deve passare
+nessuna icona**: l'artefatto tiene la sua.
+
+**Un difetto della pagina, che sta nel generatore globale e non in questo repo.** Pubblicando,
+l'ambiente ha avvertito che il pulsante «Scarica il testo» del riquadro delle proposte non funziona
+per chi guarda la pagina: il visualizzatore degli artefatti non concede mai a una pagina il permesso
+di consegnare file, quindi quel pulsante non fa niente e non lo dice. L'altro pulsante, quello che
+copia negli appunti, funziona, e il testo resta selezionabile a mano nel riquadro — quindi la
+scheda non è inutilizzabile. Il difetto sta in `~/.claude/scripts/project_panel.py`, che è
+configurazione globale fuori dal mandato di questo loop: lo segnalo e non lo tocco. È lo stesso
+tipo di segnalazione già fatta il 3 settembre alle 01:33, su un altro punto dello stesso generatore.
+
+**Riferimento remoto a fine run**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`, identico a quello di
+inizio. Nessun push è partito, come dev'essere.
+
+## 2026-09-03 07:33 UTC — `NOOP-DIRTY` — guardia: LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 37 transcript scansionati, 1 worktree ispezionati, scope suite OFF) — costo del controllo: 0.052s su 37 transcript (soglia 1s, massimo storico 0.156s) — contatore: 4 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 4 — BREAKER: OPEN NOOP-DIRTY|item 8 2026-09-03T07:33:35Z — escalated: NOOP-DIRTY|item 8 @ 2026-09-03T07:33:35Z — pannello: pubblicato 428339e7ea36 — nessun item preso
+
+ESCALATION: 4 fire senza progresso confermato (~8.5 ore, dal 2026-09-02T23:06:01Z). Causa: via libera ma nessun lavoro confermato: loop fermo o run che muore prima di confermare. Il backlog e' fermo e nessuno se ne accorgerebbe: scrivi una voce nel canale utente (chiave progetto-wrap-dev-loop:noop-busy-streak), poi conferma con --confirm-escalation.
+
+**Che cosa è cambiato rispetto al giro delle 04:33: una cosa sola, ed è quella per cui il breaker
+esiste.** L'avviso è partito. Alle 04:33 le condizioni erano una sì e una no — lo streak aveva già
+toccato 3, ma dal primo run erano passate 5,5 ore contro le 6 richieste, e la voce di allora lo
+scrisse come `BREAKER: TRATTENUTO`. Adesso sono passate 8,5 ore e lo streak è 4: entrambe vere,
+avviso emesso. Il resto del quadro è identico e non lo riscrivo — lo sporco della working tree è
+descritto nella voce del **2026-09-03 01:33**, ed è ancora esattamente quello: tre voci, di cui una
+(il run-log) esente per contratto.
+
+**Dove è finito l'avviso.** Nel canale che Fabio vede all'avvio di ogni sessione, chiave
+`progetto-wrap-dev-loop:breaker`, voce nuova con `first_seen` di oggi. Dice tre cose: che cosa
+blocca (la cartella `.claude/tasks/plan-global-top-tracks/` e le 18 righe nuove in
+`.claude/tasks/lessons.md`, tutte della sessione di piano di stanotte fra le 00:10 e le 01:07),
+che l'item in coda — il numero 8, allineare il piano di lancio — non c'entra nulla con quei file,
+e quale gesto lo sblocca: committare, oppure `git stash`, oppure spostare il piano fuori dal repo.
+Uno qualsiasi dei tre, e il fire successivo riparte da solo.
+
+**Un dettaglio su cui si può inciampare: la guardia propone una chiave diversa da quella del
+contratto.** Il testo dell'`ESCALATION` qui sopra suggerisce `progetto-wrap-dev-loop:noop-busy-streak`,
+il Passo 7 di questo contratto prescrive `progetto-wrap-dev-loop:breaker`. Ho usato quella del
+contratto. Non sono due avvisi diversi: sono due contatori diversi — quello della guardia e quello
+di questo prompt — che guardano lo stesso blocco, e la guardia non sa che qui la causa non è
+«nessuno lavora» ma «la tree è sporca», quindi la sua chiave descriverebbe male il fatto.
+
+**Una voce vecchia dello stesso loop, nello stesso canale, dice il falso.** La riga `capolinea` di
+`progetto-wrap-dev-loop` racconta che il loop è fermo al cartello `LOOP HALTED` dal 1 agosto. Non è
+più vero dal **22 agosto**, quando il cartello è stato tolto: da allora il loop è ripartito e il
+2 settembre ha chiuso l'item 7. Non l'ho cancellata — la testata di quel file dichiara che la
+rimozione è un gesto umano — ma l'ho detto dentro la voce nuova, perché due righe dello stesso loop
+che si contraddicono fanno perdere tempo a chi legge. Si può cancellare.
+
+**Riferimento remoto**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba` a inizio run e identico a fine
+run. Nessun push è partito, come dev'essere. Nessun commit creato: su `NOOP-DIRTY` non si committa,
+quindi questa voce resta sul disco e se la porterà dentro il primo run che committa.
+
+**Pannello**: `pannello: pubblicato 428339e7ea36`. Corsia `suite` presa e rilasciata due volte —
+una per generare, una per riferire l'esito — gate di riservatezza verde (22 spie, 72 righe
+controllate, 11 fonti su 11), pagina viva riletta per intero prima di riscriverla, pubblicata allo
+stesso indirizzo e con la sua icona.
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 richieste`.
+La pubblicazione ha ripetuto l'avvertimento sul pulsante «Scarica il testo» che non funziona per chi
+guarda la pagina: difetto già descritto nella voce del **2026-09-03 04:33**, sta nel generatore
+globale `~/.claude/scripts/project_panel.py` e non in questo repo, quindi lo segnalo e non lo tocco.
+
+## 2026-09-03 10:35 UTC — `NOOP-DIRTY` — guardia: LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 38 transcript scansionati, 1 worktree ispezionati, scope suite OFF) — costo del controllo: 0.053s su 38 transcript (soglia 1s, massimo storico 0.156s) — contatore: 5 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 5 — BREAKER: OPEN NOOP-DIRTY|item 8 2026-09-03T07:33:35Z — escalated: NOOP-DIRTY|item 8 @ 2026-09-03T07:33:35Z — nessun item preso — pannello: pubblicato 584014d477e1
+
+**Due cose sole sono cambiate dal giro delle 07:33, e nessuna riguarda il blocco.** Lo sporco della
+working tree è identico a quello descritto nella voce del **2026-09-03 01:33** — la cartella
+`.claude/tasks/plan-global-top-tracks/` e le 18 righe nuove in `.claude/tasks/lessons.md`, entrambe
+della sessione di piano di stanotte — e l'item in coda è sempre il numero 8. Non lo riscrivo.
+
+La prima: **la guardia non stampa più `ESCALATION`**, perché il giro delle 07:33 ha chiuso i conti
+con `--confirm-escalation`. Il suo contatore continua a salire (5), ma non ripete l'allarme già dato,
+che è esattamente il comportamento voluto.
+
+La seconda: **l'avviso a Fabio non è stato rinnovato, ed è voluto.** Il breaker resta aperto — cinque
+run senza progresso, 11,5 ore dal primo — ma la chiave è la stessa di tre ore fa, `NOOP-DIRTY|item 8`,
+e il rinnovo non matura prima di 24 ore. Un blocco che dura non deve gridare a ogni fire: la voce del
+07:33 è ancora in cima al canale e dice già tutto, compreso il gesto che sblocca. Prossima finestra
+di rinnovo: **2026-09-04T07:33:35Z**, e solo se la causa sarà ancora questa. Una causa diversa
+sarebbe una chiave diversa, e quella parlerebbe subito.
+
+**Riferimento remoto**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba` a inizio run, identico a fine run.
+Nessun push è partito, come dev'essere. Nessun commit creato: su `NOOP-DIRTY` non si committa, quindi
+questa voce resta sul disco e se la porterà dentro il primo run che committa.
+
+**Pannello**: `pannello: pubblicato 584014d477e1`. Corsia `suite` presa e rilasciata due volte — una
+per generare, una per riferire l'esito — gate di riservatezza verde (22 spie, 72 righe controllate,
+11 fonti su 11), pagina viva riletta per intero prima di riscriverla, pubblicata allo stesso
+indirizzo e con la sua icona.
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 richieste`.
+Ripetuto anche stavolta l'avvertimento sul pulsante «Scarica il testo», che non funziona per chi
+guarda la pagina: difetto già descritto nella voce del **2026-09-03 04:33**, sta nel generatore
+globale `~/.claude/scripts/project_panel.py` e non in questo repo, quindi lo segnalo e non lo tocco.
