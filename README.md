@@ -5,6 +5,7 @@ Dashboard di analisi musicale personale che va oltre Spotify Wrapped. Collega il
 ## Funzionalita'
 
 - **Dashboard**: KPI animati, profilo audio radar, trend temporali, distribuzione generi (donut)
+- **Classifiche mondiali**: i tuoi brani riordinati per quanto li ascolta il mondo, e la top 50 mondiale del momento (fonte Last.fm)
 - **Profilo**: obscurity score, genere DNA, decade distribution, taste map
 - **Confronto Playlist**: confronta fino a 4 playlist con grafici comparativi (popolarita', generi, audio features)
 - **Analisi Playlist**: statistiche aggregate, distribuzione dimensioni, concentrazione artisti
@@ -28,6 +29,7 @@ Dashboard di analisi musicale personale che va oltre Spotify Wrapped. Collega il
 | Database | PostgreSQL 16 (Alembic migrations) |
 | Cache | Redis 7 (rate limiting, caching) |
 | Auth | OAuth 2.0 PKCE (Spotify) |
+| Dati mondiali | Last.fm API (`chart.getTopTracks`, `track.getInfo`) |
 | Container | Docker Compose |
 | PWA | vite-plugin-pwa (installabile) |
 
@@ -46,6 +48,10 @@ Dashboard di analisi musicale personale che va oltre Spotify Wrapped. Collega il
 cp .env.example .env
 # Modifica .env con le tue credenziali Spotify
 ```
+
+Facoltativo: `LASTFM_API_KEY` accende le due classifiche mondiali della Dashboard.
+La chiave e' gratuita ([last.fm/api/account/create](https://www.last.fm/api/account/create)).
+Senza chiave le due card restano nascoste e tutto il resto funziona identico.
 
 ### 2. Avvia infrastruttura
 
@@ -133,6 +139,8 @@ progettoWrap/
 | `POST /auth/logout` | Logout |
 | `GET /api/v1/library/top` | Top brani/artisti per periodo |
 | `GET /api/v1/library/recent` | Brani recenti |
+| `GET /api/v1/library/top-global-popular` | I tuoi brani ordinati per ascolti mondiali (Last.fm), segue il periodo |
+| `GET /api/v1/library/top-global` | Classifica mondiale Last.fm (top 50, cache 12h) |
 | `GET /api/v1/playlists` | Lista playlist |
 | `GET /api/v1/playlists/compare` | Confronto playlist (2-4) |
 | `GET /api/v1/playlist-analytics` | Analisi aggregata playlist |

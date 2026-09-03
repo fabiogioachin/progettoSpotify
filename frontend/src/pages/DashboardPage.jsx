@@ -356,7 +356,7 @@ export default function DashboardPage() {
                 </h3>
                 <p className="text-text-muted text-xs mb-4">
                   I tuoi brani {RANGE_LABEL[range]}, ordinati per quanto li ascolta
-                  il mondo secondo Spotify
+                  il mondo secondo Last.fm
                   {globalPopularMissing > 0 && ` · ${globalPopularMissing} senza dato, esclusi`}
                 </p>
                 <div className="max-h-[600px] overflow-y-auto pr-1 space-y-1">

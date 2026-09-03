@@ -36,6 +36,11 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - `GET /me/top/tracks` **non restituisce `popularity`** nel track object in dev mode
 - `/playlists/{id}/items` ha `limit` max 50, non 100
 
+### Rimozioni settembre 2026 (verificate dal vivo, non dedotte)
+- **`popularity` non esiste più**: il campo è **assente dalle chiavi** della risposta, non `null` — verificato su `/tracks/{id}`, `/me/top/tracks` e `/me/player/recently-played`. Effetto pratico: `track.get("popularity")` restituisce `None` per sempre senza sollevare nulla, e la tabella `track_popularity` è rimasta a **0 righe contro 469 brani distinti** per mesi, in silenzio
+- **Playlist editoriali irraggiungibili**: ogni playlist di proprietà Spotify risponde **404** (Top 50 Global `37i9dQZEVXbMDoHDwVN2tF`, Top 50 Italy, Viral 50, Today's Top Hits); le playlist pubbliche di altri utenti rispondono **403**. Leggibili restano solo quelle dell'utente autenticato. Anche `/search` collabora al travestimento: restituisce voci `null` dove ci sarebbero i risultati editoriali
+- **Regola che ne discende**: prima di progettare su un campo o un endpoint di terzi, sondarlo dal vivo e guardare le chiavi della risposta — non fidarsi di ciò che questo documento dichiara disponibile. Evidenza: `.claude/tasks/plan-global-top-tracks/GATE-1-RESULT.md` e `GATE-2-RESULT.md`
+
 ### Sempre disponibili
 - Artist genres, followers, images
 - Track metadata (name, album, artists, duration_ms, preview_url)
@@ -55,7 +60,7 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Accumulo storico**: modello `RecentPlay` in DB — sync ogni 60 min via APScheduler + salvataggio ad ogni visita
 - **Snapshot giornalieri**: modello `UserSnapshot` salva top_artists/top_tracks JSON 1x/giorno
 - **Aggregati**: `DailyListeningStats` computati alle 02:00 — minuti e ascolti per giorno
-- **Popularity**: non disponibile in dev mode (non restituita da API). Cache DB `TrackPopularity` per eventuale enrichment futuro. Nessuna chiamata API inline per popolarità — le feature dipendenti sono nascoste quando i dati non sono disponibili
+- **Ascolti mondiali**: la fonte Spotify non esiste più (vedi sopra). Sostituita da **Last.fm** — `services/lastfm_client.py` per le chiamate, `services/global_chart_cache.py` per la cache condivisa. La tabella `TrackPopularity` resta nel modello ma non si popola più: cosa farne è una decisione aperta (`.claude/tasks/todo.md`, B4-bis). Le feature che dipendevano dalla popolarità Spotify restano nascoste quando il dato manca
 - **Generi artista**: `genre_cache.py` — DB `artist_genres` (7d TTL, cross-user) → Redis 1h → Spotify API on miss. Nessun cap artificiale — la cache limita naturalmente le chiamate API
 - **Audio features**: librosa su preview MP3 (CDN, non API Spotify) — analisi on-demand
 
@@ -66,7 +71,10 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - **Tempo di Ascolto**: area chart minuti/giorno con selettore temporale (7gg / 30gg / 3M / Tutto). Dati da `DailyListeningStats` pre-aggregati o fallback da `RecentPlay`
 - **Trend features**: se audio features disponibili (da librosa), mostra trend 3 periodi. Altrimenti mostra Tempo di Ascolto
 - **Audio Radar**: radar chart 7 feature audio (da cache DB o analisi librosa on-demand con progress bar)
-- **Top 50 brani**: lista scrollabile con TrackCard
+- **Top 50 brani**: lista scrollabile con TrackCard — sono i tuoi top secondo Spotify, quindi personali
+- **Popolari nel mondo, fra i tuoi**: gli stessi brani che ascolti, riordinati per quante volte il mondo li ha ascoltati (Last.fm `track.getInfo`). Segue il selettore di periodo. Un brano di cui non si conosce il peso mondiale **resta fuori**, non entra con uno zero, e la card dichiara quanti ne ha esclusi
+- **I brani più ascoltati nel mondo**: la classifica mondiale vera (Last.fm `chart.getTopTracks`, top 50, con copertine). **Non** segue il periodo — una classifica mondiale esiste solo al presente — e la card lo dice in chiaro, con la data dell'ultimo aggiornamento
+- Entrambe le card spariscono se `LASTFM_API_KEY` non è configurata o se non c'è nulla da mostrare
 - **Genre Donut**: visualizzazione generi dominanti (donut chart + legenda, fino a 12 generi)
 - **Export Claude AI**: prompt strutturato con dati per analisi personalizzata
 
@@ -152,6 +160,19 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 | `GET /artists/{id}` | Generi/popolarità artista | **1h cross-user** | 0-20 |
 | `GET /tracks/{id}` | Dettaglio brano | 5 min | 0-N |
 
+### Stack Last.fm (fonte dei dati mondiali)
+
+| Metodo | Uso | Cache | Chiamate per richiesta utente |
+|--------|-----|-------|-------------------------------|
+| `chart.getTopTracks` | Classifica mondiale (50 brani) | DB `global_chart_entries`, TTL 12h, **condivisa fra tutti gli utenti** | 0 — il rinfresco vive in sottofondo |
+| `track.getInfo` | Ascolti mondiali di un brano | DB `track_world_playcount`, TTL 7 giorni, condivisa | 0 — ciò che manca si chiede dopo che la risposta è partita |
+
+Nessuna delle due card chiama Last.fm dentro il ciclo richiesta/risposta: leggono la
+cache e basta. Un rinfresco fallito lascia in piedi l'ultimo dato buono con la sua
+data vera, invece di svuotare la card. Il lock è Redis `SET NX` **fail-closed** — al
+contrario del rate limiter Spotify, che è fail-open per policy: se Redis non risponde
+il rinfresco non parte, perché un dato vecchio costa meno di N rinfreschi paralleli.
+
 ### Budget per pagina (worst-case, cache fredda)
 - **Dashboard**: ~7 calls (top tracks ×3, top artists ×3, recently played)
 - **Trends**: ~23 calls (top tracks ×3 + artists ×20)
@@ -194,11 +215,13 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - `artist_genres` DB table (TTL 7d): generi per artista, cross-user, persistente. Via `genre_cache.py`
 - **Regola**: sempre `limit=50` per top tracks/artists. Slice in-memory se servono meno items
 
-### 8.3 Popularity
-- Spotify dev mode non restituisce `popularity` in `GET /me/top/tracks`
-- Enrichment via `GET /tracks/{id}` **non è sostenibile** nel budget (50 chiamate per page load esauriscono il window)
-- Approccio: `read_popularity_cache()` legge solo dal DB (zero API calls). Le feature dipendenti da popularity sono nascoste quando i dati non sono disponibili
-- Cache DB: tabella `TrackPopularity` con TTL 90 giorni (cleanup mensile)
+### 8.3 Ascolti mondiali (Last.fm)
+- La popolarità Spotify non è "vuota": **il campo non esiste più**. Non c'è enrichment possibile, nemmeno costoso
+- Fonte unica rimasta: Last.fm, chiave gratuita e **opzionale**. Senza chiave le card spariscono e nient'altro cambia
+- **Cache condivisa, mai per utente**: il dato mondiale è identico per tutti, quindi vive in tabelle senza colonna utente (`global_chart_entries`, `track_world_playcount`). Chi apre la Dashboard riscalda la cache per tutti gli altri
+- **Zero chiamate nel ciclo richiesta/risposta**: la richiesta legge la cache; ciò che manca parte in sottofondo con la propria sessione DB (invariante 4)
+- **"Non lo conosco" non è "sono giù"**: Last.fm segnala un brano sconosciuto (errore 6) dentro una risposta HTTP 200 riuscita. Trattarlo come guasto interromperebbe il riempimento al primo brano oscuro — 4 brani su 60 lascerebbero senza dato gli altri 56. Il client distingue i due casi (`LastfmUnavailable.code`)
+- `TrackPopularity` (TTL 90 giorni, cleanup mensile) resta nel modello ma non si popola più
 
 ### 8.4 Resilienza e Degradazione Graduale
 - **SpotifyAuthError propagation**: ogni `except Exception` è preceduto da `except SpotifyAuthError: raise`
@@ -211,7 +234,7 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 ### 8.5 Background Jobs (APScheduler)
 | Job | Frequenza | Calls/user | Descrizione |
 |-----|-----------|------------|-------------|
-| `sync_recent_plays` | Ogni 60 min | 1 + 0-N genre cache | Accumula ascolti + popola genre cache per artisti nuovi |
+| `sync_recent_plays` | Ogni 60 min | 1 + 0-N genre cache | Accumula ascolti + popola genre cache per artisti nuovi + rinfresca la classifica mondiale se più vecchia di 12h (chiamata Last.fm, non Spotify) |
 | `save_daily_snapshot` | 1x/giorno (primo login) | 2 | Snapshot top artists + top tracks |
 | `compute_daily_aggregates` | 02:00 daily | 0 (DB only) | Statistiche giornaliere per charts |
 | `cleanup_expired_data` | 1x/mese (1° del mese) | 0 (DB only) | Prune snapshots >365d, popularity >90d |
@@ -233,7 +256,7 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - `DELETE /api/v1/me/data`: cancellazione completa account e dati utente (hard delete)
 - `GET /api/v1/me/data/export`: esportazione dati in JSON
 - Pagina privacy nel frontend con spiegazione raccolta dati, conservazione, diritti
-- **Data retention policy**: plays e stats = forever, snapshots = 1 anno, popularity cache = 90 giorni
+- **Data retention policy**: plays e stats = forever, snapshots = 1 anno, popularity cache = 90 giorni. Le cache mondiali non contengono dati personali e non entrano nell'export: classifica 12h, ascolti mondiali per brano 7 giorni
 
 ### 8.9 Admin Dashboard
 - Pagina `/admin` protetta (solo `is_admin`)
@@ -256,4 +279,5 @@ Dashboard di analytics personale che analizza i dati di ascolto Spotify dell'ute
 - Structured JSON logging in produzione (python-json-logger)
 - Request context: `request_id` (UUID) + `user_id` in ogni log line via contextvars
 - Health endpoints: `/health` (load balancer) + `/health/detailed` (admin diagnostics)
+- `/health/detailed` espone `global_chart.configured` e `global_chart.age_hours`: una classifica mondiale ferma non si vedrebbe da nessun'altra parte. Nessuna soglia allarma ancora su quell'età (`.claude/tasks/todo.md`, B4-ter)
 - Per-user rate limit via Redis sorted set (sliding 1-min window)
