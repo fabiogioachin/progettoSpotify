@@ -22,6 +22,14 @@
   di `docs/LOOP-BACKLOG.md`).
 - [ ] B2: Dashboard — unificare selettore temporale (7gg/30gg/3M/Tutto per tutta la pagina, mapping a Spotify time_range)
 - [ ] B3: Dashboard — ThrottleBanner: mostrare budget effettivo per-user, drain progressivo della barra, auto-hide
+- [ ] B4: Dashboard — card "I brani più ascoltati" con la classifica globale di Spotify, accanto a
+  quella personale. **Piano già pronto e rivisto**: `.claude/tasks/plan-global-top-tracks/PLAN.md`,
+  prodotto con `/plan-hardened` il 2026-09-03 (5 giri di revisione, 27 rilievi accolti). Scelta fatta
+  dall'utente: la classifica editoriale vera di Spotify, non l'aggregato degli utenti della piattaforma
+  — quindi **la card non seguirà il selettore di periodo**, perché quella playlist esiste solo per
+  «adesso», e deve dichiararlo in UI. Primo step del piano: verificare che l'ID della playlist
+  `37i9dQZEVXbMDoHDwVN2tF` risponda in dev mode — se non risponde il piano non parte e la scelta si
+  riapre. Da eseguire con `/feature`, non a mano.
 - [ ] C1: Ecosistema Artisti — fusione grafi KG + Rete con zoom semantico (KG overview, zoom-in rivela connessioni)
 - [ ] D1: Callback OAuth — gestire l'errore imprevisto invece della pagina «Internal Server Error»
   — `spotify_callback` in `backend/app/routers/auth.py` rimanda al frontend con `?error=...` su tutti i
