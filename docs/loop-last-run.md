@@ -3119,9 +3119,32 @@ Ripetuto anche stavolta l'avvertimento sul pulsante «Scarica il testo», che no
 guarda la pagina: difetto già descritto nella voce del **2026-09-03 04:33**, sta nel generatore
 globale `~/.claude/scripts/project_panel.py` e non in questo repo, quindi lo segnalo e non lo tocco.
 
-## 2026-09-14 14:41 UTC — `ITEM-DONE` — guardia: LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 41 transcript scansionati, 1 worktree ispezionati, scope suite OFF) — costo del controllo: 0.177s su 41 transcript (soglia 1s, massimo storico 0.177s) — contatore: 6 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 0 (azzerato) — BREAKER: CHIUSO, era OPEN NOOP-DIRTY|item 8 dal 2026-09-03T07:33:35Z — item 8 «Allineare LAUNCH-PLAN a ciò che esiste davvero» — pannello: da scrivere in coda
+## 2026-09-14 14:41 UTC — `ITEM-DONE` — guardia: LIBERO, nessun'altra sessione viva sul repo — contatore 6 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 0 — BREAKER chiuso, era OPEN NOOP-DIRTY|item 8 dal 2026-09-03T07:33:35Z — item 8 «Allineare LAUNCH-PLAN a ciò che esiste davvero» — pannello: pubblicato 516b2856fc2b
 
-`ESCALATION: 6 fire senza progresso confermato (~279.4 ore, dal 2026-09-02T23:06:01Z). Causa: via libera ma nessun lavoro confermato: loop fermo o run che muore prima di confermare. Il backlog e' fermo e nessuno se ne accorgerebbe: scrivi una voce nel canale utente (chiave progetto-wrap-dev-loop:noop-busy-streak), poi conferma con --confirm-escalation.`
+Riga integrale della guardia, e sotto quella dell'escalation:
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 41 transcript scansionati, 1 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.177s su 41 transcript (soglia 1s, massimo storico 0.177s)
+         contatore: 6 fire senza progresso confermato (soglia 3), halted_fires 0
+ESCALATION: 6 fire senza progresso confermato (~279.4 ore, dal 2026-09-02T23:06:01Z). Causa: via libera ma nessun lavoro confermato: loop fermo o run che muore prima di confermare. Il backlog e' fermo e nessuno se ne accorgerebbe: scrivi una voce nel canale utente (chiave progetto-wrap-dev-loop:noop-busy-streak), poi conferma con --confirm-escalation.
+```
+
+no_progress_streak 0 — azzerato da questo giro, che ha prodotto lavoro vero.
+
+**L'intestazione di questa voce è più corta del solito, ed è una correzione, non una svista.** Il
+percorso assoluto della cartella di lavoro, che la guardia stampa nella sua riga, sta ora **solo**
+dentro il recinto di codice qui sopra. Il motivo lo ha scoperto il passo del pannello di questo
+stesso giro: il generatore ricava un campo pubblicabile spezzando l'intestazione sui trattini
+lunghi, e quel campo finisce dritto nella pagina condivisibile. Il controllo di riservatezza lo ha
+respinto nominando due spie, «percorso assoluto (Windows)» e «nome utente della macchina». Dentro un
+recinto di codice il generatore non guarda, quindi la riga resta integrale nel registro e fuori
+dalla pagina.
+
+**Il difetto non è di questo giro solo: riguarda ogni voce che questo loop ha scritto finora**, e
+nei giri `NOOP-*` è passato inosservato perché il generatore pubblica quel campo solo per i giri che
+hanno prodotto lavoro — e di giri così non ce n'erano da settimane. Le voci precedenti restano come
+sono: riscriverle sarebbe riscrivere la storia. Dal prossimo giro l'intestazione va scritta così.
 
 **Il blocco che durava da undici giorni si è sciolto da solo, e non per merito di questo loop.** Le
 cinque uscite `NOOP-DIRTY` del 2 e 3 settembre erano causate da lavoro non committato di una
@@ -3204,3 +3227,42 @@ compose`.
 
 **Riferimento remoto**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba` a inizio run, riletto identico a
 fine run. Nessun push è partito, come dev'essere.
+
+### Il pannello
+
+`pannello: pubblicato 516b2856fc2b`. Corsia `suite` presa e rilasciata tre volte — due per generare,
+una per riferire l'esito — e corsia `inbox` presa e rilasciata una volta per le due voci nel canale.
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 richieste`.
+
+**La generazione è stata fatta due volte, e la prima è servita a scoprire un difetto.** Il primo giro
+ha prodotto una pagina che il controllo di riservatezza ha respinto con quattro rilievi, due spie per
+due documenti: «percorso assoluto (Windows)» e «nome utente della macchina», nel documento
+pubblicabile e nella pagina. Il dato incriminato era il percorso della cartella di lavoro dentro
+l'intestazione di questa voce, e la correzione — descritta qui sopra — è stata spostarlo in un
+recinto di codice. Alla seconda generazione il controllo è uscito verde: 22 spie, 73 righe
+controllate, 11 fonti su 11.
+
+**Il controllo non è stato aggirato, e vale la pena dirlo esplicitamente.** La via facile sarebbe
+stata dichiarare quei due nomi in `riservatezza.json`, cioè spegnere le spie invece di togliere il
+dato. Sarebbe stato sbagliato due volte: spegnerebbe quelle spie per sempre e per tutte le fonti di
+questo progetto, e quel file è configurazione globale, fuori dal mandato di questo loop.
+
+Prima di ripubblicare, la pagina viva è stata riletta per intero come vuole il contratto, e il file
+generato è stato letto per intero prima di mandarlo fuori: 1389 righe, nessun dato personale,
+nessun percorso, nessun identificativo di account.
+
+**Due scarti fra contratto e realtà, segnalati e non corretti da qui.** Il primo: il contratto di
+questo loop dice che il pannello va pubblicato con l'icona 🎵, ma la pagina viva porta 📊 dalla sua
+prima pubblicazione, che è stata umana. Il contratto stesso dice che in quel caso è la sua riga a
+doversi allineare alla scelta umana, non il contrario: l'icona è stata lasciata com'era, e la riga
+del contratto resta da correggere — è una modifica a un file di configurazione globale, quindi non
+la fa questo loop. Il secondo: la pubblicazione ha ripetuto l'avvertimento sul pulsante «Scarica il
+testo», che per chi guarda la pagina non funziona. È il difetto già descritto nella voce del
+**2026-09-03 04:33**, sta nel generatore globale e non in questo repo, quindi lo segnalo e non lo
+tocco.
+
+**Nel canale utente sono state aggiornate due voci, entrambe di questo loop.** La prima,
+`progetto-wrap-dev-loop:breaker`, diceva che il loop era bloccato: ora dice che il blocco è finito e
+che la voce si può cancellare. La seconda, `progetto-wrap-dev-loop:noop-busy-streak`, è nuova e
+riporta gli undici giorni senza fire, che nessun'altra voce copriva. Le chiavi degli altri lavori
+automatici non sono state toccate: il file ne conteneva sette prima e sette dopo, più la nuova.
