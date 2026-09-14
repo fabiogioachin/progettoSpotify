@@ -3280,7 +3280,7 @@ LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (
 
 ### In breve
 
-**Lo script di backup c'è, è documentato e la sua rotazione è provata da nove test. Quello che
+**Lo script di backup c'è, è documentato e la sua rotazione è provata da dieci test. Quello che
 manca è una prova sola — farlo girare contro un database vero — e quella prova richiede un gesto
 tuo.** Per questo l'item è finito `[BLOCKED_USER]` invece che `[x]`: non perché il lavoro sia a
 metà, ma perché l'ultima riga della sua verifica non la può firmare il loop.
@@ -3298,7 +3298,7 @@ Tre file nuovi, più due documenti riallineati.
 - `docker/backup/README.md` — come si lancia, la riga di crontab pronta, le sette manopole con il
   loro valore di partenza, e il giro completo per **rileggere** una copia. Quest'ultimo pezzo non è
   decorazione: un backup che nessuno ha mai riletto non è un backup, è un file.
-- `backend/tests/test_backup_rotation.py` — nove test che eseguono **lo script vero**, non una sua
+- `backend/tests/test_backup_rotation.py` — dieci test che eseguono **lo script vero**, non una sua
   riscrittura in Python, nel ramo `--prune-only` che non tocca nessun database. Girano anche nella
   CI, quindi la prova della rotazione non invecchia.
 - `docs/LAUNCH-PLAN.md` § 2.5 diceva «non esiste nulla nel repo»: adesso descrive ciò che c'è e
@@ -3322,7 +3322,7 @@ messaggio d'errore compresso lo è. Perciò il controllo cerca anche l'intestazi
 **Un backup vecchio che si finge il più recente.** La rotazione ordina **per nome**
 (`spotify_AAAAMMGG.sql.gz`), mai per data di modifica. Un ripristino, una copia o un `rsync`
 riscrivono la data di modifica: bastano a far passare per fresco un backup di un mese fa e a fargli
-scalzare quelli veri. Uno dei nove test è scritto apposta per questo caso — tocca il file più
+scalzare quelli veri. Uno dei dieci test è scritto apposta per questo caso — tocca il file più
 vecchio per renderlo il più recente di data, e pretende che sparisca lo stesso.
 
 ### Perché la prova dal vivo non si è potuta fare
@@ -3375,15 +3375,15 @@ Interprete: il venv del progetto, `backend/.venv/Scripts/python.exe`.
 | Comando | Esito |
 |---|---|
 | `bash -n docker/backup/pg-backup.sh` | 0 |
-| `pytest tests/test_backup_rotation.py -q` | 0 — **9 passati**, nessuno saltato |
-| `pytest -q` (suite intera) | 0 — **598 passati** in 321s (erano 589, più i 9 nuovi) |
+| `pytest tests/test_backup_rotation.py -q` | 0 — **10 passati**, nessuno saltato |
+| `pytest -q` (suite intera) | 0 — **598 passati** in 321s (erano 589, più i 9 di allora; il decimo è arrivato dopo, vedi sotto) |
 | `ruff check tests/test_backup_rotation.py` | 0 |
 | `ruff format tests/test_backup_rotation.py --check` | 0 |
 | `npm run lint` | 0 |
 | `npm run build` | 0 — costruito in 4.16s |
 | `ruff check app/` | **1 — difetto preesistente, vedi sopra** |
 
-I nove test **hanno girato davvero, non sono stati saltati**: lo dice il conteggio, e importa
+I dieci test **hanno girato davvero, non sono stati saltati**: lo dice il conteggio, e importa
 perché il file si salta da solo quando `bash` non c'è.
 
 Oltre ai test, la rotazione è stata provata a mano una volta su una cartella temporanea con 10 copie
@@ -3407,3 +3407,179 @@ Il giro ha prodotto lavoro vero e committato, ma non chiude un item, quindi l'es
 è stato chiamato: il contratto lo lega esplicitamente a `ITEM-DONE`. Entrambi i contatori
 sovrastimano la fermata, ed è bene saperlo leggendo questa riga. Nessun allarme è maturato: la
 soglia è 3.
+
+### Il pannello
+
+`pannello: pubblicato 3d29632c0b14`. Corsia `suite` presa e rilasciata due volte — una per generare,
+una per riferire l'esito — e mai tenuta insieme a un'altra. Il controllo di riservatezza è uscito
+verde al primo colpo: 22 spie, 76 righe controllate, 11 fonti su 11. La lezione del giro precedente
+ha tenuto: la riga della guardia sta dentro un recinto di codice e il percorso della cartella di
+lavoro non è finito in pagina.
+
+Prima di ripubblicare la pagina viva è stata riletta, e il file generato è stato letto per intero:
+1425 righe, nessun dato personale, nessun percorso, nessun identificativo di account.
+
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 richieste`.
+
+**Torna l'avvertimento sul pulsante «Scarica il testo»**, che per chi guarda la pagina non funziona.
+È il difetto già descritto nella voce del **2026-09-03 04:33**: sta nel generatore globale, non in
+questo repo, quindi lo cito e non lo tocco. L'icona della pagina resta 📊, quella scelta dalla prima
+pubblicazione umana — il contratto del loop ne nomina un'altra, ma dice anche che in questo caso è
+la sua riga a doversi allineare alla scelta umana, e correggerla è una modifica a configurazione
+globale che questo loop non fa.
+
+### Due difetti trovati dopo il primo commit, nel mio stesso lavoro
+
+Entrambi corretti nello stesso giro, con un commit ciascuno.
+
+**Lo script era committato come non eseguibile.** Git su Windows non registra il permesso di
+esecuzione: il file è entrato come `100644`, e su Linux il crontab e le istruzioni — che lo invocano
+direttamente — sarebbero morti con «permission denied». Corretto con `update-index --chmod=+x`: ora
+è `100755`.
+
+**L'aiuto stampava una riga di codice.** `--help` ricava il testo dal commento in testa al file, e
+lo faceva con un intervallo di righe fisso: bastava che il commento fosse lungo diciassette righe
+invece di diciotto perché in coda comparisse `set -euo pipefail`. Ora si ferma da sé alla prima
+riga che non è un commento, e un decimo test pretende che il codice non riaffiori. I test del
+backup passano da 9 a 10.
+
+Il conteggio della suite intera riportato nella tabella qui sopra, 598, è quello misurato prima che
+il decimo test esistesse: oggi sarebbe 599. Non l'ho rimisurato per non far girare cinque minuti di
+suite per una riga, e lo dichiaro invece di correggere il numero a mente.
+
+## 2026-09-14 19:42 UTC — `ITEM-DONE` — item 10 «Archiviare o rigenerare `HEALTH-REPORT.md`»
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 43 transcript scansionati, 1 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.067s su 43 transcript (soglia 1s, massimo storico 0.177s)
+         contatore: 2 fire senza progresso confermato (soglia 3), halted_fires 0
+```
+
+`no_progress_streak 0` — azzerato da questo `ITEM-DONE`, veniva da 1 (il giro delle 16:56, chiuso
+`BLOCKED_USER` sull'item 9). Nessun breaker aperto, nessuno da chiudere.
+
+**Non era una raffica**: l'ultima intestazione del run-log diceva 16:56 UTC, cioè 2 ore e 37 minuti
+prima, oltre la soglia di un'ora del Passo 0.
+
+### Cosa è stato fatto
+
+Rigenerato `.claude/tasks/HEALTH-REPORT.md`, che era fermo al 2026-04-01. Delle due strade che
+l'item concedeva — rigenerare col delta, oppure archiviare il vecchio con una riga di spiegazione —
+ho preso la prima, perché archiviare avrebbe tolto di mezzo un rapporto sbagliato senza metterne al
+suo posto uno giusto, e il problema dichiarato dall'item è proprio che un rapporto vecchio preso per
+buono fa sprecare giri interi. Il vecchio resta comunque leggibile nella storia di git, al commit
+`0d67cb7`.
+
+**Nessun file di codice è stato toccato.** Questo item produce documentazione: tutto il lavoro è
+stato di verifica.
+
+### Il delta, e perché è più grande di quanto l'item stimasse
+
+L'item diceva «15 dei suoi 21 finding risultano già chiusi», sulla scorta di un controllo a campione
+del 2026-07-29. Ricontrollandoli **tutti e 21 uno per uno** sul codice di oggi, il conto vero è:
+
+| | |
+|---|---|
+| Chiusi | **21** |
+| Ancora veri | **0** |
+| Nuovi | 1 confermato, 1 informativo |
+
+Il campione sottostimava perché fra il 29/07 e oggi sono passati i nove giri dell'ispezione frontend
+di questo stesso loop, che hanno chiuso buona parte di ciò che restava. Ogni verdetto nel rapporto
+porta la sua riga di prova — file e numero di riga — così che nessuno debba ricontrollare a memoria.
+
+Un solo verdetto ha bisogno di una riserva, ed è **UI-9**: la soppressione del controllo sulle
+dipendenze è ancora nel codice, a `ArtistNetwork.jsx:322`. La conto chiusa perché il rilievo
+chiedeva di *verificare* che le dipendenze fossero giuste, non di togliere la soppressione, e quella
+verifica oggi sta scritta in sei righe di commento accanto a essa. L'ho dichiarato nel rapporto
+perché chi cercherà soppressioni con una ricerca testuale la ritroverà e sarà tentato di riaprirla.
+
+### Il rilievo nuovo: la verifica automatica è rossa da cinque mesi
+
+**E1.** `ruff check app/` esce **1** su due rilievi `F841` — `synced` in `backend/app/main.py:721` e
+`sync_ok` in `backend/app/routers/auth.py:363`. Sono due variabili messe a vero al primo successo di
+un ciclo di tre tentativi e poi mai rilette, perché il `break` subito sotto porta già da sé
+l'informazione «è andata bene».
+
+Il punto non è la zavorra, sono due righe: è che il lavoro `backend-lint` del flusso di verifica
+esegue esattamente quel comando, quindi **su `master` il semaforo è rosso dal commit `0d67cb7` del
+2026-04-03**, cioè da cinque mesi. Una verifica sempre rossa smette di proteggere: chi introduce un
+difetto vero vede lo stesso rosso di sempre e non ha modo di distinguerlo.
+
+Ho verificato che il rosso sia vero e non un effetto di versione: ruff è 0.9.3, la stessa fissata in
+`requirements-dev.txt`, e nessun file di configurazione disattiva la regola.
+
+**Non l'ho corretto**, ed è deliberato: è fuori dall'item del giro, e la correzione non è meccanica —
+per ciascuna delle due va deciso se la variabile fosse il residuo di un uso che manca o solo
+zavorra. Era già in coda come voce E1 di `todo.md`, aperta dal giro precedente.
+
+Coincidenza che vale la pena notare: `0d67cb7` è anche **l'ultimo commit che ha toccato il rapporto
+di salute**. Lo stesso commit ha introdotto il difetto e lasciato fermo il documento che avrebbe
+dovuto segnalarlo.
+
+L'altro rilievo nuovo è informativo e non è un rosso: `ruff format app/ --check` riformatterebbe 10
+file su 68, ma quel comando **non sta nel flusso di verifica**, quindi non blocca niente. L'ho
+scritto perché `CLAUDE.md` lo elenca fra i comandi del progetto e si potrebbe credere che sia
+sorvegliato. Non lo è, e se lo si vuole sorvegliare è una decisione, non una riparazione.
+
+### Un controllo che non ha saputo rispondere, dichiarato come tale
+
+Ho provato a verificare da programma il primo invariante di `CLAUDE.md` — ogni `except Exception`
+attorno a una chiamata Spotify preceduto da `except SpotifyAuthError: raise`. La ricerca automatica
+ha segnalato **25 punti su 50**, e ne ho aperti quattro a campione: **tutti e quattro falsi
+allarmi**, o perché il blocco non tocca Spotify affatto (è una scrittura sul database protetta
+apposta, come vuole il terzo invariante), o perché `except SpotifyAuthError` c'era davvero ma più in
+alto della finestra di righe che stavo guardando — è il caso di `wrapped.py:297`, otto righe sopra.
+
+Non ho aperto nessun rilievo. Un elenco di venticinque difetti inventati in un rapporto che serve
+proprio a non far sprecare giri sarebbe stato il modo più rapido di rifare il danno che questo item
+doveva riparare. Il limite del metodo è scritto nel rapporto, così che il prossimo che ci prova non
+rifaccia la stessa strada.
+
+### Verifiche eseguite
+
+Interprete: `backend/.venv/Scripts/python.exe` (Python 3.12.13), il venv del progetto.
+
+| Comando | Uscita | Esito |
+|---|---|---|
+| `pytest -q` | **0** | **599 test passati**, 23 avvisi, 320,96 s |
+| `npm run lint` | **0** | verde |
+| `npm run build` | **0** | verde, 4,08 s |
+| `ruff check app/` | **1** | 2 rilievi `F841` — è E1, preesistente |
+| `ruff format app/ --check` | 0 | 10 file su 68 divergono — informativo |
+
+I 599 test confermano il numero che il giro precedente aveva previsto senza misurarlo: aveva
+misurato 598 prima di aggiungere il decimo test del backup, e aveva dichiarato che oggi sarebbero
+stati 599 invece di correggere il numero a mente. Erano 599.
+
+Il rosso di `ruff check` **non è stato introdotto da questo giro** ed era già noto: preesiste di
+cinque mesi ed è il rilievo E1 qui sopra.
+
+Oltre ai comandi, sei controlli fatti per il delta, tutti sani e tutti riportati nel rapporto: nessun
+componente dell'interfaccia mai importato, nessun endpoint senza chiamante (34 controllati; l'unico
+senza riferimenti è `/auth/spotify/callback`, che lo chiama Spotify), nessuna dipendenza del server
+dichiarata e mai importata (16 controllate), nessun `TODO`/`FIXME`/`HACK` nel codice, e la catena
+delle migrazioni lineare con una sola testa (9 revisioni, testa `3bf86040aebd`).
+
+### Working tree e riferimento remoto
+
+All'inizio del giro c'erano tre modifiche non committate: `.claude/tasks/lessons.md`,
+`.claude/tasks/todo.md` e `docs/loop-last-run.md`. Le prime due sono la lezione e la voce E1 scritte
+dal giro precedente e rimaste lì; il terzo è esente per contratto. Tutte riconducibili al backlog e
+al loop stesso, quindi **non** è `NOOP-DIRTY`, e le porto dentro il commit di oggi.
+
+Riferimento remoto all'inizio del giro: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`. Nessun
+`git push` eseguito.
+
+### Il backlog è finito: il prossimo fire arriva al capolinea
+
+Con l'item 10 chiuso **non resta nessun item lavorabile**. Quel che rimane — 9, 11, 12, 13 — è tutto
+`[BLOCKED_USER]` e aspetta gesti umani: il file `.env` con i segreti Spotify, un server e un dominio
+per il deploy, la quota estesa di Spotify.
+
+**Non ho scritto `LOOP HALTED` in questo giro**, ed è una scelta di contratto, non una dimenticanza.
+Il Passo 4 lega il cartello al ramo `NOOP-NOTHING-TO-DO`, cioè al giro che *cerca* un item e non ne
+trova: questo giro un item l'ha trovato e fatto, quindi esce `ITEM-DONE`. Sarà il prossimo fire a
+trovare la coda vuota, scrivere il cartello e mandare la voce di capolinea nel canale. Lo annoto qui
+perché chi legge questa riga sappia che l'ultimo fire utile è stato questo, e che il silenzio che
+comincerà fra tre ore è previsto e non un guasto.

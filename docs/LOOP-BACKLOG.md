@@ -677,13 +677,27 @@ incollare a mano. Va messo nel repo (`docker/backup/`), rotazione inclusa, con i
 **Verifica**: lo script gira in locale contro il Postgres di sviluppo e produce un `.sql.gz`
 leggibile; la rotazione è provata (test o prova documentata nel run-log).
 
-### 10. `[ ]` Archiviare o rigenerare `HEALTH-REPORT.md`
+### 10. `[x]` Archiviare o rigenerare `HEALTH-REPORT.md`
 
 `.claude/tasks/HEALTH-REPORT.md` è del 2026-04-01 e 15 dei suoi 21 finding risultano già chiusi
 (verifica a campione del 2026-07-29). Un report vecchio preso per buono fa sprecare giri interi.
 
 **Verifica**: nuovo report datato con il delta (chiusi / confermati / nuovi), oppure il vecchio
 spostato in un archivio con una riga che dice perché.
+
+> **Fatto il 2026-09-14.** Rigenerato con il delta, scelta la prima opzione fra le due: il vecchio
+> resta nella storia di git al commit `0d67cb7`, dov'era rimasto fermo dal 2026-04-03. Tutti e 21 i
+> rilievi ricontrollati uno per uno sul codice di oggi con la riga di prova: **21 chiusi, 0 ancora
+> veri**, quindi il campione del 29/07 sottostimava (ne dava 15). Un rilievo nuovo e vero, **E1**:
+> `ruff check app/` esce 1 su due `F841`, quindi il lavoro `backend-lint` della verifica automatica
+> fallisce su `master` dal 2026-04-03 — già in coda in `todo.md`, non corretto qui perché fuori
+> dall'item. Più uno informativo (`ruff format --check` diverge su 10 file, ma non è sorvegliato
+> dalla verifica automatica, quindi non è un rosso). Il rapporto dichiara anche un controllo che
+> **non** ha saputo rispondere — l'invariante su `SpotifyAuthError`, 25 segnalazioni automatiche e
+> 4 falsi allarmi su 4 campionati — invece di spacciarlo per un elenco di difetti.
+>
+> Verificato: `pytest -q` **599 passati** (uscita 0, 320,96 s), `npm run lint` e `npm run build`
+> **uscita 0**. Nessun file di codice toccato: l'item produce documentazione.
 
 ### 11. `[BLOCKED_USER]` Creare `.env` dalla `.env.example`
 

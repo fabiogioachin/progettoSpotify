@@ -3,6 +3,12 @@
 ## Active
 Lessons that affect future tasks. Target: under 15 entries.
 
+### 2026-09-14 — [tool] Uno script di shell scritto su Windows arriva rotto su Linux in tre modi, e i test non se ne accorgono
+**Context**: sempre l'item 9, `docker/backup/pg-backup.sh`, destinato al VPS Linux ma scritto e provato su Windows.
+**What happened**: la suite era verde e lo script girava in locale, eppure sul server sarebbe morto. Tre difetti trovati **dopo** il primo commit. (1) Git su Windows non registra il permesso di esecuzione: il file è entrato come `100644`, e il crontab che lo invoca direttamente avrebbe risposto «permission denied». (2) Con `core.autocrlf=true` un checkout successivo lo riscrive in CRLF, e il kernel Linux legge lo shebang come `/usr/bin/env bash\r` rispondendo «bad interpreter» — un errore che non nomina mai la vera causa. (3) `--help` ricavava il testo dal commento di testa con un intervallo di righe fisso (`sed -n '3,20p'`), quindi stampava anche `set -euo pipefail`.
+**Root cause**: i primi due sono proprietà del **trasporto** — permessi e fine riga — che nessun test di comportamento eseguito su Windows può vedere, perché lì entrambe le cose funzionano comunque. Il terzo è fragilità: un indice di riga si rompe al primo commento aggiunto.
+**Action**: quando committi uno script destinato a Linux da questa macchina, fai tre cose prima di dire fatto. `git ls-files -s <script>` deve dire `100755` — altrimenti `git update-index --chmod=+x`. Il repository deve avere un `.gitattributes` con `*.sh text eol=lf`, e la prova è `git show HEAD:<script> | tr -dc '\r' | wc -c` che deve dare **0**: il warning «LF will be replaced by CRLF» parla della copia di lavoro, non di ciò che viene committato, quindi non è né un allarme né una rassicurazione. E un aiuto testuale si ricava fermandosi alla prima riga non commentata (`awk`), mai con un intervallo di righe, con un test che pretende che il codice non riaffiori.
+
 ### 2026-09-14 — [workflow] `pg_dump | gzip` nasconde il fallimento del dump, e la prova dal vivo ha bisogno di un umano
 **Context**: item 9 del backlog del loop, lo script di backup versionato in `docker/backup/`.
 **What happened**: due cose. (1) Il comando che il piano di lancio suggeriva —
