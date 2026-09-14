@@ -166,24 +166,26 @@ jobs:
 **Verifica**: un push su `master` innesca i tre workflow nell'ordine giusto, e l'ultimo passo del
 deploy riceve 200 dall'indirizzo di salute.
 
-### 2.5 Backup PostgreSQL — `[ ]` non esiste nulla nel repo
+### 2.5 Backup PostgreSQL — `[x]` lo script c'è, manca solo la prova dal vivo
 
-`docker/backup/` non c'è. È l'item 9 del backlog del loop di sviluppo (`docs/LOOP-BACKLOG.md`), che
-chiede di versionare lo script invece di lasciarlo come riga di crontab da incollare a mano sul
-VPS: rotazione di 7 copie giornaliere più 4 settimanali, istruzioni accanto, e prova che il file
-prodotto si rilegge.
+`docker/backup/pg-backup.sh` esiste dal 2026-09-14, con le istruzioni accanto in
+`docker/backup/README.md`: rotazione di 7 copie giornaliere più 4 settimanali, riga di crontab
+pronta da incollare, e il giro completo per rileggere una copia. Non c'è più niente da scrivere a
+mano sul VPS.
 
-Il comando di partenza, da incapsulare nello script:
+La rotazione è coperta da 9 test che eseguono lo script vero nel suo ramo `--prune-only`
+(`backend/tests/test_backup_rotation.py`), quindi gira anche in CI e non invecchia.
 
-```bash
-docker exec postgres pg_dump -U spotify spotify_intelligence | gzip > /backups/spotify_$(date +%Y%m%d).sql.gz
-```
+Quello che **resta aperto** è una prova sola: far girare lo script contro un database vero e
+rileggere il `.sql.gz` che produce. Richiede il motore Docker avviato, che è un gesto umano — il
+dettaglio sta nell'item 9 di `docs/LOOP-BACKLOG.md`, marcato `[BLOCKED_USER]` per quel motivo.
 
-Attenzione al nome del database, che questo piano confondeva: è `spotify_intelligence`. `spotify` è
-il nome dell'utente, non del database — lo dice `docker/docker-compose.prod.yml:9`.
+Il comando di partenza che il piano suggeriva è ormai dentro allo script, ma vale la pena
+ricordarne la trappola: il nome del database è `spotify_intelligence`, mentre `spotify` è il nome
+dell'utente — lo dice `docker/docker-compose.prod.yml:9`.
 
-**Verifica**: lo script gira contro il Postgres di sviluppo e produce un `.sql.gz` che `gunzip -t`
-dichiara integro; la rotazione è provata.
+**Verifica**: sul VPS, `docker/backup/pg-backup.sh` produce un `.sql.gz` che `gzip -t` dichiara
+integro, e dopo otto giorni la cartella `daily/` ne contiene sette, non otto.
 
 ### 2.6 Checklist deploy — tutte azioni sul VPS, nessuna nel repo
 
@@ -268,7 +270,8 @@ Se non hai Extended Quota, devi aggiungere **manualmente** l'email Spotify di og
 - Admin page → tab "Utilizzo API" — verificare che nessun utente monopolizzi il budget
 - Admin page → tab "Jobs" — verificare che `sync_recent_plays` giri regolarmente
 - Logs: `docker logs backend --tail 100 -f` — cercare 429, 500, errori auth
-- Backup: verificare che il cron `pg_dump` giri (`ls -la /backups/`)
+- Backup: verificare che il cron giri (`ls -la /backups/daily/`) e che l'ultima copia si rilegga
+  (`gzip -t /backups/daily/spotify_*.sql.gz`)
 
 ### Primi giorni
 

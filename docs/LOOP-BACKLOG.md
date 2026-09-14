@@ -640,7 +640,36 @@ solo ciò che manca.
 
 **Verifica**: nessuna voce dello Step 2 descrive come da creare un file che esiste nel repo.
 
-### 9. `[ ]` Script di backup del database, versionato
+### 9. `[BLOCKED_USER]` Script di backup del database, versionato
+
+> **Scritto e provato a meta' il 2026-09-14, poi fermato su un gesto tuo.** Lo script c'e'
+> (`docker/backup/pg-backup.sh`), le istruzioni pure (`docker/backup/README.md`), e la rotazione e'
+> provata da **9 test** che eseguono lo script vero nel suo ramo `--prune-only`
+> (`backend/tests/test_backup_rotation.py`): girano anche in CI, quindi la prova non invecchia.
+> Suite backend 598 passati, `npm run lint` e `npm run build` a zero.
+>
+> **Manca una sola cosa, e non la puo' fare il loop**: la prova dal vivo, cioe' far girare lo script
+> contro un database vero e rileggere il `.sql.gz` che produce. Due strade, chiuse entrambe quel
+> giorno. Il Postgres del progetto vive in un container, e **il motore Docker non si e' avviato**:
+> la distribuzione WSL `docker-desktop` e' rimasta ferma anche dopo aver lanciato Docker Desktop e
+> atteso dieci minuti, segno che chiede attenzione umana. L'altro Postgres, quello installato sulla
+> macchina e in ascolto sulla 5432 — quello che `.env.example` indica come database di sviluppo —
+> risponde ma **chiede una password**, e il loop ha il divieto di maneggiare credenziali.
+>
+> **Come si chiude, in due minuti.** Avvia Docker, poi:
+>
+> ```
+> docker compose -f docker/docker-compose.yml up postgres -d
+> BACKUP_DIR=/tmp/bk PG_CONTAINER=wrap-postgres-1 docker/backup/pg-backup.sh
+> gzip -t /tmp/bk/daily/spotify_*.sql.gz && echo "copia integra"
+> ```
+>
+> Se il file si rilegge, spunta l'item `[x]`. Se il nome del container non torna, chiedilo a Docker:
+> `docker compose -f docker/docker-compose.yml ps -q postgres`.
+>
+> Marcato `[BLOCKED_USER]` e non lasciato aperto per una ragione pratica: lasciandolo aperto il loop
+> lo ripescherebbe ogni tre ore, si fermerebbe sempre sullo stesso gesto mancante e non arriverebbe
+> mai all'item 10, che invece e' tutto lavoro suo. Riepilogo del giro in `docs/loop-last-run.md`.
 
 Il piano descrive un `pg_dump` con rotazione 7 giornalieri + 4 settimanali come crontab da
 incollare a mano. Va messo nel repo (`docker/backup/`), rotazione inclusa, con istruzioni.

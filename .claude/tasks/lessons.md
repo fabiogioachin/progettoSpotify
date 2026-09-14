@@ -3,6 +3,32 @@
 ## Active
 Lessons that affect future tasks. Target: under 15 entries.
 
+### 2026-09-14 — [workflow] `pg_dump | gzip` nasconde il fallimento del dump, e la prova dal vivo ha bisogno di un umano
+**Context**: item 9 del backlog del loop, lo script di backup versionato in `docker/backup/`.
+**What happened**: due cose. (1) Il comando che il piano di lancio suggeriva —
+`docker exec postgres pg_dump ... | gzip > file.sql.gz` — **non si accorge se il dump fallisce**:
+l'esito della pipeline è quello di `gzip`, che comprime allegramente zero byte e consegna un `.gz`
+perfettamente valido. Te ne accorgi il giorno del ripristino. (2) La verifica dal vivo non si è
+potuta fare: il motore Docker non si è avviato (la distribuzione WSL `docker-desktop` è rimasta
+ferma dopo dieci minuti), e il Postgres installato sulla macchina — quello che `.env.example`
+indica sulla 5432 — chiede una password, che il loop ha divieto di maneggiare.
+**Root cause**: (1) è il comportamento normale delle pipeline in shell, non un difetto di Docker.
+(2) è ambiente degradato, non un difetto del codice.
+**Action**: nello script guarda **`PIPESTATUS` di entrambi** i comandi, scrivi su un file `.part` e
+rinominalo solo dopo che `gzip -t` e l'intestazione `PostgreSQL database dump` hanno confermato che
+è un dump vero — un `.gz` valido non prova niente. Per la rotazione, ordina **per nome**
+(`spotify_AAAAMMGG.sql.gz`) e mai per data di modifica: un `rsync` o un ripristino la riscrivono e
+un backup vecchio si presenta come il più fresco. Quando una verifica richiede un servizio che il
+loop non può avviare, **non surrogarla**: consegna tutto il resto provato, marca l'item
+`[BLOCKED_USER]` con il comando esatto che lo chiude, e non lasciarlo aperto — altrimenti il loop
+lo ripesca ogni tre ore e non arriva mai agli item successivi.
+
+### 2026-09-14 — [workflow] Un percorso assoluto nell'intestazione del run-log blocca la pubblicazione del pannello
+**Context**: giro del loop di sviluppo, item 8. Il contratto chiede di trascrivere «per intero» la riga di output della guardia di cortesia, che contiene il percorso assoluto della cartella di lavoro.
+**What happened**: il controllo di riservatezza del pannello (`__GODprompt/output/gates/project-panel.gate.py`) ha respinto la pubblicazione con 4 rilievi — «percorso assoluto (Windows)» e «nome utente della macchina», su entrambi i documenti generati. Il dato usciva dall'intestazione `## <timestamp> — <esito> — guardia: LIBERO nessun'altra sessione viva su C:\...` di `docs/loop-last-run.md`.
+**Root cause**: il generatore (`~/.claude/scripts/project_panel.py`) ricava un campo pubblicabile spezzando l'intestazione sui trattini lunghi e pubblicando tutto ciò che segue l'esito. Il difetto esiste da sempre ma era **invisibile**: quel campo finisce in pagina solo per i giri che hanno prodotto lavoro (`ITEM-DONE`/`SLICE-DONE`/`FETTA-DONE`), e da settimane uscivano solo `NOOP-*`. Un difetto latente che si sveglia proprio quando il loop ricomincia a funzionare.
+**Action**: nell'intestazione del run-log **non scrivere mai percorsi assoluti** — «sul repo» basta. La riga integrale della guardia va nel corpo, **dentro un recinto di codice**: il parser salta i recinti per non leggere «contatore: 4 fire» come un campo, e la stessa esenzione tiene il percorso fuori dalla pagina condivisibile. Il controllo **non si aggira** dichiarando le spie in `riservatezza.json`: le spegnerebbe per sempre su tutte le fonti del progetto, ed è configurazione globale.
+
 ### 2026-09-03 — [codebase] Spotify dev mode ha tolto anche `popularity` e TUTTE le playlist editoriali
 **Context**: implementazione della card "I brani più ascoltati". Il piano prevedeva la playlist editoriale "Top 50 - Global" (Opzione A) e, come ripiego, l'indice `popularity` di Spotify (Opzione D).
 **What happened**: due muri, uno dopo l'altro. (1) Ogni playlist di proprietà di Spotify risponde **404** — Top 50 Global, Top 50 Italy, Viral 50, Today's Top Hits — e le playlist pubbliche di altri utenti rispondono **403**: leggibili restano solo quelle dell'utente stesso. `/search` restituisce `null` al posto delle voci editoriali invece di ometterle. (2) Il campo `popularity` **non compare più fra le chiavi** di nessuna risposta — né `/tracks/{id}`, né `/me/top/tracks`, né `recently-played`. Non è `null`: è assente.

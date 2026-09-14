@@ -3266,3 +3266,144 @@ tocco.
 che la voce si può cancellare. La seconda, `progetto-wrap-dev-loop:noop-busy-streak`, è nuova e
 riporta gli undici giorni senza fire, che nessun'altra voce copriva. Le chiavi degli altri lavori
 automatici non sono state toccate: il file ne conteneva sette prima e sette dopo, più la nuova.
+
+## 2026-09-14 16:56 UTC — `BLOCKED_USER` — guardia: LIBERO, nessun'altra sessione viva sul repo — contatore 1 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 1 — item 9 «Script di backup del database, versionato» — pannello: vedi in fondo
+
+Riga integrale della guardia di cortesia, nel recinto perché contiene il percorso della cartella di
+lavoro:
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 42 transcript scansionati, 1 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.068s su 42 transcript (soglia 1s, massimo storico 0.177s)
+         contatore: 1 fire senza progresso confermato (soglia 3), halted_fires 0
+```
+
+### In breve
+
+**Lo script di backup c'è, è documentato e la sua rotazione è provata da nove test. Quello che
+manca è una prova sola — farlo girare contro un database vero — e quella prova richiede un gesto
+tuo.** Per questo l'item è finito `[BLOCKED_USER]` invece che `[x]`: non perché il lavoro sia a
+metà, ma perché l'ultima riga della sua verifica non la può firmare il loop.
+
+### Che cosa è stato consegnato
+
+Tre file nuovi, più due documenti riallineati.
+
+- `docker/backup/pg-backup.sh` — fa la copia e la rotazione: tiene le 7 copie giornaliere e le 4
+  settimanali più recenti. Di domenica la copia del giorno entra **anche** fra le settimanali, come
+  collegamento fisico: stesso contenuto, nessun byte in più sul disco, e sopravvive alla rotazione
+  della giornaliera. La configurazione passa tutta da variabili d'ambiente: **nessun segreto nel
+  file**, e il `pg_dump` gira dentro il container, dove la connessione è locale e non chiede
+  password.
+- `docker/backup/README.md` — come si lancia, la riga di crontab pronta, le sette manopole con il
+  loro valore di partenza, e il giro completo per **rileggere** una copia. Quest'ultimo pezzo non è
+  decorazione: un backup che nessuno ha mai riletto non è un backup, è un file.
+- `backend/tests/test_backup_rotation.py` — nove test che eseguono **lo script vero**, non una sua
+  riscrittura in Python, nel ramo `--prune-only` che non tocca nessun database. Girano anche nella
+  CI, quindi la prova della rotazione non invecchia.
+- `docs/LAUNCH-PLAN.md` § 2.5 diceva «non esiste nulla nel repo»: adesso descrive ciò che c'è e
+  lascia aperta solo la prova dal vivo. Corretta anche la voce della checklist operativa, che
+  guardava `/backups/` mentre ora le copie stanno in `/backups/daily/`.
+
+### I tre modi in cui questo script poteva mentire, e come non lo fa
+
+Vale la pena scriverli, perché sono i tre modi in cui i backup si scoprono rotti il giorno del
+ripristino e non prima.
+
+**Un `pg_dump` fallito che consegna un file valido.** Il comando che il piano di lancio suggeriva —
+`pg_dump ... | gzip > file.sql.gz` — restituisce l'esito di `gzip`, non quello di `pg_dump`. Se il
+dump muore, `gzip` comprime zero byte e produce un `.gz` perfettamente integro. Lo script guarda
+l'esito di **entrambi** i comandi della pipeline e, se il primo è andato storto, non scrive niente.
+
+**Un file valido che non è un dump.** `gzip -t` dice solo che l'archivio è leggibile: anche un
+messaggio d'errore compresso lo è. Perciò il controllo cerca anche l'intestazione
+`PostgreSQL database dump` dentro al file, prima di dargli il nome definitivo.
+
+**Un backup vecchio che si finge il più recente.** La rotazione ordina **per nome**
+(`spotify_AAAAMMGG.sql.gz`), mai per data di modifica. Un ripristino, una copia o un `rsync`
+riscrivono la data di modifica: bastano a far passare per fresco un backup di un mese fa e a fargli
+scalzare quelli veri. Uno dei nove test è scritto apposta per questo caso — tocca il file più
+vecchio per renderlo il più recente di data, e pretende che sparisca lo stesso.
+
+### Perché la prova dal vivo non si è potuta fare
+
+La verifica dell'item chiede due cose: che la rotazione sia provata, e che lo script giri «contro il
+Postgres di sviluppo» producendo un `.sql.gz` leggibile. La prima è fatta. La seconda ha due strade,
+e oggi erano chiuse tutte e due.
+
+**Il database del progetto vive in un container, e il motore Docker non si è avviato.** Al
+principio del giro il servizio non rispondeva affatto. Docker Desktop è stato lanciato e ha messo in
+piedi i suoi processi, ma il motore vero non è mai arrivato: dieci tentativi nell'arco di cinque
+minuti hanno ricevuto silenzio, e la distribuzione WSL `docker-desktop` è rimasta ferma. È il
+segno che l'applicazione sta aspettando attenzione umana — una licenza da accettare, un
+aggiornamento, un accesso.
+
+**L'altro Postgres risponde ma chiede una password.** Sulla macchina c'è un PostgreSQL 18 in
+ascolto sulla 5432, che è esattamente l'indirizzo che `.env.example` indica come database di
+sviluppo. `pg_isready` conferma che accetta connessioni, ma `pg_dump` si ferma su
+`no password supplied`. Il loop ha il divieto di maneggiare credenziali, e il tentativo di
+esportarne una è stato **respinto dal controllo dei permessi**. Quel rifiuto non è stato aggirato:
+era nel giusto.
+
+Nessuna delle due strade è stata surrogata con un dato finto. Uno script di backup provato contro
+un database finto proverebbe solo se stesso.
+
+### Perché `[BLOCKED_USER]` e non «aperto»
+
+È una scelta, e va dichiarata come tale. Lasciare l'item aperto avrebbe significato che il loop lo
+ripesca fra tre ore, rifà lo stesso ragionamento, si ferma sullo stesso gesto mancante e **non
+arriva mai all'item 10** — che invece è lavoro interamente suo. Marcandolo `[BLOCKED_USER]` il loop
+lo salta e prosegue, e la voce dell'item porta i tre comandi che lo chiudono in due minuti una volta
+avviato Docker. Il lavoro non è perduto: è committato.
+
+### Un difetto trovato per strada, che non è di questo item
+
+**La CI è rossa su `master`, e non per colpa di questo giro.** `ruff check app/` esce 1 con due
+rilievi `F841`, cioè due variabili assegnate e mai usate: `synced` in `backend/app/main.py:721` e
+`sync_ok` in `backend/app/routers/auth.py:363`. Vengono entrambe dal commit `0d67cb7` del
+**2026-04-03**, e la cartella `backend/app/` non è stata toccata da questo giro — `git status` la dà
+pulita. La versione di `ruff` usata qui è la stessa che usa la CI (0.9.3, fissata in
+`requirements-dev.txt`) e non c'è nessun file di configurazione che disattivi la regola: quindi il
+lavoro `backend-lint` fallisce anche là. Sono due righe da togliere, ma toccano `app/` e non hanno
+niente a che vedere con il backup: il contratto dice un item per giro, e inventarne di nuovi non è
+permesso. Lo segnalo e non lo tocco.
+
+### Verifiche eseguite
+
+Interprete: il venv del progetto, `backend/.venv/Scripts/python.exe`.
+
+| Comando | Esito |
+|---|---|
+| `bash -n docker/backup/pg-backup.sh` | 0 |
+| `pytest tests/test_backup_rotation.py -q` | 0 — **9 passati**, nessuno saltato |
+| `pytest -q` (suite intera) | 0 — **598 passati** in 321s (erano 589, più i 9 nuovi) |
+| `ruff check tests/test_backup_rotation.py` | 0 |
+| `ruff format tests/test_backup_rotation.py --check` | 0 |
+| `npm run lint` | 0 |
+| `npm run build` | 0 — costruito in 4.16s |
+| `ruff check app/` | **1 — difetto preesistente, vedi sopra** |
+
+I nove test **hanno girato davvero, non sono stati saltati**: lo dice il conteggio, e importa
+perché il file si salta da solo quando `bash` non c'è.
+
+Oltre ai test, la rotazione è stata provata a mano una volta su una cartella temporanea con 10 copie
+giornaliere e 6 settimanali: ne sono rimaste 7 e 4, quelle giuste, e un file estraneo lasciato lì
+apposta non è stato toccato.
+
+### Working tree e riferimento remoto
+
+All'inizio del giro la cartella portava una modifica non committata, `.claude/tasks/lessons.md`: era
+la lezione scritta dal giro precedente, rimasta lì. Riconducibile al backlog e al loop stesso,
+quindi **non** è stata trattata come lavoro di qualcun altro, e viene committata adesso insieme alla
+lezione di oggi.
+
+Il riferimento remoto era `8616d0c6b50fac0db5a7d262e928c0df65a602ba` all'inizio del giro. Nessun
+`git push` è stato eseguito, come dev'essere.
+
+### Nota sui due contatori
+
+Il giro ha prodotto lavoro vero e committato, ma non chiude un item, quindi l'esito non è
+`ITEM-DONE`. Di conseguenza `no_progress_streak` sale a 1 e il comando `--confirm-progress` **non**
+è stato chiamato: il contratto lo lega esplicitamente a `ITEM-DONE`. Entrambi i contatori
+sovrastimano la fermata, ed è bene saperlo leggendo questa riga. Nessun allarme è maturato: la
+soglia è 3.

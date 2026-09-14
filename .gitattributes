@@ -1,0 +1,5 @@
+# Gli script di shell vanno sul VPS, che e Linux: devono restare a fine riga LF.
+# Senza questa riga un checkout su Windows li riscrive in CRLF, e la, il kernel
+# legge "/usr/bin/env bash\r" e risponde "bad interpreter" — un errore che non
+# nomina mai la vera causa.
+*.sh text eol=lf
