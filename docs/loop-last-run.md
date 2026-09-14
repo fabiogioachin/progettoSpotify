@@ -3583,3 +3583,69 @@ trova: questo giro un item l'ha trovato e fatto, quindi esce `ITEM-DONE`. Sarà 
 trovare la coda vuota, scrivere il cartello e mandare la voce di capolinea nel canale. Lo annoto qui
 perché chi legge questa riga sappia che l'ultimo fire utile è stato questo, e che il silenzio che
 comincerà fra tre ore è previsto e non un guasto.
+
+### Il pannello, e un difetto che mi ero fatto da solo
+
+`pannello: pubblicato faa7a35de723`. Corsia `suite` presa e rilasciata quattro volte — tre giri di
+generazione e uno per riferire l'esito — e mai tenuta insieme a un'altra. Nessuna corsia `inbox`
+presa in questo giro: non c'era niente da mandare nel canale.
+
+**I tre giri di generazione non sono uno spreco, sono la scoperta di una regressione mia.** Il primo
+`--render` ha detto `copertura: 10/11`, mentre il giro precedente diceva 11 su 11. La fonte caduta
+era proprio la scansione di salute, cioè il file che questo giro aveva appena riscritto.
+
+Riscrivendo il rapporto gli avevo tolto due cose che il lettore del pannello pretende, senza
+accorgermene, perché nessuna delle due si vede leggendo il documento:
+
+1. **una riga `Generated: <data>` da sola**, in inglese. Il lettore la cerca con
+   `^generated:\s*(\S+)$`, quindi la mia intestazione italiana `**Generato**: 2026-09-14 — ...` non
+   la soddisfaceva né per la lingua né per la forma: c'era altro sulla stessa riga.
+2. **una sezione `## Manual Action Required`** con sottosezioni `### HIGH / P1` e righe di tabella
+   che cominciano con un numero. Senza almeno una riga così il lettore dichiara la fonte «non
+   letta», anche avendo la data.
+
+Sono entrambe rimesse, ognuna con accanto la riga che spiega perché quell'inglese è lì e non va
+tradotto — altrimenti il prossimo che riordina il documento rifà lo stesso danno, e sarebbe il terzo
+a caderci. Dopo il rimedio: `copertura: 11/11`, controllo di riservatezza verde (22 spie, 70 righe,
+11 fonti su 11), ed **E1 compare in «Da risolvere»** col titolo intero, che è il punto: un rilievo di
+salute che il pannello non vede è un rilievo che non esiste per chi legge la pagina invece del file.
+
+**Vale la pena dire com'è venuta fuori**, perché non è merito di un controllo: il difetto si è visto
+solo perché prima di pubblicare ho confrontato la copertura con quella del giro precedente. Il
+programma non l'ha segnalato — `10/11` non è un errore per lui, è un numero — e il controllo di
+riservatezza era verde in entrambi i casi. Una regressione che nessun cancello ferma si vede solo
+guardando il numero di ieri.
+
+Un'imprecisione che resta, e la lascio: il pannello data E1 al 14 settembre, non al 3 aprile. La
+colonna «Dal» che ho messo in tabella non viene letta, perché la configurazione di questo progetto
+dichiara che la scansione non registra da quando vede un rilievo, e allora tutti prendono la data
+della scansione. Correggerlo vorrebbe dire toccare configurazione fuori da questo repository, che
+non è cosa di questo loop. Il titolo del rilievo dice «da cinque mesi», quindi in pagina il senso
+arriva lo stesso.
+
+`pannello-avviso: trattenuto — fallimenti 0 su 3 richiesti; pagina ferma da 0.0 ore su 24 richieste`.
+
+**Torna l'avvertimento sul pulsante «Scarica il testo»**, che per chi guarda la pagina non funziona.
+È il difetto già descritto nella voce del **2026-09-03 04:33**: sta nel generatore globale, non in
+questo repository, quindi lo cito e non lo tocco. L'icona resta 📊, quella scelta dalla prima
+pubblicazione umana.
+
+Prima di ripubblicare la pagina viva è stata riletta, e il file generato letto per intero: 1344
+righe, nessun dato di ascolto personale, nessun identificativo di account, nessun percorso, nessun
+indirizzo di posta.
+
+### Perché questo giro ha due commit
+
+Il secondo commit non porta la sola riga del pannello — quella il contratto dice giustamente di non
+committare da sola. Porta il rimedio alla regressione qui sopra, cioè una modifica vera a
+`HEALTH-REPORT.md` fatta **dopo** il primo commit, perché il difetto si è visto solo generando il
+pannello, che gira in coda al giro.
+
+Lasciarla sul disco sarebbe stato peggio che aprire un commit in più: il giro successivo avrebbe
+trovato un file di lavoro modificato e non esente, e sarebbe uscito `NOOP-DIRTY`. È esattamente il
+modo in cui questo loop ha perso cinque fire fra il 3 e il 14 settembre.
+
+### Riferimento remoto a fine giro
+
+Riletto a fine giro: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`, **identico** a quello annotato al
+Passo 3. Nessun push è partito, come dev'essere.

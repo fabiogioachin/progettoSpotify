@@ -1,8 +1,16 @@
 # Rapporto di salute del progetto
 
-**Generato**: 2026-09-14 — **Progetto**: Spotify Listening Intelligence (progettoWrap)
+Generated: 2026-09-14
+
+**Progetto**: Spotify Listening Intelligence (progettoWrap)
 **Stack**: FastAPI 0.115 + React 18 + Vite 6 + PostgreSQL 16 + Redis 7
 **Tipo**: rigenerazione con delta sul rapporto precedente del 2026-04-01
+
+> La riga `Generated:` qui sopra è in inglese e sta da sola per un motivo meccanico, non per
+> distrazione: è l'unica forma che il lettore del pannello di progetto riconosce per datare la
+> scansione (`^generated:\s*(\S+)$`). Scritta in italiano, o accorpata alla riga del progetto, il
+> pannello dichiara questa fonte «non letta» e smette di dire quanto è vecchia la scansione.
+> Successo davvero il 2026-09-14, alla prima stesura di questo file.
 
 ## In breve
 
@@ -73,6 +81,29 @@ il rosso è vero, non un effetto di versione.
 perché chi legge `CLAUDE.md` trova `ruff format` fra i comandi del progetto e potrebbe aspettarsi
 che sia sorvegliato. Non lo è. Se lo si vuole sorvegliare è una decisione da prendere, non un guasto
 da riparare.
+
+## Manual Action Required
+
+Questa sezione ripete in tabella ciò che il testo qui sopra ha già detto a parole, e l'intestazione
+resta in inglese come la riga `Generated:`: è la forma che il lettore del pannello di progetto
+riconosce, e senza di essa il pannello dichiara questa fonte «non letta» e i rilievi aperti non
+compaiono in «Da risolvere». Il titolo del difetto va nella quarta colonna, la sigla nella seconda,
+la data nell'ultima.
+
+Le due righe sono le uniche cose aperte del progetto: i 21 rilievi del rapporto vecchio sono tutti
+chiusi e non stanno qui.
+
+### HIGH / P1
+
+| # | ID | File | Difetto | Azione | Dal |
+|---|-----|------|---------|--------|-----|
+| 1 | E1 | `backend/app/main.py:721`, `backend/app/routers/auth.py:363` | **La verifica automatica è rossa su `master` da cinque mesi.** `ruff check app/` esce 1 su due `F841` — `synced` e `sync_ok`, messe a vero e mai rilette perché il `break` sotto porta già l'esito. Finché il semaforo è rosso, un difetto nuovo non si distingue da questo. | Decidere per ciascuna se fosse il residuo di un uso mancante o solo zavorra, poi toglierla o completarla | 2026-04-03 |
+
+### LOW / P3
+
+| # | ID | File | Difetto | Azione | Dal |
+|---|-----|------|---------|--------|-----|
+| 2 | FMT-1 | `backend/app/` (10 file su 68) | **La formattazione automatica diverge, ma nessuno la sorveglia.** `ruff format --check` riformatterebbe 10 file. Non blocca niente, perché la verifica automatica esegue solo `ruff check`: è una decisione da prendere, non un guasto. | Scegliere: o si aggiunge `ruff format --check` alla verifica, riformattando prima i 10 file, o si toglie `ruff format` dai comandi dichiarati in `CLAUDE.md` | 2026-09-14 |
 
 ## I 21 rilievi vecchi, uno per uno
 
