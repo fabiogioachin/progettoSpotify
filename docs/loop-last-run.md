@@ -3118,3 +3118,89 @@ indirizzo e con la sua icona.
 Ripetuto anche stavolta l'avvertimento sul pulsante «Scarica il testo», che non funziona per chi
 guarda la pagina: difetto già descritto nella voce del **2026-09-03 04:33**, sta nel generatore
 globale `~/.claude/scripts/project_panel.py` e non in questo repo, quindi lo segnalo e non lo tocco.
+
+## 2026-09-14 14:41 UTC — `ITEM-DONE` — guardia: LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 41 transcript scansionati, 1 worktree ispezionati, scope suite OFF) — costo del controllo: 0.177s su 41 transcript (soglia 1s, massimo storico 0.177s) — contatore: 6 fire senza progresso confermato (soglia 3), halted_fires 0 — no_progress_streak 0 (azzerato) — BREAKER: CHIUSO, era OPEN NOOP-DIRTY|item 8 dal 2026-09-03T07:33:35Z — item 8 «Allineare LAUNCH-PLAN a ciò che esiste davvero» — pannello: da scrivere in coda
+
+`ESCALATION: 6 fire senza progresso confermato (~279.4 ore, dal 2026-09-02T23:06:01Z). Causa: via libera ma nessun lavoro confermato: loop fermo o run che muore prima di confermare. Il backlog e' fermo e nessuno se ne accorgerebbe: scrivi una voce nel canale utente (chiave progetto-wrap-dev-loop:noop-busy-streak), poi conferma con --confirm-escalation.`
+
+**Il blocco che durava da undici giorni si è sciolto da solo, e non per merito di questo loop.** Le
+cinque uscite `NOOP-DIRTY` del 2 e 3 settembre erano causate da lavoro non committato di una
+sessione di piano — la cartella `.claude/tasks/plan-global-top-tracks/` e le righe nuove in
+`.claude/tasks/lessons.md`. Oggi la working tree è pulita: quel lavoro è stato committato da
+sessioni interattive, che nel frattempo hanno anche portato avanti il progetto per conto loro
+(le classifiche mondiali Last.fm, da `f3c7e0a` a `7e91004`). Il loop non ha fatto nulla per
+sbloccarsi: ha solo trovato il campo libero al primo fire dopo undici giorni di silenzio.
+
+**Quegli undici giorni sono il fatto che merita più attenzione dell'item.** Fra l'ultimo fire
+(3 settembre, 10:35) e questo ne sono passati 279, contro una cadenza dichiarata di 3 ore: il task
+non ha girato. La guardia legge il salto come «~279.4 ore senza progresso» e grida, ma la sua
+diagnosi — «loop fermo o run che muore prima di confermare» — è giusta solo a metà. Il loop non
+moriva: non veniva proprio invocato. Questo run-log non può dire perché, perché il registro dei
+lavori automatici sta fuori dal repo; è una cosa da guardare lì.
+
+### Che cosa è stato fatto
+
+Lo **Step 2 del piano di lancio** (`docs/LAUNCH-PLAN.md`) è stato riscritto voce per voce contro il
+repo. Il difetto che l'item denunciava era reale e costoso: **il piano chiedeva di creare quattro
+cose che nel repo c'erano già**, e chi l'avesse seguito alla lettera avrebbe riscritto da zero file
+funzionanti. Ora ogni voce dice prima che cosa esiste e poi che cosa manca.
+
+Il censimento, fatto leggendo i file uno per uno:
+
+- **`docker/docker-compose.prod.yml` esiste ed è completo per quattro servizi.** Ha i controlli di
+  salute, il `depends_on` condizionato a quei controlli, database e cache senza porte esposte, un
+  solo processo Uvicorn per non duplicare i lavori pianificati.
+- **`docker/caddy/Caddyfile` esiste ma è vuoto**: una riga di commento e nulla altro. Non va
+  creato, va riempito — e insieme al servizio Caddy, che nel file di composizione è commentato.
+- **I due workflow esistono e coprono già la metà «lint, test, build»** che il piano descriveva
+  come da scrivere: `ci.yml` fa ruff, pytest, eslint e vite build; `build.yml` costruisce le due
+  immagini Docker.
+- **`.github/workflows/deploy.yml` manca davvero**, ed è l'unica delle quattro voci che resta
+  aperta a pieno titolo. Manca per una ragione dichiarata nel piano: non c'è una macchina su cui
+  pubblicare finché l'item 12 resta `[BLOCKED_USER]`.
+
+### Cinque errori nel piano, trovati mentre lo si confrontava col repo
+
+Il confronto ha fatto emergere cose che non erano solo «scritte al passato», ma **sbagliate**. Sono
+tutte nel piano, nessuna è stata corretta nel codice — perché toccano il deploy, e il deploy è
+bloccato sull'item 12. Il piano ora le descrive come lavoro aperto.
+
+1. **Il frontend ascolta sulla porta 80, non sulla 5173.** Il piano faceva puntare Caddy a
+   `frontend:5173`, che dentro la rete Docker non risponde: l'immagine di produzione è un nginx che
+   serve il build statico (`docker/frontend.Dockerfile`), e la 5173 è la porta del server di
+   sviluppo Vite. Con la bozza vecchia, Caddy avrebbe dato 502 su ogni pagina.
+2. **Il percorso del volume nel servizio Caddy commentato è sbagliato**: dice `./Caddyfile`, ma il
+   file di composizione sta in `docker/`, quindi quel percorso punta a `docker/Caddyfile`, che non
+   esiste. Va scritto `./caddy/Caddyfile`.
+3. **Il nome del database era sbagliato nel comando di backup**: è `spotify_intelligence`
+   (`docker/docker-compose.prod.yml:9`), mentre `spotify` è il nome dell'utente. Il `pg_dump` del
+   piano sarebbe fallito.
+4. **`postgres` e `redis` non hanno `restart: unless-stopped`**, mentre backend e frontend ce
+   l'hanno. Dopo un riavvio del VPS l'app resterebbe in piedi senza database sotto.
+5. **Backend e frontend pubblicano le porte sull'host** (`8001:8001`, `5173:80`). Oggi è l'unico
+   modo per raggiungerli, ma il giorno in cui Caddy entra in funzione quelle porte diventano una
+   scorciatoia che aggira l'HTTPS: vanno tolte nello stesso momento in cui Caddy si accende.
+
+### Verifiche eseguite
+
+| Comando | Cartella | Esito |
+|---|---|---|
+| `.venv/Scripts/python.exe -m pytest -q` | `backend/` | **589 passati**, 23 warning, 430.69s — exit 0 |
+| `npm run lint` | `frontend/` | exit 0 |
+| `npm run build` | `frontend/` | built in 17.78s, 51 voci in precache — exit 0 |
+| `POSTGRES_PASSWORD=x docker compose -f docker/docker-compose.prod.yml config --services` | radice | `redis postgres backend frontend` — exit 0 |
+
+Interprete backend: `backend/.venv/Scripts/python.exe`, Python 3.12.13 — il venv del progetto.
+
+L'ultimo comando non è di contorno: è la **prova diretta** dell'affermazione centrale dell'item,
+cioè che il file di composizione di produzione non solo esiste ma regge, e definisce esattamente i
+quattro servizi che il piano ora descrive. Il criterio di chiusura dell'item — «nessuna voce dello
+Step 2 descrive come da creare un file che esiste nel repo» — è verificato: l'unica occorrenza
+rimasta della parola «creare» dentro lo Step 2 sta nella nota storica che spiega com'era prima.
+
+**Nessun dato finto, nessun servizio simulato.** La modifica è di sola documentazione; i test e le
+build sono girati sul codice vero, e il file di composizione è stato validato dal vero `docker
+compose`.
+
+**Riferimento remoto**: `8616d0c6b50fac0db5a7d262e928c0df65a602ba` a inizio run, riletto identico a
+fine run. Nessun push è partito, come dev'essere.

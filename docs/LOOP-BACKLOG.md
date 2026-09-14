@@ -615,7 +615,24 @@ scritta accanto, o si corregge la dipendenza.
 **Verifica**: `cd frontend && npm run lint` → exit 0; ogni `eslint-disable` residuo ha il perché
 nel commento.
 
-### 8. `[ ]` Allineare LAUNCH-PLAN a ciò che esiste davvero
+### 8. `[x]` Allineare LAUNCH-PLAN a ciò che esiste davvero
+
+> **Fatto il 2026-09-14.** Lo Step 2 è stato riscritto voce per voce contro il repo: ogni punto
+> dice prima che cosa esiste e poi che cosa manca. Tre delle quattro cose che il piano chiedeva di
+> creare **c'erano già** — il file di composizione di produzione, il `Caddyfile` e i due workflow —
+> e la quarta, `deploy.yml`, manca per una ragione dichiarata: non c'è ancora una macchina su cui
+> pubblicare. Oltre allo scarto fra piano e repo sono emersi **cinque errori nel piano stesso**,
+> corretti: il frontend ascolta sulla porta 80 e non sulla 5173, perché in produzione è un nginx e
+> non il server di sviluppo Vite; il percorso del volume nel servizio Caddy commentato punta a
+> `docker/Caddyfile`, che non esiste; il database si chiama `spotify_intelligence` e `spotify` è
+> l'utente, non il database; `postgres` e `redis` non hanno riavvio automatico mentre backend e
+> frontend sì; e le porte 8001 e 5173 restano esposte sull'host, cosa che il giorno in cui Caddy
+> entra in funzione aggirerebbe l'HTTPS. Nessuno di questi cinque è stato corretto nel codice: il
+> piano ora li descrive come lavoro aperto, perché toccano il deploy e il deploy è bloccato
+> sull'item 12. Verifiche: `pytest -q` 589 passati (exit 0), `npm run lint` e `npm run build`
+> exit 0, `docker compose -f docker/docker-compose.prod.yml config --services` exit 0 con quattro
+> servizi — cioè la conferma diretta che il file esiste e regge. Dettaglio in
+> `docs/loop-last-run.md`.
 
 Lo Step 2 del piano di lancio descrive come da fare cose già nel repo (`docker-compose.prod.yml`,
 `docker/caddy/`, i due workflow). Confrontare voce per voce, spuntare l'esistente, lasciare aperto

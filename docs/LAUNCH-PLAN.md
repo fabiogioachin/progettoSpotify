@@ -49,53 +49,65 @@ La metà «error boundaries» della voce è invece piena: `SectionErrorBoundary`
 
 ## Step 2: Deploy Pipeline (ex Phase 6)
 
-### 2.1 VPS Setup
+> **Riscritto il 2026-09-14 confrontando voce per voce con il repo.** Prima di questa revisione lo
+> Step 2 chiedeva di creare quattro cose che nel repo c'erano già, e chi avesse seguito il piano
+> alla lettera avrebbe riscritto file funzionanti credendo di partire da zero. Ora ogni voce dice
+> prima che cosa esiste e poi che cosa manca davvero. **Quello che manca è il deploy vero e
+> proprio**: la macchina, il dominio, il reverse proxy configurato e il workflow che pubblica.
+
+### 2.1 VPS Setup — `[ ]` da fare, dipende da acquisti tuoi
 
 - **Provider**: Hetzner CX22 (~5€/mese) — 2 vCPU, 4GB RAM, 40GB SSD
 - **OS**: Ubuntu 24.04 LTS
 - **Dominio**: acquistare dominio (es. `tuodominio.it`, ~10€/anno)
 - **DNS**: A record → IP del VPS
 
-### 2.2 Docker Compose Production
+Nessuna di queste quattro cose si può preparare dal repo: servono un acquisto e una decisione. Nel
+backlog del loop di sviluppo è l'item 12, marcato `[BLOCKED_USER]` per questo motivo.
 
-Creare `docker/docker-compose.prod.yml`:
+### 2.2 Docker Compose Production — `[x]` il file esiste, `[ ]` tre scostamenti
 
-```yaml
-services:
-  postgres:
-    image: postgres:16-alpine
-    volumes: [postgres_data:/var/lib/postgresql/data]
-    environment: [POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD]
-    healthcheck: ...
-    restart: unless-stopped
+`docker/docker-compose.prod.yml` **c'è**, e copre quattro servizi: PostgreSQL 16, Redis 7, il
+backend e il frontend. Ha già le cose che contano: controlli di salute su tutti e quattro,
+`depends_on` condizionato a quei controlli, database e cache **senza porte esposte** all'esterno, le
+credenziali lette da `../.env.production`, e un solo processo Uvicorn — scelta voluta, perché con
+più processi i lavori pianificati (APScheduler) partirebbero in copia.
 
-  redis:
-    image: redis:7-alpine
-    volumes: [redis_data:/data]
-    healthcheck: ...
-    restart: unless-stopped
+Restano tre scostamenti rispetto a questo piano, tutti veri sul file di oggi:
 
-  backend:
-    build: {context: .., dockerfile: docker/backend.Dockerfile}
-    environment: [DATABASE_URL, REDIS_URL, SESSION_SECRET, ...]
-    depends_on: [postgres: healthy, redis: healthy]
-    restart: unless-stopped
+1. **`postgres` e `redis` non hanno `restart: unless-stopped`** (righe 4 e 23; il backend e il
+   frontend ce l'hanno, righe 60 e 73). Dopo un riavvio del VPS i due servizi di stato non
+   ripartono da soli, e l'app resta in piedi senza database sotto.
+2. **Il servizio `caddy` è commentato**, insieme ai suoi due volumi (righe 77-91 e 96-97). Finché
+   resta così non c'è HTTPS, e il punto 2.3 qui sotto non ha nulla che lo attivi.
+3. **Backend e frontend pubblicano le porte sull'host** (`8001:8001` e `5173:80`). Senza Caddy è
+   l'unico modo per raggiungerli, ma il giorno in cui Caddy entra in funzione quelle due porte
+   diventano una scorciatoia che aggira l'HTTPS: vanno tolte nello stesso momento.
 
-  frontend:
-    build: {context: .., dockerfile: docker/frontend.Dockerfile}
-    restart: unless-stopped
+**Verifica**: `docker compose -f docker/docker-compose.prod.yml config` esce 0 e mostra i quattro
+servizi; dopo la correzione del punto 1, `grep -c "restart: unless-stopped"` sul file dà 4.
 
-  caddy:
-    image: caddy:2-alpine
-    ports: ["80:80", "443:443"]
-    volumes: [./caddy/Caddyfile:/etc/caddy/Caddyfile, caddy_data:/data]
-    depends_on: [backend, frontend]
-    restart: unless-stopped
-```
+### 2.3 Caddy (HTTPS automatico) — `[x]` il file esiste, `[ ]` è vuoto
 
-### 2.3 Caddy (HTTPS automatico)
+`docker/caddy/Caddyfile` **c'è ma non contiene configurazione**: una riga di commento e nulla
+altro. Non va creato, va riempito — e insieme al servizio commentato del punto 2.2, perché un file
+di configurazione che nessuno monta non fa niente.
 
-`docker/caddy/Caddyfile`:
+Due cose vanno corrette rispetto alla bozza che questo piano portava prima, perché non
+corrispondevano al repo:
+
+- **Il frontend ascolta sulla porta 80, non sulla 5173.** L'immagine è un nginx che serve il build
+  statico (`docker/frontend.Dockerfile`), quindi dentro la rete Docker l'indirizzo è `frontend:80`.
+  La 5173 è la porta del server di sviluppo Vite, e in produzione non esiste.
+- **Il percorso del volume nel servizio commentato è sbagliato**: dice `./Caddyfile`, ma il file di
+  composizione sta in `docker/`, quindi quel percorso punta a `docker/Caddyfile`, che non esiste.
+  Va scritto `./caddy/Caddyfile`.
+
+Da notare che nginx **già inoltra** `/api` e `/auth` al backend (`docker/frontend.Dockerfile`).
+Caddy potrebbe quindi limitarsi a terminare l'HTTPS e passare tutto a `frontend:80`. Meglio però
+inoltrare esplicitamente come qui sotto: in quel caso la regola di Caddy vince e quella di nginx
+resta inerte, e l'instradamento sta in un posto solo invece che in due.
+
 ```
 tuodominio.it {
     handle /api/* {
@@ -108,51 +120,83 @@ tuodominio.it {
         reverse_proxy backend:8001
     }
     handle {
-        reverse_proxy frontend:5173
+        reverse_proxy frontend:80
     }
 }
 ```
 
-### 2.4 CI/CD (GitHub Actions)
+**Verifica**: `docker compose -f docker/docker-compose.prod.yml exec caddy caddy validate --config
+/etc/caddy/Caddyfile` esce 0, e `curl -I https://tuodominio.it/health` risponde 200 con certificato
+valido.
+
+### 2.4 CI/CD (GitHub Actions) — `[x]` lint, test e build ci sono; `[ ]` manca il deploy
+
+**La metà che gira a ogni push esiste già**, in due workflow:
+
+- `.github/workflows/ci.yml` — tre lavori su `push` e `pull_request` verso `master`: lint del
+  backend (`ruff check app/`), test del backend (`pytest -q`, con un commento che spiega perché non
+  servono i servizi Postgres e Redis), lint e build del frontend (`npm run lint`, `npm run build`).
+- `.github/workflows/build.yml` — costruisce le due immagini Docker con i contesti giusti
+  (`./backend` e `./frontend`, Dockerfile dentro `docker/`).
+
+**Manca `.github/workflows/deploy.yml`**, e non è una dimenticanza: non c'è nulla su cui pubblicare
+finché il punto 2.1 non è fatto. Quando ci sarà, il lavoro di deploy va agganciato ai due workflow
+esistenti, non duplicato — riscrivere lint e test dentro il deploy significherebbe farli girare due
+volte e poterli far divergere.
 
 ```yaml
-# .github/workflows/deploy.yml
+# .github/workflows/deploy.yml — DA SCRIVERE dopo il punto 2.1
 on:
-  push:
+  workflow_run:
+    workflows: [CI, Build Docker Images]
+    types: [completed]
     branches: [master]
 
 jobs:
-  lint-test-build:
-    runs-on: ubuntu-latest
-    steps:
-      - Backend: ruff check + pytest
-      - Frontend: eslint + vite build
   deploy:
-    needs: lint-test-build
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - SSH into VPS
+      - SSH into VPS (chiave privata in un secret del repo)
       - git pull
       - docker compose -f docker/docker-compose.prod.yml up --build -d
-      - Health check: curl https://tuodominio.it/health
+      - Health check: curl -f https://tuodominio.it/health
 ```
 
-### 2.5 Backup PostgreSQL
+**Verifica**: un push su `master` innesca i tre workflow nell'ordine giusto, e l'ultimo passo del
+deploy riceve 200 dall'indirizzo di salute.
 
-Cron job sul VPS:
+### 2.5 Backup PostgreSQL — `[ ]` non esiste nulla nel repo
+
+`docker/backup/` non c'è. È l'item 9 del backlog del loop di sviluppo (`docs/LOOP-BACKLOG.md`), che
+chiede di versionare lo script invece di lasciarlo come riga di crontab da incollare a mano sul
+VPS: rotazione di 7 copie giornaliere più 4 settimanali, istruzioni accanto, e prova che il file
+prodotto si rilegge.
+
+Il comando di partenza, da incapsulare nello script:
+
 ```bash
-# /etc/cron.d/pg-backup
-0 4 * * * docker exec postgres pg_dump -U spotify spotify | gzip > /backups/spotify_$(date +\%Y\%m\%d).sql.gz
-# Rotazione: 7 daily + 4 weekly
+docker exec postgres pg_dump -U spotify spotify_intelligence | gzip > /backups/spotify_$(date +%Y%m%d).sql.gz
 ```
 
-### 2.6 Checklist deploy
+Attenzione al nome del database, che questo piano confondeva: è `spotify_intelligence`. `spotify` è
+il nome dell'utente, non del database — lo dice `docker/docker-compose.prod.yml:9`.
+
+**Verifica**: lo script gira contro il Postgres di sviluppo e produce un `.sql.gz` che `gunzip -t`
+dichiara integro; la rotazione è provata.
+
+### 2.6 Checklist deploy — tutte azioni sul VPS, nessuna nel repo
 
 - [ ] VPS creato e SSH configurato
 - [ ] Dominio acquistato, DNS configurato
-- [ ] `.env.production` creato sul VPS con secrets reali
+- [ ] `.env.production` creato **nella radice del repo sul VPS** con i secret veri: è lì che il file
+      di composizione lo cerca (`env_file: ../.env.production`, relativo a `docker/`)
 - [ ] `SESSION_SECRET` e `ENCRYPTION_SALT` generati (`openssl rand -hex 32`)
+- [ ] `POSTGRES_PASSWORD` valorizzato: senza, l'indirizzo del database si compone monco e il backend
+      non si collega
 - [ ] Spotify Developer Dashboard: aggiungere redirect URI produzione (`https://tuodominio.it/auth/spotify/callback`)
+- [ ] Correzioni dei punti 2.2 e 2.3 applicate: riavvio automatico su Postgres e Redis, servizio
+      Caddy scommentato col percorso giusto, porte 8001 e 5173 tolte dall'host
 - [ ] `docker compose -f docker/docker-compose.prod.yml up --build -d`
 - [ ] Verificare: `curl https://tuodominio.it/health` → 200
 - [ ] Primo login come admin → verificare onboarding
