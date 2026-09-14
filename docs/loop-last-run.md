@@ -3634,12 +3634,14 @@ Prima di ripubblicare la pagina viva è stata riletta, e il file generato letto 
 righe, nessun dato di ascolto personale, nessun identificativo di account, nessun percorso, nessun
 indirizzo di posta.
 
-### Perché questo giro ha due commit
+### Perché questo giro ha tre commit
 
-Il secondo commit non porta la sola riga del pannello — quella il contratto dice giustamente di non
-committare da sola. Porta il rimedio alla regressione qui sopra, cioè una modifica vera a
-`HEALTH-REPORT.md` fatta **dopo** il primo commit, perché il difetto si è visto solo generando il
-pannello, che gira in coda al giro.
+`ecebfde` è il lavoro dell'item, `1819a24` il rimedio alla regressione qui sopra, `96ae71a` la
+lezione che ne è uscita.
+
+Il secondo non porta la sola riga del pannello — quella il contratto dice giustamente di non
+committare da sola. Porta una modifica vera a `HEALTH-REPORT.md` fatta **dopo** il primo commit,
+perché il difetto si è visto solo generando il pannello, che gira in coda al giro.
 
 Lasciarla sul disco sarebbe stato peggio che aprire un commit in più: il giro successivo avrebbe
 trovato un file di lavoro modificato e non esente, e sarebbe uscito `NOOP-DIRTY`. È esattamente il
