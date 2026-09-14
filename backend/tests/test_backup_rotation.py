@@ -166,3 +166,27 @@ def test_argomento_sconosciuto_esce_diverso_da_zero(tmp_path):
 
     assert result.returncode != 0
     assert "argomento sconosciuto" in result.stderr
+
+
+def test_l_aiuto_stampa_solo_il_commento_di_testa(tmp_path):
+    """--help non deve lasciar scappare il codice che sta sotto il commento.
+
+    L'aiuto si ricava dal blocco di commento in cima al file. Scritto come
+    intervallo di righe fisso, basta aggiungere una riga perche' cominci a
+    stampare `set -euo pipefail` in coda: e' successo, ed e' il motivo di questo
+    test.
+    """
+    env = {"BACKUP_DIR": str(tmp_path), "PATH": os.environ.get("PATH", "")}
+    result = subprocess.run(
+        [BASH, str(SCRIPT), "--help"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "rotazione: 7 copie giornaliere" in result.stdout
+    assert "--prune-only" in result.stdout
+    assert "set -euo pipefail" not in result.stdout
+    assert "BACKUP_DIR=" not in result.stdout

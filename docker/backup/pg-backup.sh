@@ -35,8 +35,13 @@ log() {
     printf '%s  %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
 }
 
+# Stampa il blocco di commento in testa al file, saltando la riga dello shebang.
+#
+# Si ferma alla prima riga che non e' un commento, invece di stampare un intervallo
+# di righe fisso: cosi' aggiungere una riga qui sopra non fa comparire del codice
+# dentro l'aiuto, che e' esattamente come si era rotto la prima volta.
 usage() {
-    sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
+    awk 'NR < 3 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
 }
 
 # Tiene i $2 file piu' recenti in $1 e cancella il resto.

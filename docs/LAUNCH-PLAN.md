@@ -173,7 +173,7 @@ deploy riceve 200 dall'indirizzo di salute.
 pronta da incollare, e il giro completo per rileggere una copia. Non c'è più niente da scrivere a
 mano sul VPS.
 
-La rotazione è coperta da 9 test che eseguono lo script vero nel suo ramo `--prune-only`
+La rotazione è coperta da 10 test che eseguono lo script vero nel suo ramo `--prune-only`
 (`backend/tests/test_backup_rotation.py`), quindi gira anche in CI e non invecchia.
 
 Quello che **resta aperto** è una prova sola: far girare lo script contro un database vero e

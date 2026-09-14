@@ -644,7 +644,7 @@ solo ciò che manca.
 
 > **Scritto e provato a meta' il 2026-09-14, poi fermato su un gesto tuo.** Lo script c'e'
 > (`docker/backup/pg-backup.sh`), le istruzioni pure (`docker/backup/README.md`), e la rotazione e'
-> provata da **9 test** che eseguono lo script vero nel suo ramo `--prune-only`
+> provata da **10 test** che eseguono lo script vero nel suo ramo `--prune-only`
 > (`backend/tests/test_backup_rotation.py`): girano anche in CI, quindi la prova non invecchia.
 > Suite backend 598 passati, `npm run lint` e `npm run build` a zero.
 >

@@ -3,7 +3,7 @@
 `pg-backup.sh` fa una copia del database e tiene **7 copie giornaliere più 4 settimanali**,
 cancellando da sé le più vecchie. Sostituisce la riga di crontab che il piano di lancio
 (`docs/LAUNCH-PLAN.md`, § 2.5) chiedeva di incollare a mano sul server: stando nel repo, la
-rotazione è coperta da un test (`backend/tests/test_backup_rotation.py`) e queste istruzioni
+rotazione è coperta da 10 test (`backend/tests/test_backup_rotation.py`) e queste istruzioni
 invecchiano insieme al codice invece che dentro un documento a parte.
 
 ## Come si usa
