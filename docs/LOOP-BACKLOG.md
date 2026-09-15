@@ -1,5 +1,28 @@
 # LOOP BACKLOG — progettoWrap
 
+LOOP HALTED
+
+> **Capolinea del terzo programma, 2026-09-15T01:44:49Z: non resta più lavoro che il loop possa
+> fare da solo.** Gli item 7, 8 e 10 sono chiusi; l'item 9 è `BLOCKED_USER` perché la prova dal vivo
+> del backup richiede un gesto tuo; 11, 12 e 13 lo erano già. **Zero `FAILED`** in tutti e tre i
+> programmi. Da qui ogni fire esce `NOOP-HALTED` in silenzio.
+>
+> **Per rimettere in moto il loop servono due gesti tuoi**, non uno: togliere questa riga
+> `LOOP HALTED`, **e** scrivere item nuovi qui sotto. È la differenza rispetto al capolinea del
+> 2026-08-01, quando bastava togliere il cartello perché c'era già una sezione approvata in coda: il
+> terzo programma era l'ultimo scritto, e dopo di esso non c'è più niente.
+>
+> **Se invece vuoi solo chiudere l'item 9**, bastano i tre comandi del suo riquadro: due minuti, e
+> poi si spunta `[x]`. Non riapre il loop da solo — il cartello resta finché non lo togli tu.
+>
+> **Una cosa da sapere prima di decidere cosa mettere in coda.** La verifica automatica su `master`
+> è rossa dal 2026-04-03: `ruff check app/` esce 1 su due rilievi `F841`, quindi il lavoro
+> `backend-lint` fallisce da cinque mesi, e un semaforo sempre rosso smette di distinguere un
+> difetto vero dal rumore. È il rilievo **E1** del rapporto di salute rigenerato il 2026-09-14, ed
+> è già in coda in `.claude/tasks/todo.md` — ma **nessun item di questo backlog lo copre**, e il
+> loop non può prenderlo da sé, perché dedurre item nuovi gli è vietato. Se vuoi che lo ripari,
+> va scritto qui.
+
 > **Cartello tolto il 2026-08-22 su decisione di Fabio: il loop riparte dagli item 7-10**
 > (sezione «lint, piano di lancio, backup e health report», APPROVATO-IN-CODA dal 30/07). Lo stesso
 > giorno il task è stato riacceso nel registro dei lavori automatici, e il contratto del loop ha

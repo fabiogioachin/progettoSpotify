@@ -3651,3 +3651,68 @@ modo in cui questo loop ha perso cinque fire fra il 3 e il 14 settembre.
 
 Riletto a fine giro: `8616d0c6b50fac0db5a7d262e928c0df65a602ba`, **identico** a quello annotato al
 Passo 3. Nessun push è partito, come dev'essere.
+
+---
+
+## 2026-09-15 01:46 UTC — `NOOP-NOTHING-TO-DO` — capolinea: il terzo programma è finito
+
+```
+LIBERO   nessun'altra sessione viva su C:\Users\fgioa\Desktop\PRO\progettoWrap (finestra 15min, 44 transcript scansionati, 1 worktree ispezionati, scope suite OFF)
+         costo del controllo: 0.062s su 44 transcript (soglia 1s, massimo storico 0.177s)
+         contatore: 1 fire senza progresso confermato (soglia 3), halted_fires 0
+```
+
+`no_progress_streak 1` — veniva da 0, azzerato dall'`ITEM-DONE` di ieri sera. **Nessun breaker**:
+la soglia è 3 e siamo a 1, quindi non c'è neppure un avviso trattenuto da dichiarare.
+
+**Non era una raffica**: l'ultima intestazione diceva 2026-09-14 19:42 UTC, cioè **2 ore e 4
+minuti** prima, oltre la soglia di un'ora del Passo 0.
+
+### Perché il loop si ferma, e perché non è un guasto
+
+**Non resta nessun item che il loop possa prendere.** Ho riletto tutte e 23 le voci del backlog:
+19 sono `[x]`, 4 sono `[BLOCKED_USER]`, **zero sono aperte e zero sono `FAILED`**. I tre programmi
+scritti da Fabio sono tutti esauriti — i 5 item del primo, i 9 finding dell'ispezione frontend del
+secondo, i 4 item del terzo — e dopo il terzo non c'è una sezione in coda.
+
+Quindi, come prescrive il Passo 4, ho scritto **`LOOP HALTED`** in testa a `docs/LOOP-BACKLOG.md`.
+Da adesso ogni fire esce `NOOP-HALTED` in silenzio.
+
+### La differenza rispetto al capolinea del 2026-08-01, che vale la pena non confondere
+
+Quella volta il cartello si toglieva **con un gesto solo**, perché sotto c'era già la sezione
+«APPROVATO-IN-CODA» con gli item 7-10 pronti. Oggi **i gesti sono due**: togliere il cartello *e*
+scrivere item nuovi. Chi tornasse qui ricordando la procedura di agosto toglierebbe il cartello e
+basta, e il loop ripartirebbe per uscire `NOOP-NOTHING-TO-DO` al primo giro, riscrivendo il cartello
+da sé. L'ho messo per esteso nel riquadro in testa al backlog, non solo qui.
+
+### Le quattro cose che restano, e che aspettano tutte una mano umana
+
+| Item | Cosa aspetta |
+|---|---|
+| **9** — backup del database | La prova dal vivo: Docker non partiva e l'altro Postgres chiede una password. Tre comandi, due minuti, sono scritti nel riquadro dell'item. |
+| **11** — `.env` dalla `.env.example` | Contiene i secret Spotify: divieto esplicito per il loop. |
+| **12** — deploy sul VPS | Server, dominio e chiave SSH: acquisti e decisioni. |
+| **13** — Extended Quota Spotify | Dipende dal 12. |
+
+### Un difetto scoperto ieri che nessun item copre
+
+La verifica automatica su `master` è **rossa dal 2026-04-03**: `ruff check app/` esce 1 su due
+rilievi `F841`, quindi il lavoro `backend-lint` fallisce da cinque mesi e il semaforo non distingue
+più un difetto vero dal rumore. È il rilievo **E1** scritto ieri nel rapporto di salute (voce del
+2026-09-14 19:42 UTC in questo stesso registro) ed è in coda in `.claude/tasks/todo.md`.
+
+**Il loop non può ripararlo di sua iniziativa**: dedurre item nuovi gli è vietato dal backlog
+stesso, e l'unica eccezione riguarda i finding di un giro di ispezione frontend, che questo non è.
+L'ho scritto in testa al backlog perché sia sotto gli occhi di chi deciderà cosa mettere in coda,
+invece di restare sepolto in un registro che nessuno apre.
+
+### Verifiche eseguite
+
+**Nessun comando di test.** Questo giro non ha toccato né codice né test: l'unica modifica è il
+cartello di stop e il riquadro che lo spiega, entrambi in `docs/LOOP-BACKLOG.md`. Eseguire la suite
+qui avrebbe misurato un albero identico a quello che ieri ha dato 599 test verdi, senza aggiungere
+nessuna informazione.
+
+La working tree era **pulita** all'inizio del giro (`git status --porcelain` senza output), quindi
+non c'era lavoro altrui da rispettare né un `NOOP-DIRTY` da dichiarare.
