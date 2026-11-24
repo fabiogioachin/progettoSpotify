@@ -50,13 +50,14 @@
   quindi o serviva e manca il suo uso, o è zavorra. Trovato il 2026-09-14 dal loop di sviluppo, che
   non l'ha toccato perché fuori dall'item del giro.
   — **Chiuso il 2026-11-24**: le due variabili erano zavorra e sono state tolte. Ogni fallimento del sync è già registrato nel suo ramo `except`. `ruff check app/` (0.9.3) esce 0, e i test restano 599 su 599.
-- [ ] D1: Callback OAuth — gestire l'errore imprevisto invece della pagina «Internal Server Error»
+- [x] D1: Callback OAuth — gestire l'errore imprevisto invece della pagina «Internal Server Error»
   — `spotify_callback` in `backend/app/routers/auth.py` rimanda al frontend con `?error=...` su tutti i
   fallimenti previsti, ma non avvolge la parte di persistenza: un errore del database propaga fino al
   gestore globale e lascia l'utente su una pagina nera senza interfaccia né via d'uscita, sull'indirizzo
   di ritorno di Spotify. Visto dal vivo il 2026-08-04 con lo schema mancante. Serve un `except Exception`
   che registri il traceback e rimandi a `?error=server_error`, **più** la verifica che il frontend legga
   davvero quel parametro: oggi `LoginPage.jsx` mostra un avviso solo tramite il flag `serviceDown`.
+  — **Chiuso il 2026-11-24**: in `spotify_callback` la parte dalla ricerca dell'utente al commit è ora dentro un `try/except Exception`, che registra il traceback, annulla la transazione e rimanda a `?error=server_error`. `LoginPage.jsx` non leggeva `?error=` per nessun codice: ora mostra un messaggio per ciascuno (anche `access_denied` di Spotify) e uno generico per i codici ignoti, nello stesso riquadro di `serviceDown`. `ruff check app/` esce 0, i test restano 599 su 599, `npm run lint` e `npm run build` escono 0. Nessun test di regressione dedicato al callback: non verificato dal vivo nel browser.
 
 - [x] D2: Cache Redis — la scadenza raddoppiava senza tetto, e la cache diventava perenne
   — `extend_cache_ttl` in `backend/app/services/api_budget.py` raddoppiava la scadenza di tutte le
