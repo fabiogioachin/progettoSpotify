@@ -369,3 +369,50 @@ class TestSyncUserRecentPlaysOptionalClient:
             await _sync_user_recent_plays(mock_db, 1)
 
         mock_client.close.assert_called_once()
+
+
+class TestSyncDoesNotWriteDeadPopularityTable:
+    """Il giro orario non scrive piu' `track_popularity` (B4-bis).
+
+    Spotify in dev mode non manda piu' il campo `popularity`, quindi la tabella
+    restava vuota. Il test passa al giro un brano CON `popularity` — il caso in
+    cui il vecchio ramo scriveva davvero — e controlla che nessuna istruzione
+    tocchi quella tabella. Se qualcuno reintroduce la scrittura, torna rosso.
+    """
+
+    @pytest.mark.asyncio
+    async def test_no_statement_targets_track_popularity(self):
+        item = {
+            "played_at": "2026-11-20T10:00:00.000Z",
+            "track": {
+                "id": "trk1",
+                "name": "Brano",
+                "popularity": 77,
+                "duration_ms": 200000,
+                "artists": [{"id": "art1", "name": "Artista"}],
+            },
+        }
+        empty = MagicMock()
+        empty.scalar.return_value = None
+        empty.all.return_value = []
+        mock_db = AsyncMock()
+        mock_db.add = MagicMock()
+        mock_db.execute = AsyncMock(return_value=empty)
+
+        with (
+            patch(
+                "app.services.background_tasks.retry_with_backoff",
+                new_callable=AsyncMock,
+                return_value={"items": [item]},
+            ),
+            patch(
+                "app.services.background_tasks.get_artist_genres_cached",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await _sync_user_recent_plays(mock_db, 1, client=AsyncMock())
+
+        # Il giro ha davvero salvato l'ascolto: il test non passa per un'uscita anticipata.
+        mock_db.add.assert_called_once()
+        executed = [str(call.args[0]) for call in mock_db.execute.call_args_list]
+        assert not any("track_popularity" in sql for sql in executed)
