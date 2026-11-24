@@ -6,15 +6,13 @@ Eseguiti da APScheduler nel lifespan di FastAPI.
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session
 from app.models.listening_history import RecentPlay, UserSnapshot
-from app.models.track import TrackPopularity
 from app.models.user import SpotifyToken, User
 from app.services.api_budget import Priority
 from app.services.genre_cache import get_artist_genres_cached
@@ -283,39 +281,10 @@ async def _sync_user_recent_plays(
                 min(max_pages, len(all_items) // 50 + 1),
             )
 
-        # Upsert track popularity from recently-played response (zero extra API calls)
-        now_utc = datetime.now(timezone.utc)
-        pop_count = 0
-        for item in all_items:
-            track = item.get("track", {})
-            track_id = track.get("id", "")
-            popularity = track.get("popularity")
-            if not track_id or popularity is None:
-                continue
-            stmt = (
-                pg_insert(TrackPopularity)
-                .values(
-                    track_spotify_id=track_id,
-                    popularity=popularity,
-                    cached_at=now_utc,
-                )
-                .on_conflict_do_update(
-                    index_elements=["track_spotify_id"],
-                    set_={
-                        "popularity": popularity,
-                        "cached_at": now_utc,
-                    },
-                )
-            )
-            await db.execute(stmt)
-            pop_count += 1
-        if pop_count > 0:
-            await db.commit()
-            logger.info(
-                "Background sync: user_id=%d — %d popularity aggiornate",
-                user_id,
-                pop_count,
-            )
+        # Qui un tempo si salvava `popularity` in `track_popularity`. Tolto il
+        # 2026-11-24 (B4-bis): Spotify in dev mode non manda piu' il campo, e la
+        # tabella e' rimasta a 0 righe. Il peso mondiale di un brano viene da
+        # Last.fm, in `global_chart_cache.py`, non da questo giro.
 
         # Populate genre cache for artists seen in this batch (non-critical)
         try:

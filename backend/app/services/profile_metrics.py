@@ -20,7 +20,6 @@ from app.models.listening_history import (
     UserProfileMetrics,
     UserSnapshot,
 )
-from app.models.track import TrackPopularity
 from app.services.genre_cache import get_artist_genres_cached
 from app.services.spotify_client import SpotifyClient
 from app.utils.rate_limiter import SpotifyAuthError, retry_with_backoff
@@ -301,16 +300,12 @@ async def compute_daily_stats(
     except Exception as exc:
         logger.warning("compute_daily_stats: genre lookup failed: %s", exc)
 
-    # Average popularity from TrackPopularity cache
-    track_ids = list(set(p.track_spotify_id for p in plays))
-    pop_result = await db.execute(
-        select(func.avg(TrackPopularity.popularity)).where(
-            TrackPopularity.track_spotify_id.in_(track_ids),
-            TrackPopularity.popularity > 0,
-        )
-    )
-    avg_pop = pop_result.scalar()
-    avg_popularity = round(avg_pop, 1) if avg_pop is not None else None
+    # Popolarita' media: non piu' calcolabile, resta None (B4-bis, 2026-11-24).
+    # Era la media del punteggio 0-100 di Spotify letto da `track_popularity`,
+    # che e' vuota perche' Spotify non manda piu' il campo. Gli ascolti mondiali
+    # di Last.fm sono un numero assoluto, non la stessa scala: metterli in
+    # questa colonna farebbe sembrare misura cio' che non lo e'.
+    avg_popularity = None
 
     # Peak listening hour
     hour_counter = Counter(p.played_at.hour for p in plays)

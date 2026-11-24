@@ -20,8 +20,24 @@
   generi con la percentuale, quindi un genere dominante non ne nasconde più nessuno. Restava solo
   il nome, che diceva ancora `GenreTreemap`: rinominato in `GenreDonut` il 2026-08-01 (finding I-7
   di `docs/LOOP-BACKLOG.md`).
-- [ ] B2: Dashboard — unificare selettore temporale (7gg/30gg/3M/Tutto per tutta la pagina, mapping a Spotify time_range)
-- [ ] B3: Dashboard — ThrottleBanner: mostrare budget effettivo per-user, drain progressivo della barra, auto-hide
+- [x] B2: Dashboard — unificare selettore temporale (7gg/30gg/3M/Tutto per tutta la pagina, mapping a Spotify time_range)
+  — **già fatto il 2026-04-03 in `58e39f2`** («unified time range selector (7gg/30gg/3M/Tutto)»),
+  mai spuntato qui. Quel commit ha tolto il selettore che `TrendTimeline` aveva per conto suo e ha
+  messo un solo stato `range` in cima a `DashboardPage.jsx`, tradotto nei periodi di Spotify da
+  `RANGE_TO_SPOTIFY`. Controllato il 2026-11-24 leggendo la pagina intera: KPI, grafico dei
+  minuti, radar audio, ciambella dei generi e le due classifiche sui tuoi ascolti seguono tutti
+  quel `range`; `GenreDonut`, `AudioRadar` e `TrendTimeline` non hanno un selettore proprio. Due
+  card non lo seguono, per scelta dichiarata nella pagina: la Top 50 di Spotify ha un suo
+  selettore coi tre periodi veri di Spotify (`354bcc9`, 2026-08-04, che ha portato i periodi a
+  cinque, aggiungendo 1Y), e la classifica mondiale Last.fm esiste solo al presente.
+- [x] B3: Dashboard — ThrottleBanner: mostrare budget effettivo per-user, drain progressivo della barra, auto-hide
+  — **già fatto il 2026-04-03 in `58e39f2`** («ThrottleBanner with effective per-user budget and
+  progressive drain»), mai spuntato qui. Controllato il 2026-11-24 leggendo il codice: il backend
+  scrive nell'intestazione `X-RateLimit-Usage` il budget calcolato da `get_effective_budget()`
+  (quota per utente attivo, non il 25 fisso di Spotify); `lib/api.js` la legge e la passa al
+  banner con l'evento `api:usage`. Il 25 nel banner è solo lo stato iniziale, prima della prima
+  risposta. Fra una risposta e l'altra la barra si svuota da sola nel tempo della finestra, e il
+  banner si nasconde sotto il 60% di carico; il conto alla rovescia in basso sparisce a finestra vuota.
 - [x] B4: Dashboard — classifiche mondiali. **Fatto il 2026-09-03**, commit `f3c7e0a` e `7cc0d7e`,
   ma non come il piano prevedeva: la fonte scelta non esisteva più. La playlist editoriale
   `37i9dQZEVXbMDoHDwVN2tF` risponde 404 in dev mode, come ogni playlist di proprietà di Spotify;
@@ -31,15 +47,36 @@
   «Popolari nel mondo, fra i tuoi» (i tuoi brani pesati sugli ascolti mondiali, segue il periodo).
   Verificate dal vivo coi dati veri. Evidenza in `plan-global-top-tracks/GATE-1-RESULT.md` e
   `GATE-2-RESULT.md`; slice in `phases.md`.
-- [ ] B4-bis: `track_popularity` è una tabella morta — 0 righe a fronte di 469 brani distinti, perché
-  il giro orario legge un campo che Spotify non manda più. Va decisa: rimuoverla insieme al codice
-  che la scrive e la legge (`popularity_cache.py`, il ramo in `background_tasks.py`, il filtro in
-  `profile_metrics.py`), oppure ripopolarla da Last.fm. Finché resta così, ogni lettura di
-  `popularity` in giro per il codice ritorna vuoto in silenzio.
+- [x] B4-bis: `track_popularity` era una tabella morta (0 righe). **Deciso il 2026-11-24: si toglie,
+  non si ripopola da Last.fm.** Perché: `popularity` è un punteggio 0-100 dell'algoritmo interno di
+  Spotify, che nessun dato in nostro possesso permette di ricalcolare; Last.fm `track.getInfo` dà
+  invece ascolti mondiali assoluti, un'altra scala, e funziona bene (59 brani su 60 con un numero,
+  tabella `track_world_playcount`), ma è già usato dove serve, dalla card «Popolari nel mondo».
+  Metterlo in `track_popularity` avrebbe voluto dire chiamate Last.fm nel giro orario e una media
+  0-100 che non lo è più. Fatto: tolta la scrittura dal giro orario (`background_tasks.py`), la
+  popolarità media del giorno resta vuota invece di leggere la tabella (`profile_metrics.py`), e un
+  test che torna rosso se la scrittura rientra (`test_background_tasks.py`, rosso prima del taglio).
+  Suite 600 verde, ruff pulito.
+- [ ] B4-quater: finire di togliere `track_popularity`. `popularity_cache.py` resta solo perché tre
+  file lo importano (`routers/library.py`, `routers/playlists.py`, `services/audio_analyzer.py`, più
+  i loro test); poi la pulizia in `data_retention.py`, il modello `TrackPopularity`, una migrazione
+  che cancella la tabella, la colonna `avg_popularity` delle statistiche giornaliere. Fuori dallo
+  scope di B4-bis.
 - [ ] B4-ter: sorvegliare l'età della classifica mondiale. Il campo `global_chart.age_hours` c'è già
   in `/health/detailed`, ma nessuno lo guarda: senza una soglia, un rinfresco fermo da settimane
   resta invisibile perché la card continua — per scelta — a mostrare il dato vecchio.
-- [ ] C1: Ecosistema Artisti — fusione grafi KG + Rete con zoom semantico (KG overview, zoom-in rivela connessioni)
+- [x] C1: Ecosistema Artisti — fusione grafi KG + Rete con zoom semantico (KG overview, zoom-in rivela connessioni)
+  — **già fatto il 2026-04-03 in `58e39f2`** («merged KG+Rete into single view with semantic zoom»),
+  lo stesso commit di B1, B2 e B3, mai spuntato qui. Quel commit ha tolto da `ArtistNetworkPage.jsx`
+  i due bottoni «Rete» / «Knowledge Graph» che sceglievano un grafo alternativo all'altro, e ha
+  introdotto in `ArtistNetwork.jsx` un solo grafo con `zoomBlend`, che vale 0 sotto la scala 1.3 e 1
+  sopra la 2.2. Controllato il 2026-11-24 leggendo dove quel valore agisce, non solo il nome: a
+  zoom pieno i nodi-genere scendono al 15% di opacità, i nodi-artista passano dal raggio 3-8 al
+  6-22, gli archi fra artisti compaiono (a zoom 0 hanno opacità zero) e le etichette degli artisti
+  medi appaiono. Il backend manda davvero `genre_nodes` e `genre_edges` (`build_artist_network`,
+  fino a 3 generi per cerchia): provato chiamando il servizio con tre artisti, che restituisce 3
+  nodi-genere e 5 archi. I nodi-genere esistono solo se gli artisti hanno generi, cioè quanto copre
+  MusicBrainz; non verificato dal vivo nel browser.
 - [x] E1: La CI è rossa su `master`, e nessuno se n'è accorto — `ruff check app/` esce 1 con due
   rilievi `F841`, cioè variabili assegnate e mai usate: `synced` in `backend/app/main.py:721` e
   `sync_ok` in `backend/app/routers/auth.py:363`. Vengono entrambe dal commit `0d67cb7` del

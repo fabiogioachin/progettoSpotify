@@ -1,7 +1,13 @@
 """Cache centralizzata per popularity dei brani.
 
 read_popularity_cache() — solo DB, zero API calls. Usata dagli endpoint sincroni.
-La cache viene popolata dal job orario sync_recent_plays in background_tasks.py.
+
+Modulo in dismissione (B4-bis, 2026-11-24). Nessuno scrive piu' in
+`track_popularity`: Spotify in dev mode non manda il campo `popularity`, e il
+ramo che lo salvava nel giro orario e' stato tolto. Questa funzione quindi non
+arricchisce piu' nulla e ritorna sempre 0. Resta solo perche' tre chiamanti
+(library.py, playlists.py, audio_analyzer.py) e i loro test la importano: va
+rimossa insieme a loro, alla tabella e alla pulizia in data_retention.py.
 """
 
 import logging
