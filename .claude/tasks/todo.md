@@ -40,7 +40,7 @@
   in `/health/detailed`, ma nessuno lo guarda: senza una soglia, un rinfresco fermo da settimane
   resta invisibile perché la card continua — per scelta — a mostrare il dato vecchio.
 - [ ] C1: Ecosistema Artisti — fusione grafi KG + Rete con zoom semantico (KG overview, zoom-in rivela connessioni)
-- [ ] E1: La CI è rossa su `master`, e nessuno se n'è accorto — `ruff check app/` esce 1 con due
+- [x] E1: La CI è rossa su `master`, e nessuno se n'è accorto — `ruff check app/` esce 1 con due
   rilievi `F841`, cioè variabili assegnate e mai usate: `synced` in `backend/app/main.py:721` e
   `sync_ok` in `backend/app/routers/auth.py:363`. Vengono entrambe dal commit `0d67cb7` del
   2026-04-03, quindi il lavoro `backend-lint` del workflow CI fallisce anche in remoto da allora:
@@ -49,6 +49,7 @@
   entrambi i casi la variabile sembra il residuo di un ramo che doveva riportare l'esito del sync,
   quindi o serviva e manca il suo uso, o è zavorra. Trovato il 2026-09-14 dal loop di sviluppo, che
   non l'ha toccato perché fuori dall'item del giro.
+  — **Chiuso il 2026-11-24**: le due variabili erano zavorra e sono state tolte. Ogni fallimento del sync è già registrato nel suo ramo `except`. `ruff check app/` (0.9.3) esce 0, e i test restano 599 su 599.
 - [ ] D1: Callback OAuth — gestire l'errore imprevisto invece della pagina «Internal Server Error»
   — `spotify_callback` in `backend/app/routers/auth.py` rimanda al frontend con `?error=...` su tutti i
   fallimenti previsti, ma non avvolge la parte di persistenza: un errore del database propaga fino al

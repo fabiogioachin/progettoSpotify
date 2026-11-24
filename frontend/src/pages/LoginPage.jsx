@@ -1,13 +1,32 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { AlertTriangle, BarChart3, Music2, Sparkles, TrendingUp } from 'lucide-react'
+
+// Codici che il backend mette in `?error=` quando il ritorno da Spotify fallisce
+// (vedi `spotify_callback` in backend/app/routers/auth.py).
+const LOGIN_ERRORS = {
+  access_denied: 'Hai annullato l’autorizzazione su Spotify. Per entrare serve il tuo consenso.',
+  state_mismatch: 'La richiesta di accesso è scaduta o non è valida. Riprova a collegarti.',
+  token_exchange_failed: 'Spotify non ha confermato l’accesso. Riprova a collegarti.',
+  profile_fetch_failed: 'Non è stato possibile leggere il tuo profilo Spotify. Riprova fra qualche istante.',
+  rate_limited: 'Spotify sta limitando le richieste in questo momento. Riprova fra qualche minuto.',
+  invite_required: 'Per registrarti serve un codice invito valido. Chiedilo a chi ti ha invitato.',
+  server_error: 'Si è verificato un errore imprevisto durante l’accesso. Riprova fra qualche istante.',
+}
+const LOGIN_ERROR_FALLBACK = 'L’accesso con Spotify non è andato a buon fine. Riprova a collegarti.'
 
 export default function LoginPage() {
   const { login, serviceDown } = useAuth()
   const [connecting, setConnecting] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const errorCode = searchParams.get('error')
+  const loginError = errorCode ? (LOGIN_ERRORS[errorCode] ?? LOGIN_ERROR_FALLBACK) : null
 
   async function handleLogin() {
     if (connecting) return
+    // Un nuovo tentativo toglie il messaggio del tentativo precedente.
+    if (errorCode) setSearchParams({}, { replace: true })
     setConnecting(true)
     const started = await login()
     // Se il redirect e' partito la pagina sta lasciando il dominio e il bottone
@@ -92,6 +111,17 @@ export default function LoginPage() {
               Il servizio non risponde. Non è possibile collegarsi a Spotify in questo momento —
               riprova fra qualche istante.
             </p>
+          </div>
+        )}
+
+        {/* Ritorno da Spotify fallito: il backend ha rimandato qui con ?error= */}
+        {loginError && !serviceDown && (
+          <div
+            role="alert"
+            className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-6 flex items-start gap-2 text-left"
+          >
+            <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-amber-400 text-sm">{loginError}</p>
           </div>
         )}
 

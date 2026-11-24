@@ -703,7 +703,6 @@ async def _startup_sync_recent_plays():
         )
 
         for uid in user_ids:
-            synced = False
             for attempt in range(3):
                 try:
                     async with async_session() as db:
@@ -718,7 +717,6 @@ async def _startup_sync_recent_plays():
                                 max_pages=20,
                                 raise_on_throttle=True,
                             )
-                            synced = True
                         finally:
                             await client.close()
                     break

@@ -192,89 +192,104 @@ async def spotify_callback(
     profile = profile_resp.json()
     spotify_id = profile["id"]
 
-    # Crea o aggiorna utente
-    result = await db.execute(select(User).where(User.spotify_id == spotify_id))
-    user = result.scalar_one_or_none()
+    # Dalla lookup utente al commit: un errore imprevisto del database non deve
+    # far finire l'utente su una pagina vuota al ritorno da Spotify, ma sulla
+    # pagina di login con un messaggio leggibile.
+    try:
+        # Crea o aggiorna utente
+        result = await db.execute(select(User).where(User.spotify_id == spotify_id))
+        user = result.scalar_one_or_none()
 
-    if not user:
-        # Controlla se è il primo utente in assoluto
-        user_count_result = await db.execute(select(func.count(User.id)))
-        total_users = user_count_result.scalar()
+        if not user:
+            # Controlla se è il primo utente in assoluto
+            user_count_result = await db.execute(select(func.count(User.id)))
+            total_users = user_count_result.scalar()
 
-        is_first_user = total_users == 0
+            is_first_user = total_users == 0
 
-        if not is_first_user:
-            # Validazione codice invito per nuovi utenti
-            if not invite_code_value:
-                return RedirectResponse(
-                    url=f"{settings.frontend_url}?error=invite_required"
+            if not is_first_user:
+                # Validazione codice invito per nuovi utenti
+                if not invite_code_value:
+                    return RedirectResponse(
+                        url=f"{settings.frontend_url}?error=invite_required"
+                    )
+
+                invite_result = await db.execute(
+                    select(InviteCode).where(
+                        InviteCode.code == invite_code_value,
+                        InviteCode.uses < InviteCode.max_uses,
+                        (
+                            (InviteCode.expires_at.is_(None))
+                            | (InviteCode.expires_at > datetime.now(timezone.utc))
+                        ),
+                    )
                 )
+                invite = invite_result.scalar_one_or_none()
+                if not invite:
+                    return RedirectResponse(
+                        url=f"{settings.frontend_url}?error=invite_required"
+                    )
 
-            invite_result = await db.execute(
-                select(InviteCode).where(
-                    InviteCode.code == invite_code_value,
-                    InviteCode.uses < InviteCode.max_uses,
-                    (
-                        (InviteCode.expires_at.is_(None))
-                        | (InviteCode.expires_at > datetime.now(timezone.utc))
-                    ),
-                )
+                # Incrementa utilizzi
+                invite.uses += 1
+
+            user = User(
+                spotify_id=spotify_id,
+                display_name=profile.get("display_name"),
+                email=profile.get("email"),
+                avatar_url=(
+                    profile.get("images", [{}])[0].get("url")
+                    if profile.get("images")
+                    else None
+                ),
+                country=profile.get("country"),
+                is_admin=is_first_user,
             )
-            invite = invite_result.scalar_one_or_none()
-            if not invite:
-                return RedirectResponse(
-                    url=f"{settings.frontend_url}?error=invite_required"
-                )
-
-            # Incrementa utilizzi
-            invite.uses += 1
-
-        user = User(
-            spotify_id=spotify_id,
-            display_name=profile.get("display_name"),
-            email=profile.get("email"),
-            avatar_url=(
+            db.add(user)
+            await db.flush()
+        else:
+            user.display_name = profile.get("display_name")
+            user.email = profile.get("email")
+            user.avatar_url = (
                 profile.get("images", [{}])[0].get("url")
                 if profile.get("images")
                 else None
-            ),
-            country=profile.get("country"),
-            is_admin=is_first_user,
+            )
+            user.updated_at = datetime.now(timezone.utc)
+
+        # Salva/aggiorna token
+        result = await db.execute(
+            select(SpotifyToken).where(SpotifyToken.user_id == user.id)
         )
-        db.add(user)
-        await db.flush()
-    else:
-        user.display_name = profile.get("display_name")
-        user.email = profile.get("email")
-        user.avatar_url = (
-            profile.get("images", [{}])[0].get("url") if profile.get("images") else None
+        token_record = result.scalar_one_or_none()
+
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+        if not token_record:
+            token_record = SpotifyToken(
+                user_id=user.id,
+                access_token_encrypted=encrypt_token(access_token),
+                refresh_token_encrypted=encrypt_token(refresh_token),
+                expires_at=expires_at,
+                scope=" ".join(SCOPES),
+            )
+            db.add(token_record)
+        else:
+            token_record.access_token_encrypted = encrypt_token(access_token)
+            token_record.refresh_token_encrypted = encrypt_token(refresh_token)
+            token_record.expires_at = expires_at
+            token_record.updated_at = datetime.now(timezone.utc)
+
+        await db.commit()
+    except Exception:
+        logger.exception(
+            "Callback OAuth: errore imprevisto durante il salvataggio utente"
         )
-        user.updated_at = datetime.now(timezone.utc)
-
-    # Salva/aggiorna token
-    result = await db.execute(
-        select(SpotifyToken).where(SpotifyToken.user_id == user.id)
-    )
-    token_record = result.scalar_one_or_none()
-
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-
-    if not token_record:
-        token_record = SpotifyToken(
-            user_id=user.id,
-            access_token_encrypted=encrypt_token(access_token),
-            refresh_token_encrypted=encrypt_token(refresh_token),
-            expires_at=expires_at,
-            scope=" ".join(SCOPES),
-        )
-        db.add(token_record)
-    else:
-        token_record.access_token_encrypted = encrypt_token(access_token)
-        token_record.refresh_token_encrypted = encrypt_token(refresh_token)
-        token_record.expires_at = expires_at
-        token_record.updated_at = datetime.now(timezone.utc)
-
-    await db.commit()
+        try:
+            await db.rollback()
+        except Exception:
+            logger.warning("Rollback fallito dopo errore nel callback OAuth")
+        return RedirectResponse(url=f"{settings.frontend_url}?error=server_error")
 
     # Imposta cookie di sessione e redirect al frontend
     response = RedirectResponse(url=settings.frontend_url)
@@ -349,7 +364,6 @@ async def _try_sync_and_snapshot(user_id: int):
         # 1. Sync ascolti recenti — priorità P0 con retry.
         #    Delay minimo: solo il tempo di completare la response HTTP.
         await asyncio.sleep(0.5)
-        sync_ok = False
         for attempt in range(3):
             try:
                 async with async_session() as db:
@@ -360,7 +374,6 @@ async def _try_sync_and_snapshot(user_id: int):
                         await _sync_user_recent_plays(
                             db, user_id, client, raise_on_throttle=True
                         )
-                        sync_ok = True
                     finally:
                         await client.close()
                 break
